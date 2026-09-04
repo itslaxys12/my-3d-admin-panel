@@ -10,6 +10,8 @@ Features:
 - Standby Listener mode for seamless Web Terminal activation
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
 import re
@@ -19,7 +21,7 @@ import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Set, List
+from typing import Optional, Set, List, Dict, Any, Union, Tuple
 
 BASE_DIR = Path(__file__).resolve().parent
 
