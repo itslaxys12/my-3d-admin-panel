@@ -238,6 +238,7 @@ export default function GoldXAUUSDTerminal() {
   const [desktopNotificationEnabled, setDesktopNotificationEnabled] = useState(false);
   const [isLoudSirenActive, setIsLoudSirenActive] = useState(false);
   const [lastAnnouncedId, setLastAnnouncedId] = useState(null);
+  const [simulatedOutcome, setSimulatedOutcome] = useState('BEAT'); // 'BEAT' | 'MISS' | 'NEUTRAL'
 
   const audioCtxRef = useRef(null);
   const notifiedIntervalsRef = useRef(new Set()); // Prevents duplicate voice alerts for same minute
@@ -758,86 +759,219 @@ export default function GoldXAUUSDTerminal() {
             </div>
           </div>
 
-          {/* AI Gold Institutional Direction & Guidance ("কেমনে কি হবে") */}
-          <div className="p-5 rounded-2xl bg-gradient-to-b from-slate-950 via-slate-900/95 to-slate-950 border border-amber-500/50 backdrop-blur-2xl shadow-2xl space-y-4">
+          {/* Live Market Direction Predictor & Trade Signal Engine */}
+          <div className="p-5 rounded-2xl bg-gradient-to-b from-slate-950 via-slate-900/95 to-slate-950 border border-amber-500/60 backdrop-blur-2xl shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2 text-amber-300 font-mono text-sm font-black uppercase">
-                <Zap className="w-4 h-4 text-amber-400" />
-                AI Gold Institutional Direction
+                <Zap className="w-4 h-4 text-amber-400 animate-pulse" />
+                <span>লাইভ মার্কেট ডিরেকশন প্রিডিক্টর</span>
               </div>
-              <span className="text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/50 px-2.5 py-1 rounded shadow-sm">
-                DAILY ADVISOR
+              <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/50 px-2.5 py-1 rounded shadow-sm">
+                AI DIRECTION RADAR
               </span>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-900/90 border border-amber-500/40 text-center space-y-1.5 shadow-md">
-              <span className="text-xs font-mono uppercase text-slate-300 tracking-wider font-semibold block">
-                Primary Gold Movement Bias
-              </span>
-              <div className="text-xl font-black font-mono text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-emerald-300 to-cyan-300 flex items-center justify-center gap-2">
-                <TrendingUp className="w-5 h-5 text-emerald-400" />
-                <span>{(intel.primary_bias || 'BEARISH_IF_STRONG_JOBS').replace(/_/g, ' ')}</span>
-              </div>
-              <div className="text-xs font-mono text-slate-200">
-                সম্ভাব্য মুভমেন্ট রেঞ্জ: <strong className="text-amber-300 font-bold">{intel.predicted_move || '180 - 350 Pips'}</strong>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-sm font-bengali">
-              <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-300 uppercase">
-                <ShieldAlert className="w-4 h-4 text-amber-400" />
-                📖 কেমনে কি হবে? ফলাফল ও ট্রেডিং গাইডলাইন:
+            {/* Selected Event Headline & Direction Bias Banner */}
+            <div className="p-4 rounded-xl bg-slate-900/95 border border-amber-500/40 space-y-2 shadow-md">
+              <div className="flex items-center justify-between text-[11px] font-mono">
+                <span className="text-slate-400">খবর: <strong className="text-white">{selectedNews?.title || 'Economic News'}</strong></span>
+                <span className="text-amber-300 font-bold">ফোরকাস্ট: {selectedNews?.forecast || '-'}</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 font-sans">
-                <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 space-y-1">
-                  <div className="text-xs font-mono font-black text-rose-300 uppercase flex items-center gap-1">
-                    <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
-                    ডাটা বেশি আসলে (Strong / Beat)
-                  </div>
-                  <p className="text-xs text-slate-200 font-bengali leading-snug">
-                    ডলার বৃদ্ধি পাবে 🚀, গোল্ডে <strong>১৮০-৩৫০ পিপস শার্প ড্রপ</strong> হবে। টার্গেট: <strong className="text-rose-300">{intel.sell_target || '$2,870.00'}</strong> এ সেল এন্ট্রি।
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 space-y-1">
-                  <div className="text-xs font-mono font-black text-emerald-300 uppercase flex items-center gap-1">
-                    <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                    ডাটা কম আসলে (Weak / Miss)
-                  </div>
-                  <p className="text-xs text-slate-200 font-bengali leading-snug">
-                    ডলার ক্র্যাশ করবে 🩸, গোল্ডে <strong>২০০-৪০০ পিপস বুলিশ র‍্যালি</strong> শুরু হবে। টার্গেট: <strong className="text-emerald-300">{intel.buy_target || '$2,940.00'}</strong> এ বাই এন্ট্রি।
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5 shadow-sm">
-                <span className="text-xs font-mono font-bold text-cyan-300 uppercase block">
-                  বিশ্লেষণ ও প্রেক্ষাপট:
+              {/* Direction Matrix Selector Tabs */}
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[11px] font-mono text-slate-300 font-bold block">
+                  👉 ডাটার ফলাফল অনুযায়ী মার্কেট কোন ডিরেকশনে যাবে?
                 </span>
-                <p className="text-xs text-slate-100 font-bengali leading-relaxed">
-                  {intel.bangla_summary || 'মার্কিন নন-ফার্ম পেরোল ও বেকারত্ব হার আমেরিকার অর্থনীতির সবচেয়ে সংবেদনশীল খবর। এই সংবাদের সময় স্প্রেড বৃদ্ধি পেতে পারে, তাই স্টপ-লস কঠোরভাবে মেনে চলুন।'}
-                </p>
-                <div className="mt-2 pt-2 border-t border-slate-800/80 text-[11px] font-mono text-amber-300 flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                  <span>{intel.trade_action || 'প্রথম ৩-৫ মিনিট চরম ভোলাটিলিটি থাকবে। স্পাইক শান্ত হলে রিট্রেসমেন্টে এন্ট্রি নিন।'}</span>
+                <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setSimulatedOutcome('BEAT')}
+                    className={`py-2 px-2 rounded-lg transition-all text-center flex flex-col items-center gap-0.5 ${
+                      simulatedOutcome === 'BEAT'
+                        ? 'bg-rose-500/30 text-rose-200 border border-rose-500 shadow-md scale-95'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
+                  >
+                    <span className="text-[10px] uppercase text-rose-400 font-black">Actual &gt; Forecast</span>
+                    <span className="text-xs">🔴 ডাটা ভালো আসলে</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSimulatedOutcome('MISS')}
+                    className={`py-2 px-2 rounded-lg transition-all text-center flex flex-col items-center gap-0.5 ${
+                      simulatedOutcome === 'MISS'
+                        ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-500 shadow-md scale-95'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
+                  >
+                    <span className="text-[10px] uppercase text-emerald-400 font-black">Actual &lt; Forecast</span>
+                    <span className="text-xs">🟢 ডাটা খারাপ আসলে</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSimulatedOutcome('NEUTRAL')}
+                    className={`py-2 px-2 rounded-lg transition-all text-center flex flex-col items-center gap-0.5 ${
+                      simulatedOutcome === 'NEUTRAL'
+                        ? 'bg-cyan-500/30 text-cyan-200 border border-cyan-500 shadow-md scale-95'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
+                  >
+                    <span className="text-[10px] uppercase text-cyan-400 font-black">Actual = Forecast</span>
+                    <span className="text-xs">⚪ সমান আসলে</span>
+                  </button>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5 text-xs font-mono">
-              <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 shadow-sm">
-                <div className="text-[11px] text-emerald-400 uppercase font-bold flex items-center gap-1">
-                  <ArrowUpRight className="w-3.5 h-3.5" /> Buy Setup Target
+            {/* Dynamic Calculated Direction Card */}
+            {simulatedOutcome === 'BEAT' && (
+              <div className="p-4 rounded-xl bg-gradient-to-r from-rose-950/60 to-slate-950 border border-rose-500/50 space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-rose-400 font-mono font-black text-sm">
+                    <TrendingDown className="w-5 h-5 text-rose-500 animate-bounce" />
+                    <span>GOLD (XAUUSD) ডিরেকশন: শার্প সেল / ডাউনট্রেন্ড 📉</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono text-xs font-bold border border-rose-500/40">
+                    STRONG SELL
+                  </span>
                 </div>
-                <div className="text-base font-black text-white mt-1">{intel.buy_target || '$2,925.00 - $2,945.00'}</div>
-              </div>
-              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 shadow-sm">
-                <div className="text-[11px] text-rose-400 uppercase font-bold flex items-center gap-1">
-                  <ArrowDownRight className="w-3.5 h-3.5" /> Sell Setup Target
+
+                <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                  <div className="p-2.5 rounded-lg bg-slate-900/90 border border-rose-500/30">
+                    <span className="text-slate-400 block text-[10px]">USD ডলার ইনডেক্স:</span>
+                    <span className="text-emerald-400 font-bold text-sm flex items-center gap-1">
+                      <TrendingUp className="w-3.5 h-3.5" /> শক্তিশালী বুলিশ (Rocket) 🚀
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-900/90 border border-rose-500/30">
+                    <span className="text-slate-400 block text-[10px]">গোল্ডে সম্ভাব্য ড্রপ:</span>
+                    <span className="text-rose-400 font-bold text-sm">
+                      -180 থেকে -350 Pips 🩸
+                    </span>
+                  </div>
                 </div>
-                <div className="text-base font-black text-white mt-1">{intel.sell_target || '$2,870.00 - $2,852.00'}</div>
+
+                <p className="text-xs text-slate-200 font-bengali leading-relaxed bg-slate-900/50 p-2.5 rounded-lg border border-slate-800">
+                  💡 <strong>ট্রেডিং সিদ্ধান্ত:</strong> অর্থনীতি বা চাকরির ডাটা শক্তিশালী হওয়ায় ফেডারেল রিজার্ভ সুদের হার বেশি রাখার সুযোগ পাবে। ফলে ডলার রকেট গতিতে বাড়বে এবং গোল্ডে দ্রুত সেল প্রেসার তৈরি হবে। খবর প্রকাশের ১ম-২য় মিনিটের পর রিটেস্টে <strong className="text-rose-300">Sell Order</strong> ওপেন করুন।
+                </p>
+
+                <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono pt-1">
+                  <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                    <span className="text-slate-400 text-[10px] block">Entry Level</span>
+                    <span className="text-white font-bold">{intel.key_resistance || '$2,920.00'}</span>
+                  </div>
+                  <div className="bg-rose-500/15 p-2 rounded border border-rose-500/40">
+                    <span className="text-rose-400 text-[10px] block">Target Profit (TP)</span>
+                    <span className="text-rose-300 font-bold">{intel.sell_target || '$2,870.00'}</span>
+                  </div>
+                  <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                    <span className="text-slate-400 text-[10px] block">Stop Loss (SL)</span>
+                    <span className="text-slate-300 font-bold">$2,935.00</span>
+                  </div>
+                </div>
               </div>
+            )}
+
+            {simulatedOutcome === 'MISS' && (
+              <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/60 to-slate-950 border border-emerald-500/50 space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-emerald-400 font-mono font-black text-sm">
+                    <TrendingUp className="w-5 h-5 text-emerald-400 animate-bounce" />
+                    <span>GOLD (XAUUSD) ডিরেকশন: আকাশচুম্বী বাই / আপট্রেন্ড 🚀</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-xs font-bold border border-emerald-500/40">
+                    STRONG BUY
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                  <div className="p-2.5 rounded-lg bg-slate-900/90 border border-emerald-500/30">
+                    <span className="text-slate-400 block text-[10px]">USD ডলার ইনডেক্স:</span>
+                    <span className="text-rose-400 font-bold text-sm flex items-center gap-1">
+                      <TrendingDown className="w-3.5 h-3.5" /> তীব্র পতন / ক্র্যাশ 🩸
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-900/90 border border-emerald-500/30">
+                    <span className="text-slate-400 block text-[10px]">গোল্ডে সম্ভাব্য জাম্প:</span>
+                    <span className="text-emerald-400 font-bold text-sm">
+                      +200 থেকে +400 Pips 🚀
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-200 font-bengali leading-relaxed bg-slate-900/50 p-2.5 rounded-lg border border-slate-800">
+                  💡 <strong>ট্রেডিং সিদ্ধান্ত:</strong> অর্থনীতি দুর্বল বা চাকরি কম হওয়ায় ডলার হু হু করে কমবে। ফলে বিশ্ববাজারের বড় বড় ব্যাংক ও ফান্ড গোল্ডে ভারী বাই অর্ডার চালাবে। পুলব্যাকে বা সরাসরি <strong className="text-emerald-300">Buy Order</strong> দিয়ে লং পজিশন নিন।
+                </p>
+
+                <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono pt-1">
+                  <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                    <span className="text-slate-400 text-[10px] block">Entry Level</span>
+                    <span className="text-white font-bold">{intel.key_support || '$2,870.00'}</span>
+                  </div>
+                  <div className="bg-emerald-500/15 p-2 rounded border border-emerald-500/40">
+                    <span className="text-emerald-400 text-[10px] block">Target Profit (TP)</span>
+                    <span className="text-emerald-300 font-bold">{intel.buy_target || '$2,940.00'}</span>
+                  </div>
+                  <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                    <span className="text-slate-400 text-[10px] block">Stop Loss (SL)</span>
+                    <span className="text-slate-300 font-bold">$2,860.00</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {simulatedOutcome === 'NEUTRAL' && (
+              <div className="p-4 rounded-xl bg-gradient-to-r from-slate-900 to-slate-950 border border-cyan-500/40 space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-cyan-300 font-mono font-black text-sm">
+                    <Activity className="w-5 h-5 text-cyan-400" />
+                    <span>GOLD ডিরেকশন: সাইডওয়েজ / উভয়মুখী ফেকআউট রেঞ্জ ⚖️</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono text-xs font-bold border border-cyan-500/40">
+                    NEUTRAL / RANGE
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                  <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px]">মার্কেট রিয়্যাকশন:</span>
+                    <span className="text-amber-300 font-bold text-sm">দ্বিমুখী স্পাইক (Whipsaw)</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px]">ভোলাটিলিটি রেঞ্জ:</span>
+                    <span className="text-slate-200 font-bold text-sm">±40 - 70 Pips</span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-200 font-bengali leading-relaxed bg-slate-900/50 p-2.5 rounded-lg border border-slate-800">
+                  💡 <strong>ট্রেডিং সিদ্ধান্ত:</strong> ডাটা ফোরকাস্টের সমান আসলে কোনো বড় একমুখী ট্রেন্ড শুরু হয় না। মার্কেট প্রথমে উপরে বা নিচে স্টপ লস হান্ট করতে পারে। এই অবস্থায় ট্রেন্ড নিশ্চিত না হওয়া পর্যন্ত অপেক্ষা করুন।
+                </p>
+              </div>
+            )}
+
+            {/* Core News Direction Rules Cheat-Sheet in Bengali */}
+            <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs font-sans">
+              <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-300 uppercase">
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                <span>📌 ফরেক্স নিউজ ডিরেকশন বোঝার ৩টি গোল্ডেন রুল:</span>
+              </div>
+              <ul className="space-y-1.5 text-[11px] text-slate-300 font-bengali leading-relaxed">
+                <li className="flex items-start gap-1.5">
+                  <span className="text-cyan-400 font-mono font-bold">১.</span>
+                  <span><strong>NFP, CPI, PPI, Retail Sales:</strong> ডাটা বাড়লে ডলার শক্তিশালী হবে 🚀 এবং গোল্ড দ্রুত নিচে নামবে (Sell 🔴)। ডাটা কমলে গোল্ড উপরে উঠবে (Buy 🟢)।</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-cyan-400 font-mono font-bold">২.</span>
+                  <span><strong>Unemployment Rate (বেকারত্ব হার):</strong> বেকারত্ব বাড়লে ডলার দুর্বল হবে 🩸 এবং গোল্ডে বুলিশ জাম্প হবে (Buy 🟢)। বেকারত্ব কমলে গোল্ড সেল হবে (Sell 🔴)।</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-cyan-400 font-mono font-bold">৩.</span>
+                  <span><strong>Fed Interest Rate (সুদের হার):</strong> সুদের হার বাড়ানো বা হকিশ কথা বললে গোল্ড ক্র্যাশ করে 📉। সুদের হার কমালে গোল্ড রকেট হয় 🚀।</span>
+                </li>
+              </ul>
             </div>
           </div>
         </div>

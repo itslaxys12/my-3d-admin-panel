@@ -10,6 +10,7 @@ import BotInvitePage from './views/BotInvitePage';
 import Analytics from './views/Analytics';
 import Settings from './views/Settings';
 import Login from './views/Login';
+import WifiManager from './views/WifiManager';
 import ScrollVideoPlayer from './components/media/ScrollVideoPlayer';
 import ImageGallery from './components/media/ImageGallery';
 import CryptoRadarView from './components/crypto/CryptoRadarView';
@@ -242,6 +243,9 @@ export function App() {
           );
         }
         return <CryptoRadarView />;
+
+      case 'wifi_manager':
+        return <WifiManager />;
 
       case 'settings':
         if (userRole === 'user') {
