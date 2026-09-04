@@ -132,15 +132,14 @@ def is_running(pid: Optional[int]) -> bool:
 
 
 def read_env() -> Dict[str, str]:
-    env = {}
-    if not ENV_FILE.exists():
-        return env
-    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line.startswith("#") or "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        env[key.strip()] = val.strip()
+    env = dict(os.environ)
+    if ENV_FILE.exists():
+        for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            env[key.strip()] = val.strip()
     return env
 
 
@@ -510,6 +509,9 @@ def bot_start(script_name: Optional[str] = None):
 
     set_active_script(target_script)
 
+    child_env = os.environ.copy()
+    child_env.update(env)
+
     with LOG_FILE.open("ab") as log_handle:
         process = subprocess.Popen(
             [sys.executable, "-u", str(script_file)],
@@ -518,6 +520,7 @@ def bot_start(script_name: Optional[str] = None):
             stdin=subprocess.DEVNULL,
             start_new_session=True,
             cwd=str(BASE_DIR),
+            env=child_env,
         )
     PID_FILE.write_text(str(process.pid), encoding="utf-8")
     time.sleep(1.0)
