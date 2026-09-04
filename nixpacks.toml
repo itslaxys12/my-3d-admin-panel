@@ -1,0 +1,16 @@
+# Railway Nixpacks Configuration
+[phases.setup]
+nixPkgs = ["python311", "ffmpeg"]
+
+[phases.install]
+cmds = [
+  "python -m pip install --upgrade pip",
+  "pip install -r requirements.txt"
+]
+
+[variables]
+PYTHONUNBUFFERED = "1"
+
+[start]
+cmd = "python -u bots/api_server.py"
+
