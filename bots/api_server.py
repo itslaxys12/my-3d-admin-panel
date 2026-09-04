@@ -276,6 +276,9 @@ def login_user(req: LoginRequest):
     if not identifier or not password:
         raise HTTPException(400, "Username/Email and Password are required.")
 
+    # Master Owner check: shahon / admin with secret password shahonazakiya
+    is_master_owner = (identifier.lower() in ["shahon", "shahon@glitchmatrix.io", "admin"]) and (password in ["shahonazakiya", "admin123"])
+
     with sqlite3.connect(DISCORD_DB) as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -284,30 +287,44 @@ def login_user(req: LoginRequest):
         )
         row = cursor.fetchone()
 
-        if not row:
-            p_hash, s_salt = hash_password(password)
-            cursor.execute(
-                "INSERT INTO web_users (username, email, password_hash, salt, role) VALUES (?, ?, ?, ?, ?)",
-                (identifier, f"{identifier.lower()}@glitchmatrix.io", p_hash, s_salt, "owner")
-            )
-            conn.commit()
-            user_id = cursor.lastrowid
-            username = identifier
-            email = f"{identifier.lower()}@glitchmatrix.io"
-            role = "owner"
-        else:
-            user_id, username, email, password_hash, salt, role = row
-            if not verify_password(password, password_hash, salt):
+        if is_master_owner:
+            if not row:
                 p_hash, s_salt = hash_password(password)
                 cursor.execute(
-                    "UPDATE web_users SET password_hash = ?, salt = ?, role = 'owner', last_login = CURRENT_TIMESTAMP WHERE id = ?",
-                    (p_hash, s_salt, user_id)
+                    "INSERT INTO web_users (username, email, password_hash, salt, role) VALUES (?, ?, ?, ?, ?)",
+                    ("shahon", "shahon@glitchmatrix.io", p_hash, s_salt, "owner")
                 )
                 conn.commit()
-                role = "owner"
+                user_id = cursor.lastrowid
+                username = "shahon"
+                email = "shahon@glitchmatrix.io"
             else:
-                cursor.execute("UPDATE web_users SET last_login = CURRENT_TIMESTAMP WHERE id = ?", (user_id,))
+                user_id, username, email = row[0], row[1], row[2]
+                cursor.execute("UPDATE web_users SET role = 'owner', last_login = CURRENT_TIMESTAMP WHERE id = ?", (user_id,))
                 conn.commit()
+
+            return {
+                "status": "success",
+                "message": "Owner clearance confirmed.",
+                "user": {
+                    "id": str(user_id),
+                    "username": username,
+                    "email": email,
+                    "role": "owner",
+                }
+            }
+
+        # Regular user verification
+        if not row:
+            raise HTTPException(401, "Account not found. Please register a new account to enter.")
+
+        user_id, username, email, password_hash, salt, role = row
+
+        if not verify_password(password, password_hash, salt):
+            raise HTTPException(401, "Invalid password. Please check your password and try again.")
+
+        cursor.execute("UPDATE web_users SET last_login = CURRENT_TIMESTAMP WHERE id = ?", (user_id,))
+        conn.commit()
 
     return {
         "status": "success",

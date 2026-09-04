@@ -53,27 +53,35 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
     }
   };
 
-  const handleDirectEnter = (role = 'owner') => {
-    const userObj = {
-      id: '1',
-      username: username.trim() || 'Commander',
-      email: email.trim() || 'commander@glitchmatrix.io',
-      role: role,
-    };
-    localStorage.setItem('glitch_auth_user', JSON.stringify(userObj));
-    localStorage.setItem('glitch_user_role', role);
-    localStorage.setItem('glitch_auth', 'true');
-    confetti({
-      particleCount: 80,
-      spread: 70,
-      origin: { y: 0.55 },
-      colors: ['#00ff9d', '#00f0ff', '#a855f7'],
-    });
-    setTimeout(() => {
-      if (onLoginSuccess) {
-        onLoginSuccess(userObj);
-      }
-    }, 400);
+  const scrollToAuth = (mode = 'login') => {
+    setAuthMode(mode);
+    setFormError('');
+    setSuccessMessage('');
+    const cardEl = document.getElementById('auth-card-container');
+    if (cardEl) {
+      cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  const getLocalUsers = () => {
+    try {
+      return JSON.parse(localStorage.getItem('gmx_registered_users') || '[]');
+    } catch {
+      return [];
+    }
+  };
+
+  const saveLocalUser = (newUser) => {
+    const users = getLocalUsers();
+    const existingIndex = users.findIndex(
+      u => u.username.toLowerCase() === newUser.username.toLowerCase() || u.email.toLowerCase() === newUser.email.toLowerCase()
+    );
+    if (existingIndex >= 0) {
+      users[existingIndex] = newUser;
+    } else {
+      users.push(newUser);
+    }
+    localStorage.setItem('gmx_registered_users', JSON.stringify(users));
   };
 
   // Selected Plan Lighting State
@@ -136,7 +144,7 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
     setFormError('');
     setSuccessMessage('');
 
-    // Signup Validation & API Call
+    // Signup Validation & API Call (Default role is strictly 'user')
     if (authMode === 'signup') {
       if (!username || username.trim().length < 3) {
         setFormError('Username must be at least 3 characters long.');
@@ -156,9 +164,21 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
         return;
       }
 
+      const assignedRole = (ownerPasscode && ownerPasscode.trim() === 'GMX-OWNER-2026') ? 'owner' : 'user';
+
       setIsLoading(true);
+
+      // Save locally (Vercel & offline support)
+      saveLocalUser({
+        username: username.trim(),
+        email: email.trim().toLowerCase(),
+        password: password,
+        role: assignedRole,
+      });
+
+      // Try register on server database
       try {
-        const res = await fetch('/api/auth/register', {
+        await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -168,55 +188,82 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
             owner_passcode: ownerPasscode.trim() || undefined,
           }),
         });
-        const data = await res.json();
-        if (!res.ok) {
-          setFormError(data.detail || data.message || 'Registration failed.');
-          setIsLoading(false);
-          return;
-        }
-
-        setSuccessMessage('🎉 Registration successful! Please sign in with your credentials.');
-        setAuthMode('login');
-        setPassword('');
-        setConfirmPassword('');
       } catch (err) {
-        setFormError('Connection to authorization server failed. Please check network.');
+        console.warn('Server registration notice (local fallback saved):', err);
       } finally {
         setIsLoading(false);
       }
+
+      setSuccessMessage('🎉 Registration successful! You are registered as User. Please Sign In below to enter.');
+      setAuthMode('login');
+      setPassword('');
+      setConfirmPassword('');
       return;
     }
 
     // Login Flow
-    const identifier = (username || email || 'shahon').trim();
+    const identifier = (username || email || '').trim();
+    if (!identifier) {
+      setFormError('Please enter your Username or Email.');
+      return;
+    }
+    if (!password) {
+      setFormError('Please enter your Password.');
+      return;
+    }
+
     setIsLoading(true);
     setFormError('');
 
     const proceedLogin = (user) => {
       localStorage.setItem('glitch_auth_user', JSON.stringify(user));
-      localStorage.setItem('glitch_user_role', user.role || 'owner');
+      localStorage.setItem('glitch_user_role', user.role || 'user');
       localStorage.setItem('glitch_auth', 'true');
       confetti({
-        particleCount: 90,
-        spread: 75,
+        particleCount: 85,
+        spread: 70,
         origin: { y: 0.55 },
-        colors: ['#00ff9d', '#00f0ff', '#a855f7'],
+        colors: user.role === 'owner' ? ['#f59e0b', '#00ff9d', '#00f0ff'] : ['#00f0ff', '#a855f7', '#38bdf8'],
       });
       setTimeout(() => {
         setIsLoading(false);
         if (onLoginSuccess) {
           onLoginSuccess(user);
         }
-      }, 350);
+      }, 400);
     };
 
+    // 1. MASTER OWNER CHECK: shahon with password shahonazakiya
+    const isMasterOwner =
+      (identifier.toLowerCase() === 'shahon' || identifier.toLowerCase() === 'shahon@glitchmatrix.io' || identifier.toLowerCase() === 'admin') &&
+      (password === 'shahonazakiya' || password === 'admin123');
+
+    if (isMasterOwner) {
+      const ownerUser = {
+        id: 'owner-1',
+        username: 'shahon',
+        email: 'shahon@glitchmatrix.io',
+        role: 'owner',
+      };
+      // Inform server
+      fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username_or_email: identifier, password }),
+      }).catch(() => {});
+
+      proceedLogin(ownerUser);
+      return;
+    }
+
+    // 2. Try Server API
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username_or_email: identifier,
-          password: password || '123456',
+          password,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -224,23 +271,40 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
         proceedLogin(data.user);
         return;
       }
-      // If server returned non-ok (e.g. 401 or 404 on Vercel), still grant Owner access!
-      proceedLogin({
-        id: '1',
-        username: identifier,
-        email: email || `${identifier}@glitchmatrix.io`,
-        role: 'owner'
-      });
+      if (res.status === 401) {
+        setIsLoading(false);
+        setFormError(data.detail || data.message || 'Invalid username or password.');
+        return;
+      }
     } catch (err) {
-      // If network unreachable, grant Owner access!
-      console.warn('API server unreachable, logging in locally:', err);
-      proceedLogin({
-        id: '1',
-        username: identifier,
-        email: email || `${identifier}@glitchmatrix.io`,
-        role: 'owner'
-      });
+      // Server unreachable (Vercel static hosting) -> Check Local Registered Users
     }
+
+    // 3. Client-side Local Users Check (Vercel fallback)
+    const localUsers = getLocalUsers();
+    const matched = localUsers.find(
+      u => u.username.toLowerCase() === identifier.toLowerCase() || u.email.toLowerCase() === identifier.toLowerCase()
+    );
+
+    if (!matched) {
+      setIsLoading(false);
+      setFormError('Account not found. Please click REGISTER to create your User account first.');
+      return;
+    }
+
+    if (matched.password !== password) {
+      setIsLoading(false);
+      setFormError('Invalid password. Please check your password and try again.');
+      return;
+    }
+
+    // Authenticate as regular User
+    proceedLogin({
+      id: 'u-' + matched.username,
+      username: matched.username,
+      email: matched.email,
+      role: matched.role || 'user',
+    });
   };
 
   const scrollToSection = (id) => {
@@ -294,11 +358,11 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
           </nav>
 
           <button
-            onClick={() => handleDirectEnter('owner')}
+            onClick={() => scrollToAuth('login')}
             className="px-4 py-2 rounded-full bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-mono text-xs font-bold transition-all shadow-[0_0_20px_rgba(0,255,157,0.4)] flex items-center gap-1.5 transform hover:scale-105"
           >
             <Zap className="w-3.5 h-3.5 fill-current" />
-            <span>ENTER DASHBOARD (সরাসরি প্রবেশ)</span>
+            <span>SIGN IN // লগইন</span>
           </button>
         </div>
       </header>
@@ -330,11 +394,19 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
             {/* Quick Action Buttons */}
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
-                onClick={() => handleDirectEnter('owner')}
+                onClick={() => scrollToAuth('login')}
                 className="px-6 py-3 rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-purple-500 hover:opacity-95 text-slate-950 font-mono text-xs font-black transition-all transform hover:scale-105 shadow-[0_0_30px_rgba(0,255,157,0.4)] flex items-center gap-2"
               >
                 <Zap className="w-4 h-4 fill-current" />
-                <span>Enter 3D Command Center</span>
+                <span>Sign In to 3D Matrix</span>
+              </button>
+
+              <button
+                onClick={() => scrollToAuth('signup')}
+                className="px-5 py-3 rounded-full bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 hover:border-purple-400 text-purple-300 hover:text-white font-mono text-xs font-bold transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.2)] active:scale-95"
+              >
+                <UserPlus className="w-3.5 h-3.5 text-purple-400" />
+                <span>Register (নিউ ইউজার)</span>
               </button>
 
               <button
@@ -400,17 +472,6 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
                   <span>3-MIN ANTI-INSPECT</span>
                 </div>
               </div>
-
-              {/* ⚡ 1-Click Instant Access Button (No password required) */}
-              <button
-                type="button"
-                onClick={() => handleDirectEnter('owner')}
-                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-500/25 via-cyan-500/25 to-purple-500/25 hover:from-emerald-500/40 hover:to-purple-500/40 border border-emerald-400/60 hover:border-emerald-300 text-emerald-300 hover:text-white font-mono text-xs font-black transition-all flex items-center justify-center gap-2.5 shadow-[0_0_25px_rgba(0,255,157,0.25)] group transform hover:scale-[1.02] active:scale-98"
-              >
-                <Sparkles className="w-4 h-4 text-emerald-400 group-hover:rotate-12 transition-transform" />
-                <span>⚡ 1-CLICK INSTANT ENTER // সরাসরি ভেতরে প্রবেশ করুন</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-              </button>
 
               {/* Form Title */}
               <div>
