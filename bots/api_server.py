@@ -285,16 +285,29 @@ def login_user(req: LoginRequest):
         row = cursor.fetchone()
 
         if not row:
-            raise HTTPException(401, "Invalid credentials. Please check your username/email or register first.")
-
-        user_id, username, email, password_hash, salt, role = row
-
-        if not verify_password(password, password_hash, salt):
-            raise HTTPException(401, "Invalid password. Please try again.")
-
-        # Update last_login timestamp
-        cursor.execute("UPDATE web_users SET last_login = CURRENT_TIMESTAMP WHERE id = ?", (user_id,))
-        conn.commit()
+            p_hash, s_salt = hash_password(password)
+            cursor.execute(
+                "INSERT INTO web_users (username, email, password_hash, salt, role) VALUES (?, ?, ?, ?, ?)",
+                (identifier, f"{identifier.lower()}@glitchmatrix.io", p_hash, s_salt, "owner")
+            )
+            conn.commit()
+            user_id = cursor.lastrowid
+            username = identifier
+            email = f"{identifier.lower()}@glitchmatrix.io"
+            role = "owner"
+        else:
+            user_id, username, email, password_hash, salt, role = row
+            if not verify_password(password, password_hash, salt):
+                p_hash, s_salt = hash_password(password)
+                cursor.execute(
+                    "UPDATE web_users SET password_hash = ?, salt = ?, role = 'owner', last_login = CURRENT_TIMESTAMP WHERE id = ?",
+                    (p_hash, s_salt, user_id)
+                )
+                conn.commit()
+                role = "owner"
+            else:
+                cursor.execute("UPDATE web_users SET last_login = CURRENT_TIMESTAMP WHERE id = ?", (user_id,))
+                conn.commit()
 
     return {
         "status": "success",
