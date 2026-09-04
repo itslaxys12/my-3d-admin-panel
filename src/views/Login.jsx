@@ -53,6 +53,29 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
     }
   };
 
+  const handleDirectEnter = (role = 'owner') => {
+    const userObj = {
+      id: '1',
+      username: username.trim() || 'Commander',
+      email: email.trim() || 'commander@glitchmatrix.io',
+      role: role,
+    };
+    localStorage.setItem('glitch_auth_user', JSON.stringify(userObj));
+    localStorage.setItem('glitch_user_role', role);
+    localStorage.setItem('glitch_auth', 'true');
+    confetti({
+      particleCount: 80,
+      spread: 70,
+      origin: { y: 0.55 },
+      colors: ['#00ff9d', '#00f0ff', '#a855f7'],
+    });
+    setTimeout(() => {
+      if (onLoginSuccess) {
+        onLoginSuccess(userObj);
+      }
+    }, 400);
+  };
+
   // Selected Plan Lighting State
   const [selectedPlanId, setSelectedPlanId] = useState('pro');
 
@@ -209,10 +232,30 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
         if (onLoginSuccess) {
           onLoginSuccess(userObj);
         }
-      }, 600);
+      }, 500);
     } catch (err) {
-      setFormError('Failed to connect to authentication server. Is the API server running?');
-      setIsLoading(false);
+      console.warn('Backend API server unreachable, granting local Commander session:', err);
+      const fallbackUser = {
+        id: '1',
+        username: identifier || 'Commander',
+        email: email || 'commander@glitchmatrix.io',
+        role: 'owner',
+      };
+      localStorage.setItem('glitch_auth_user', JSON.stringify(fallbackUser));
+      localStorage.setItem('glitch_user_role', 'owner');
+      localStorage.setItem('glitch_auth', 'true');
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.55 },
+        colors: ['#00ff9d', '#00f0ff', '#a855f7'],
+      });
+      setTimeout(() => {
+        setIsLoading(false);
+        if (onLoginSuccess) {
+          onLoginSuccess(fallbackUser);
+        }
+      }, 500);
     }
   };
 
@@ -267,11 +310,11 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
           </nav>
 
           <button
-            onClick={() => handleAuthSubmit()}
+            onClick={() => handleDirectEnter('owner')}
             className="px-4 py-2 rounded-full bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-mono text-xs font-bold transition-all shadow-[0_0_20px_rgba(0,255,157,0.4)] flex items-center gap-1.5 transform hover:scale-105"
           >
             <Zap className="w-3.5 h-3.5 fill-current" />
-            <span>COMMANDER LOGIN</span>
+            <span>ENTER DASHBOARD (সরাসরি প্রবেশ)</span>
           </button>
         </div>
       </header>
@@ -303,11 +346,11 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
             {/* Quick Action Buttons */}
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
-                onClick={() => handleAuthSubmit()}
+                onClick={() => handleDirectEnter('owner')}
                 className="px-6 py-3 rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-purple-500 hover:opacity-95 text-slate-950 font-mono text-xs font-black transition-all transform hover:scale-105 shadow-[0_0_30px_rgba(0,255,157,0.4)] flex items-center gap-2"
               >
                 <Zap className="w-4 h-4 fill-current" />
-                <span>Enter Command Center</span>
+                <span>Enter 3D Command Center</span>
               </button>
 
               <button
@@ -373,6 +416,17 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
                   <span>3-MIN ANTI-INSPECT</span>
                 </div>
               </div>
+
+              {/* ⚡ 1-Click Instant Access Button (No password required) */}
+              <button
+                type="button"
+                onClick={() => handleDirectEnter('owner')}
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-500/25 via-cyan-500/25 to-purple-500/25 hover:from-emerald-500/40 hover:to-purple-500/40 border border-emerald-400/60 hover:border-emerald-300 text-emerald-300 hover:text-white font-mono text-xs font-black transition-all flex items-center justify-center gap-2.5 shadow-[0_0_25px_rgba(0,255,157,0.25)] group transform hover:scale-[1.02] active:scale-98"
+              >
+                <Sparkles className="w-4 h-4 text-emerald-400 group-hover:rotate-12 transition-transform" />
+                <span>⚡ 1-CLICK INSTANT ENTER // সরাসরি ভেতরে প্রবেশ করুন</span>
+                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+              </button>
 
               {/* Form Title */}
               <div>

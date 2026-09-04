@@ -525,6 +525,18 @@ def bot_stop():
     return {"status": "stopped"}
 
 
+@app.on_event("startup")
+async def on_startup():
+    """Automatically launches the Discord bot immediately when API server starts."""
+    print("[API SERVER] Auto-starting Discord bot engine...")
+    try:
+        res = bot_start()
+        print(f"[API SERVER] Bot start status: {res}")
+    except Exception as e:
+        print(f"[API SERVER] Bot startup note: {e}")
+
+
+
 @app.post("/api/bot/restart")
 def bot_restart(script_name: Optional[str] = None):
     bot_stop()
@@ -1200,4 +1212,7 @@ def get_forex_calendar(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8765, log_level="warning")
+    port = int(os.environ.get("PORT", 8765))
+    host = "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"
+    uvicorn.run(app, host=host, port=port, log_level="warning")
+
