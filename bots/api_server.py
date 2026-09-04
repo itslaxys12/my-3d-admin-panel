@@ -582,17 +582,12 @@ def bot_stop():
 @app.on_event("startup")
 async def on_startup():
     """Automatically launches the Discord bot immediately when API server starts."""
-    # If Railway is running a separate worker service for the bot, skip starting duplicate bot in web
-    if os.getenv("RAILWAY_SERVICE_NAME") == "web" and os.getenv("ENABLE_WEB_BOT") != "1":
-        print("[API SERVER] Railway dedicated worker service detected. Running web API only.", flush=True)
-        return
-
-    print("[API SERVER] Auto-starting Discord bot engine...", flush=True)
+    print("[API SERVER] Auto-starting Discord bot engine 24/7...", flush=True)
     try:
         res = bot_start()
-        print(f"[API SERVER] Bot start status: {res}", flush=True)
+        print(f"[API SERVER] Discord bot startup status: {res}", flush=True)
     except Exception as e:
-        print(f"[API SERVER] Bot startup note: {e}", flush=True)
+        print(f"[API SERVER] Discord bot startup error: {e}", flush=True)
 
 
 
