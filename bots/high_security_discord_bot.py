@@ -479,7 +479,7 @@ async def disable_native_automod_blocking(guild: discord.Guild):
 
 # ─── ROGUE WI-FI DEVICE INTRUSION DISPATCHER ─────────────────────────────────
 
-@tasks.loop(seconds=15)
+@tasks.loop(seconds=5)
 async def router_alert_dispatcher():
     """Periodically inspects router_alerts for unread rogue MAC detections and posts alerts to Discord."""
     try:
@@ -507,9 +507,12 @@ async def router_alert_dispatcher():
             rname = alert.get("router_name", "Home Wi-Fi Router")
 
             embed = discord.Embed(
-                title="🚨 INTRUSION ALERT: Unknown Wi-Fi Device Connected",
-                description=f"An unrecognized MAC address has connected to your Wi-Fi network **`{rname}`**.\n"
-                            f"Use `!check` or visit the Web Dashboard to assign an identity or whitelist this device.",
+                title="🚨 【WI-FI INTRUSION / PERMISSION ALERT】",
+                description=f"⚠️ **A new device just connected to your Wi-Fi using the password!**\n"
+                            f"Network: **`{rname}`** (Dual-Band 5G / 2.4G)\n"
+                            f"This MAC address is **unregistered / unapproved**.\n\n"
+                            f"👉 **To Approve from Discord:** Reply `!macallow {mac} <Name>`\n"
+                            f"👉 **Web Dashboard:** https://my-3d-admin-panel.vercel.app",
                 color=discord.Color.from_rgb(255, 42, 109),
                 timestamp=datetime.now()
             )
@@ -1727,6 +1730,71 @@ async def check_router_cmd(ctx, *args):
     except Exception as exc:
         print(f"[CHECK COMMAND ERROR] {exc}", flush=True)
         await status_msg.edit(content=f"❌ Error during router scan: `{exc}`")
+
+
+
+@bot.command(name="macallow", aliases=["allowmac", "macwhitelist"])
+async def mac_allow_command(ctx, mac_address: str = None, *, friendly_name: str = None):
+    """Authorizes and assigns a friendly name to a connected Wi-Fi MAC address directly from Discord."""
+    if not mac_address:
+        await ctx.send("❌ **Usage:** `!macallow <MAC_ADDRESS> <Friendly Name>`\nExample: `!macallow EA:77:8F:0E:2E:5C Brother's Phone`")
+        return
+    
+    clean_mac = normalize_mac(mac_address)
+    if not clean_mac or len(clean_mac) != 17:
+        await ctx.send("❌ **Invalid MAC Address format.** Expected: `XX:XX:XX:XX:XX:XX`")
+        return
+    
+    name = (friendly_name or f"Device-{clean_mac[-5:].replace(':', '')}").strip()
+    try:
+        with sqlite3.connect(DISCORD_DB) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO known_devices (mac_address, custom_name, owner_name, device_type, is_known, updated_at)
+                VALUES (?, ?, ?, 'mobile', 1, CURRENT_TIMESTAMP)
+                ON CONFLICT(mac_address) DO UPDATE SET
+                    custom_name = excluded.custom_name,
+                    is_known = 1,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (clean_mac, name, ctx.author.display_name))
+            
+            # Dismiss related unread alerts
+            cur.execute("UPDATE router_alerts SET status = 'read' WHERE mac_address = ?", (clean_mac,))
+            conn.commit()
+
+        embed = discord.Embed(
+            title="✅ Device Successfully Authorized & Whitelisted",
+            description=f"Device `{clean_mac}` has been registered as **{name}** by {ctx.author.mention}.\nIt will now show as green authorized on the live radar!",
+            color=discord.Color.from_rgb(0, 255, 157)
+        )
+        embed.add_field(name="🆔 MAC Address", value=f"`{clean_mac}`", inline=True)
+        embed.add_field(name="📱 Friendly Name", value=f"**{name}**", inline=True)
+        embed.add_field(name="👑 Authorized By", value=ctx.author.display_name, inline=True)
+        embed.set_footer(text="GMX Quantum Router Defense • Device Whitelisted")
+        await ctx.send(embed=embed)
+    except Exception as e:
+        await ctx.send(f"❌ Database error while authorizing device: `{e}`")
+
+
+@bot.command(name="macdeny", aliases=["blockmac"])
+async def mac_deny_command(ctx, mac_address: str = None):
+    """Provides instant blocking steps for Netis NC21 / Tenda routers."""
+    if not mac_address:
+        await ctx.send("❌ **Usage:** `!macdeny <MAC_ADDRESS>`")
+        return
+    clean_mac = normalize_mac(mac_address)
+    embed = discord.Embed(
+        title=f"🛡️ Rogue Device Action: How to Block {clean_mac}",
+        description=f"To immediately kick and permanently block `{clean_mac}` from your Wi-Fi:\n\n"
+                    f"**Option 1: Netis NC21 Router Web Filter**\n"
+                    f"1. Open `http://192.168.1.1` or `http://netis.cc`\n"
+                    f"2. Go to **Wireless** ➔ **Wireless MAC Filter**\n"
+                    f"3. Select **Deny Listed** and add `{clean_mac}`\n\n"
+                    f"**Option 2: Change Wi-Fi Password**\n"
+                    f"If an unauthorized user has your password, update your 2.4G & 5G Wi-Fi password in the router settings.",
+        color=discord.Color.from_rgb(255, 42, 109)
+    )
+    await ctx.send(embed=embed)
 
 
 @bot.command(name="help", help="Displays all available commands")

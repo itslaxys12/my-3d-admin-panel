@@ -1851,8 +1851,11 @@ async def trigger_router_scan(router_id: int):
 @app.post("/api/routers/{router_id}/sync")
 async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
     """
-    Receives connected device reports pushed from a local router agent or test runner.
-    Enables real-time monitoring of home routers (e.g. Netis NC21 192.168.1.1) when server is in the cloud.
+    Receives live telemetry from local Wi-Fi Radar Agent.
+    - Instantly detects newly connected or reconnected devices (with password).
+    - If device is not in approved whitelist, creates an intrusion alert and broadcasts UNKNOWN_DEVICE_DETECTED.
+    - Instantly detects disconnected devices and marks them offline ("যে ডিসকানেক্ট মারবে ওকে উঠায় দিবে").
+    - Broadcasts DEVICE_DISCONNECTED and RADAR_STATE_UPDATED in real time via WebSocket.
     """
     with sqlite3.connect(DISCORD_DB) as conn:
         conn.row_factory = sqlite3.Row
@@ -1860,7 +1863,6 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
         cur.execute("SELECT * FROM routers WHERE id = ?", (router_id,))
         row = cur.fetchone()
         if not row:
-            # Smart fallback: Find Netis or matching IP or first router
             cur.execute("SELECT * FROM routers WHERE brand LIKE '%Netis%' OR ip_address LIKE '%192.168.1.%' ORDER BY id DESC LIMIT 1")
             row = cur.fetchone()
         if not row:
@@ -1874,14 +1876,23 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
     now_iso = datetime.now(timezone.utc).isoformat()
     seen_macs = set()
     new_unknowns = []
+    disconnected_list = []
 
     with sqlite3.connect(DISCORD_DB) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
+        # 1. Fetch previous device state to detect instant connect / disconnect transitions
+        cur.execute("SELECT mac_address, hostname, status FROM router_device_history WHERE router_id = ?", (router_id,))
+        prev_rows = cur.fetchall()
+        prev_status_map = {r["mac_address"]: r["status"] for r in prev_rows}
+        prev_host_map = {r["mac_address"]: r["hostname"] for r in prev_rows}
+
+        # 2. Known devices whitelist map
         cur.execute("SELECT mac_address, custom_name, owner_name, is_known FROM known_devices")
         known_map = {r["mac_address"]: dict(r) for r in cur.fetchall()}
 
+        # 3. Process each currently active device
         for dev in report.devices:
             raw_mac = dev.get("mac") or dev.get("mac_address") or ""
             mac = normalize_mac(raw_mac)
@@ -1892,22 +1903,26 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
             ip = dev.get("ip") or dev.get("ip_address") or ""
             hostname = dev.get("hostname") or dev.get("name") or "Device"
             conn_type = dev.get("connection_type") or "Wi-Fi"
-            signal = dev.get("signal") or dev.get("signal_strength") or "-60 dBm"
+            signal = dev.get("signal") or dev.get("signal_strength") or "-58 dBm"
+
+            prev_status = prev_status_map.get(mac)
+            is_new_connect = (prev_status is None or prev_status == 'offline')
 
             is_recognized = False
             if mac in known_map:
                 is_recognized = bool(known_map[mac]["is_known"])
 
-            if not is_recognized:
+            # If device just connected / reconnected with password and is NOT whitelisted
+            if is_new_connect and not is_recognized:
                 cur.execute("""
                     SELECT id FROM router_alerts
                     WHERE router_id = ? AND mac_address = ? AND status = 'unread'
-                    AND datetime(created_at) > datetime('now', '-15 minutes')
+                    AND datetime(created_at) > datetime('now', '-5 minutes')
                 """, (router_id, mac))
                 recent_alert = cur.fetchone()
 
                 if not recent_alert:
-                    alert_msg = f"Unknown MAC {mac} connected ({ip} - {hostname}) on {router['name']}."
+                    alert_msg = f"Unknown MAC {mac} connected ({ip} - {hostname} [{conn_type}]) on {router['name']}."
                     cur.execute("""
                         INSERT INTO router_alerts (router_id, router_name, mac_address, ip_address, hostname, alert_type, message, status)
                         VALUES (?, ?, ?, ?, ?, 'unknown_mac', ?, 'unread')
@@ -1921,12 +1936,26 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
                         "mac_address": mac,
                         "ip_address": ip,
                         "hostname": hostname,
+                        "connection_type": conn_type,
+                        "signal": signal,
                         "alert_type": "unknown_mac",
                         "message": alert_msg,
                         "created_at": now_iso,
                         "status": "unread"
                     })
+                    cur.execute("""
+                        INSERT INTO router_audit_logs (event_type, details, router_id)
+                        VALUES ('unknown_mac_alert', ?, ?)
+                    """, (f"🚨 INTRUSION ALERT: Unrecognized device {mac} ({ip} [{conn_type}]) connected with password.", router_id))
 
+            elif is_new_connect and is_recognized:
+                cname = known_map[mac].get("custom_name", "Known Device")
+                cur.execute("""
+                    INSERT INTO router_audit_logs (event_type, details, router_id)
+                    VALUES ('device_connected', ?, ?)
+                """, (f"Authorized device '{cname}' ({mac} - {ip} [{conn_type}]) connected.", router_id))
+
+            # Upsert into router_device_history as ONLINE
             cur.execute("""
                 INSERT INTO router_device_history (router_id, mac_address, ip_address, hostname, connection_type, signal_strength, status, last_seen)
                 VALUES (?, ?, ?, ?, ?, ?, 'online', CURRENT_TIMESTAMP)
@@ -1939,6 +1968,16 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
                     last_seen = CURRENT_TIMESTAMP
             """, (router_id, mac, ip, hostname, conn_type, signal))
 
+        # 4. Instant Disconnect Detection: Mark any previously online device not in current scan as OFFLINE
+        for p_mac, p_status in prev_status_map.items():
+            if p_status == 'online' and p_mac not in seen_macs:
+                disconnected_list.append({
+                    "router_id": router_id,
+                    "mac_address": p_mac,
+                    "hostname": prev_host_map.get(p_mac, "Unknown Device"),
+                    "timestamp": now_iso
+                })
+
         if seen_macs:
             placeholders = ",".join("?" for _ in seen_macs)
             cur.execute(f"""
@@ -1946,6 +1985,13 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
                 SET status = 'offline'
                 WHERE router_id = ? AND mac_address NOT IN ({placeholders})
             """, [router_id] + list(seen_macs))
+
+        # Log disconnect audits
+        for disc in disconnected_list:
+            cur.execute("""
+                INSERT INTO router_audit_logs (event_type, details, router_id)
+                VALUES ('device_disconnected', ?, ?)
+            """, (f"🔌 Device {disc['mac_address']} ({disc['hostname']}) disconnected from Wi-Fi.", router_id))
 
         cur.execute("""
             UPDATE routers
@@ -1956,12 +2002,16 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
         cur.execute("""
             INSERT INTO router_audit_logs (event_type, details, router_id)
             VALUES ('agent_sync', ?, ?)
-        """, (f"Synced {len(seen_macs)} devices from {report.source} ({len(new_unknowns)} new alerts).", router_id))
+        """, (f"Synced {len(seen_macs)} active devices from {report.source} ({len(new_unknowns)} new alerts, {len(disconnected_list)} disconnected).", router_id))
 
         conn.commit()
 
+    # Broadcast WebSocket events in real time
     for unk in new_unknowns:
         await ws_manager.broadcast({"type": "UNKNOWN_DEVICE_DETECTED", "data": unk})
+
+    for disc in disconnected_list:
+        await ws_manager.broadcast({"type": "DEVICE_DISCONNECTED", "data": disc})
 
     await ws_manager.broadcast({
         "type": "SCAN_COMPLETED",
@@ -1970,6 +2020,7 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
             "router_name": router["name"],
             "device_count": len(seen_macs),
             "unknown_count": len(new_unknowns),
+            "disconnected_count": len(disconnected_list),
             "timestamp": now_iso
         }
     })
@@ -1978,7 +2029,8 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
         "success": True,
         "synced_count": len(seen_macs),
         "new_unknown_alerts": len(new_unknowns),
-        "message": f"Successfully synced {len(seen_macs)} devices from {report.source}."
+        "disconnected_count": len(disconnected_list),
+        "message": f"Successfully synced {len(seen_macs)} active devices ({len(new_unknowns)} new alerts)."
     }
 
 

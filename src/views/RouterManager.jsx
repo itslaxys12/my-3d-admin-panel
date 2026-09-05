@@ -52,7 +52,12 @@ export function RouterManager({ userRole = 'owner' }) {
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [deviceFilter, setDeviceFilter] = useState('all'); // 'all' | 'unknown' | 'known'
+  const [statusFilter, setStatusFilter] = useState('online'); // 'online' | 'offline' | 'all' (default: online only)
   const [routerFilter, setRouterFilter] = useState('all');
+
+  // Instant Permission Alert State (when new device connects with password)
+  const [permissionAlert, setPermissionAlert] = useState(null);
+  const [dismissedAlertIds, setDismissedAlertIds] = useState(new Set());
 
   // Audio Alerts Toggle
   const [audioAlerts, setAudioAlerts] = useState(() => {
@@ -190,8 +195,9 @@ export function RouterManager({ userRole = 'owner' }) {
           const payload = JSON.parse(event.data);
           if (payload.type === 'UNKNOWN_DEVICE_DETECTED') {
             triggerAudioChime();
+            setPermissionAlert(payload.data);
             fetchAllData();
-          } else if (payload.type === 'SCAN_COMPLETED') {
+          } else if (payload.type === 'DEVICE_DISCONNECTED' || payload.type === 'SCAN_COMPLETED' || payload.type === 'RADAR_STATE_UPDATED') {
             fetchAllData();
           }
         } catch {
@@ -391,9 +397,17 @@ export function RouterManager({ userRole = 'owner' }) {
     }
   };
 
+  // Counts
+  const onlineCount = useMemo(() => devices.filter((d) => d.status === 'online').length, [devices]);
+  const offlineCount = useMemo(() => devices.filter((d) => d.status !== 'online').length, [devices]);
+
   // ─── Filtered Devices Computation ──────────────────────────────────────────
   const filteredDevices = useMemo(() => {
     return devices.filter((d) => {
+      // Status filter (Active Online vs Disconnected History)
+      if (statusFilter === 'online' && d.status !== 'online') return false;
+      if (statusFilter === 'offline' && d.status === 'online') return false;
+
       // Router filter
       if (routerFilter !== 'all' && String(d.router_id) !== String(routerFilter)) {
         return false;
@@ -421,7 +435,7 @@ export function RouterManager({ userRole = 'owner' }) {
       }
       return true;
     });
-  }, [devices, routerFilter, deviceFilter, searchQuery]);
+  }, [devices, statusFilter, routerFilter, deviceFilter, searchQuery]);
 
   // Device type icon selector helper
   const getDeviceIcon = (type) => {
@@ -790,6 +804,43 @@ export function RouterManager({ userRole = 'owner' }) {
             </div>
           </div>
 
+          {/* Status Sub-filter Bar (Active Online vs Disconnected) */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              onClick={() => setStatusFilter('online')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all ${
+                statusFilter === 'online'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-[0_0_15px_rgba(0,255,157,0.2)]'
+                  : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>ACTIVE ONLINE ({onlineCount})</span>
+            </button>
+
+            <button
+              onClick={() => setStatusFilter('offline')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all ${
+                statusFilter === 'offline'
+                  ? 'bg-slate-700 text-slate-200 border border-slate-600 shadow-[0_0_15px_rgba(255,255,255,0.1)]'
+                  : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <span>DISCONNECTED ({offlineCount})</span>
+            </button>
+
+            <button
+              onClick={() => setStatusFilter('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all ${
+                statusFilter === 'all'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                  : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <span>ALL CLIENTS ({devices.length})</span>
+            </button>
+          </div>
+
           {/* Devices Grid / Table */}
           {filteredDevices.length === 0 ? (
             <div className="p-12 text-center rounded-2xl bg-slate-900/40 border border-slate-800/80 font-mono space-y-3">
@@ -894,12 +945,28 @@ export function RouterManager({ userRole = 'owner' }) {
                         </div>
 
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-slate-500 uppercase">Band & Signal</span>
+                          <span className="text-[10px] text-slate-500 uppercase">Status & Band</span>
                           <div className="flex items-center gap-1.5">
-                            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-emerald-400 font-bold">
+                            {dev.status === 'online' ? (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-[10px] text-emerald-300 font-bold border border-emerald-500/30 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                LIVE
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-400 font-bold border border-slate-700">
+                                OFFLINE
+                              </span>
+                            )}
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              (dev.connection_type || '').includes('5G')
+                                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                                : (dev.connection_type || '').includes('LAN')
+                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            }`}>
                               {dev.connection_type || 'Wi-Fi'}
                             </span>
-                            <span className="text-slate-400 text-[10px]">{dev.signal_strength || '-60 dBm'}</span>
+                            <span className="text-slate-400 text-[10px]">{dev.signal_strength || '-58 dBm'}</span>
                           </div>
                         </div>
                       </div>
@@ -1678,6 +1745,82 @@ export function RouterManager({ userRole = 'owner' }) {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+        {/* ─── INSTANT PERMISSION / NEW UNKNOWN DEVICE MODAL ───────────────── */}
+        {permissionAlert && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-lg p-6 rounded-3xl bg-slate-900 border-2 border-rose-500 shadow-[0_0_50px_rgba(255,42,109,0.35)] relative overflow-hidden"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 animate-pulse flex-shrink-0">
+                  <ShieldAlert className="w-7 h-7" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-[10px] font-mono font-bold text-rose-300 animate-pulse">
+                      PASSWORD ACCEPTED • NEW WI-FI CLIENT
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-black text-white font-heading mt-1">
+                    Permission Alert: Device Connected!
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Someone just connected to your Wi-Fi with the password. This MAC is unapproved.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 p-4 rounded-2xl bg-slate-950 border border-slate-800 font-mono text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 text-[11px] uppercase">MAC Address</span>
+                  <span className="text-white font-bold tracking-wider">{permissionAlert.mac_address}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 text-[11px] uppercase">IP Address</span>
+                  <span className="text-emerald-400 font-bold">{permissionAlert.ip_address || 'DHCP Pending'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 text-[11px] uppercase">Network Band</span>
+                  <span className="text-cyan-300 font-bold">
+                    {(permissionAlert.connection_type || '').includes('5G') ? '5GHz Ultra High-Speed' : '2.4GHz Wi-Fi'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 text-[11px] uppercase">Hostname</span>
+                  <span className="text-slate-300 font-bold truncate max-w-[200px]">{permissionAlert.hostname || 'Mobile Client'}</span>
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-col sm:flex-row items-center gap-3">
+                <button
+                  onClick={() => {
+                    openWhitelistModal(permissionAlert);
+                    setDismissedAlertIds((prev) => new Set([...prev, permissionAlert.id]));
+                    setPermissionAlert(null);
+                  }}
+                  className="w-full sm:flex-1 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-mono font-black text-xs transition-all shadow-[0_0_20px_rgba(0,255,157,0.35)] flex items-center justify-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4 stroke-[3]" />
+                  <span>APPROVE & SET NAME (WHITELIST)</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (permissionAlert.id) handleDismissAlert(permissionAlert.id);
+                    setDismissedAlertIds((prev) => new Set([...prev, permissionAlert.id]));
+                    setPermissionAlert(null);
+                  }}
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono font-bold text-xs transition-all border border-slate-700"
+                >
+                  Dismiss
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
