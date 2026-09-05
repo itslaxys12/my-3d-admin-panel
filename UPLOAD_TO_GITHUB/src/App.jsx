@@ -1,0 +1,348 @@
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import BackgroundCanvas from './components/3d/BackgroundCanvas';
+import Sidebar from './components/layout/Sidebar';
+import Navbar from './components/layout/Navbar';
+import Footer from './components/layout/Footer';
+import Dashboard from './views/Dashboard';
+import BotController from './views/BotController';
+import BotInvitePage from './views/BotInvitePage';
+import Settings from './views/Settings';
+import Login from './views/Login';
+import CryptoRadarView from './components/crypto/CryptoRadarView';
+import RouterManager from './views/RouterManager';
+import InteractiveModel from './components/3d/InteractiveModel';
+import GlassCard from './components/UI/GlassCard';
+import SecurityLockdown from './components/security/SecurityLockdown';
+import AnimatedWallpaperBackground from './components/media/AnimatedWallpaperBackground';
+import UserRoleManagerModal from './components/modals/UserRoleManagerModal';
+import useDevToolsSecurity from './hooks/useDevToolsSecurity';
+import use3DScene from './hooks/use3DScene';
+import { MODEL_PRESETS, APP_CONFIG } from './utils/constants';
+import { Box, Sparkles, Film, Eye, Globe, Bot, Lock, Crown, ShieldAlert, LayoutDashboard, Coins, Activity, Menu, Wifi } from 'lucide-react';
+
+export function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('glitch_auth') === 'true';
+  });
+
+  const [currentTab, setCurrentTab] = useState('dashboard');
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState(MODEL_PRESETS[0]);
+  const [activeBgTexture, setActiveBgTexture] = useState(() => {
+    return localStorage.getItem('gmx_active_background') || '';
+  });
+  const [isRoleManagerOpen, setIsRoleManagerOpen] = useState(false);
+
+  const [userRole, setUserRole] = useState(() => {
+    let role = 'user';
+    try {
+      const u = JSON.parse(localStorage.getItem('glitch_auth_user') || '{}');
+      role = u.role || localStorage.getItem('glitch_user_role') || 'user';
+    } catch {}
+    return role;
+  });
+
+  useEffect(() => {
+    const handleRoleChange = () => {
+      try {
+        const u = JSON.parse(localStorage.getItem('glitch_auth_user') || '{}');
+        setUserRole(u.role || localStorage.getItem('glitch_user_role') || 'owner');
+      } catch {}
+    };
+    window.addEventListener('gmx_roles_updated', handleRoleChange);
+    return () => window.removeEventListener('gmx_roles_updated', handleRoleChange);
+  }, []);
+
+  useEffect(() => {
+    const handleBgChange = (e) => {
+      setActiveBgTexture(e.detail || '');
+    };
+    window.addEventListener('gmx-background-change', handleBgChange);
+    return () => window.removeEventListener('gmx-background-change', handleBgChange);
+  }, []);
+
+  // 3-Minute DevTools / Inspect Element Lockdown Protection
+  const { isLocked, remainingSeconds } = useDevToolsSecurity();
+
+  const {
+    mousePos,
+    fps,
+    quality,
+    updateQuality,
+    bloomEnabled,
+    setBloomEnabled,
+    particlesCount,
+  } = use3DScene();
+
+  const handleLoginSuccess = (user) => {
+    setIsAuthenticated(true);
+    localStorage.setItem('glitch_auth', 'true');
+    if (user && user.role) {
+      setUserRole(user.role);
+      localStorage.setItem('glitch_user_role', user.role);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('glitch_auth');
+    localStorage.removeItem('glitch_auth_user');
+    localStorage.removeItem('glitch_user_role');
+  };
+
+  // If 3-minute security lockdown is active, lock down entire application
+  if (isLocked) {
+    return <SecurityLockdown remainingSeconds={remainingSeconds} />;
+  }
+
+  // If user is not logged in, render the aesthetic Cyberpunk Login Page
+  if (!isAuthenticated) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  const renderContent = () => {
+    switch (currentTab) {
+      case 'dashboard':
+        return <Dashboard />;
+
+      case 'bot_control':
+        // Regular users cannot access internal Bot Controller
+        if (userRole === 'user') {
+          return (
+            <div className="p-8 sm:p-12 rounded-3xl bg-slate-950/90 border border-purple-500/30 text-center space-y-5 max-w-xl mx-auto my-12 shadow-2xl backdrop-blur-xl font-mono">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-purple-500/10 border border-purple-500/40 flex items-center justify-center text-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.3)]">
+                <Lock className="w-8 h-8 animate-pulse" />
+              </div>
+              <div>
+                <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 text-xs font-bold">
+                  RESTRICTED ACCESS LEVEL
+                </span>
+                <h2 className="text-xl sm:text-2xl font-black text-white mt-3 font-heading">
+                  Requires Manager or Owner Clearance
+                </h2>
+                <p className="text-xs text-slate-400 mt-2 leading-relaxed font-sans">
+                  Your account currently has standard <strong>User</strong> privileges. Access to the Discord Bot Controller, .env configuration, audit logs, and Web Terminal is restricted exclusively to the <strong>Owner</strong>.
+                </p>
+              </div>
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <button
+                  onClick={() => setCurrentTab('bot_invite')}
+                  className="px-5 py-2.5 rounded-xl bg-purple-500 text-white font-mono text-xs font-bold hover:bg-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.4)] transition-all"
+                >
+                  Bot Invite Studio
+                </button>
+                <button
+                  onClick={() => setCurrentTab('router_manager')}
+                  className="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-200 font-mono text-xs font-bold hover:bg-slate-700 transition-all"
+                >
+                  WiFi Router Hub
+                </button>
+              </div>
+            </div>
+          );
+        }
+        return <BotController onOpenInvitePage={() => setCurrentTab('bot_invite')} />;
+
+      case 'bot_invite':
+        return <BotInvitePage onBackToDashboard={() => setCurrentTab('bot_control')} />;
+
+      case 'crypto_radar':
+        // Strictly guarded for Owner only
+        if (userRole !== 'owner') {
+          return (
+            <div className="p-8 sm:p-12 rounded-3xl bg-slate-950/90 border border-purple-500/40 text-center space-y-5 max-w-xl mx-auto my-12 shadow-2xl backdrop-blur-xl font-mono">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-purple-500/10 border border-purple-500/40 flex items-center justify-center text-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.3)]">
+                <Lock className="w-8 h-8 animate-pulse text-amber-400" />
+              </div>
+              <div>
+                <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 text-xs font-bold">
+                  VIP OWNER CLEARANCE REQUIRED
+                </span>
+                <h2 className="text-xl sm:text-2xl font-black text-white mt-3 font-heading">
+                  Restricted Quantum Moonshot Radar
+                </h2>
+                <p className="text-xs text-slate-400 mt-2 leading-relaxed font-sans">
+                  The real-time Crypto Moonshot Radar, live DEX new coin alerts, and 3D predictive analytics are restricted exclusively to the <strong>Server Owner</strong>.
+                </p>
+              </div>
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <button
+                  onClick={() => setCurrentTab('dashboard')}
+                  className="px-5 py-2.5 rounded-xl bg-purple-500 text-white font-mono text-xs font-bold hover:bg-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.4)] transition-all"
+                >
+                  Return to Dashboard
+                </button>
+              </div>
+            </div>
+          );
+        }
+        return <CryptoRadarView />;
+
+      case 'router_manager':
+        // Strictly guarded for Owner role only
+        if (userRole !== 'owner') {
+          return (
+            <div className="p-8 sm:p-12 rounded-3xl bg-slate-950/90 border border-cyan-500/40 text-center space-y-5 max-w-xl mx-auto my-12 shadow-2xl backdrop-blur-xl font-mono">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-cyan-500/10 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-[0_0_25px_rgba(6,182,212,0.3)]">
+                <Lock className="w-8 h-8 animate-pulse text-amber-400" />
+              </div>
+              <div>
+                <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-bold">
+                  VIP OWNER CLEARANCE REQUIRED
+                </span>
+                <h2 className="text-xl sm:text-2xl font-black text-white mt-3 font-heading">
+                  Restricted WiFi & Router Hub
+                </h2>
+                <p className="text-xs text-slate-400 mt-2 leading-relaxed font-sans">
+                  WiFi ও রাউটার কন্ট্রোল হাব, কানেক্টেড ডিভাইসের রাডার ও ম্যাক ব্লক কনফিগারেশন শুধুমাত্র <strong>Owner</strong> রোলের জন্য সংরক্ষিত।
+                </p>
+              </div>
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <button
+                  onClick={() => setCurrentTab('dashboard')}
+                  className="px-5 py-2.5 rounded-xl bg-cyan-500 text-black font-mono text-xs font-bold hover:bg-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all"
+                >
+                  Return to Dashboard
+                </button>
+              </div>
+            </div>
+          );
+        }
+        return <RouterManager userRole={userRole} />;
+
+      case 'settings':
+        if (userRole === 'user') {
+          return (
+            <div className="p-8 rounded-3xl bg-slate-950/90 border border-purple-500/30 text-center space-y-4 max-w-lg mx-auto my-12 font-mono">
+              <Lock className="w-10 h-10 text-purple-400 mx-auto" />
+              <h2 className="text-lg font-bold text-white font-heading">Settings Restricted for User Role</h2>
+              <p className="text-xs text-slate-400">
+                সিস্টেম সেটিংস ও ব্যাকগ্রাউন্ড কনফিগারেশন পরিবর্তন করতে ম্যানেজার অথবা অনার রোল প্রয়োজন।
+              </p>
+            </div>
+          );
+        }
+        return (
+          <Settings
+            quality={quality}
+            updateQuality={updateQuality}
+            bloomEnabled={bloomEnabled}
+            setBloomEnabled={setBloomEnabled}
+          />
+        );
+
+      default:
+        return <Dashboard />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#050713] text-slate-100 flex flex-col selection:bg-emerald-400 selection:text-black relative overflow-x-hidden">
+      {/* Cinematic Animated Anime Warrior Background with Rain & Mist */}
+      <AnimatedWallpaperBackground mousePos={mousePos} />
+
+      {/* Top Navbar */}
+      <Navbar
+        isCollapsed={isCollapsed}
+        onOpenSettings={() => setCurrentTab('settings')}
+        onLogout={handleLogout}
+        onOpenRoleManager={() => setIsRoleManagerOpen(true)}
+        onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+      />
+
+      {/* Collapsible Sidebar with Role awareness and Mobile Drawer */}
+      <Sidebar
+        currentTab={currentTab}
+        setCurrentTab={setCurrentTab}
+        isCollapsed={isCollapsed}
+        setIsCollapsed={setIsCollapsed}
+        isMobileOpen={isMobileMenuOpen}
+        setIsMobileOpen={setIsMobileMenuOpen}
+        userRole={userRole}
+      />
+
+      {/* Main Content Area (Responsive margins for phones, tablets & desktops) */}
+      <main
+        className={`flex-1 transition-all duration-300 pt-16 md:pt-20 pb-20 md:pb-14 px-3 sm:px-8 relative z-10 ml-0 ${
+          isCollapsed ? 'md:ml-20' : 'md:ml-64'
+        }`}
+      >
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentTab}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+          >
+            {renderContent()}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+
+      {/* Mobile Bottom Quick Navigation Bar (Active on phones for thumb-friendly navigation) */}
+      <nav className="fixed bottom-0 left-0 right-0 z-30 h-14 bg-slate-950/95 border-t border-slate-800/80 backdrop-blur-xl flex items-center justify-around px-2 md:hidden">
+        <button
+          onClick={() => setCurrentTab('dashboard')}
+          className={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium transition-colors ${
+            currentTab === 'dashboard' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <LayoutDashboard className="w-5 h-5 mb-0.5" />
+          <span>Core</span>
+        </button>
+        <button
+          onClick={() => setCurrentTab('bot_control')}
+          className={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium transition-colors ${
+            currentTab === 'bot_control' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Bot className="w-5 h-5 mb-0.5" />
+          <span>Bot Hub</span>
+        </button>
+        {userRole === 'owner' && (
+          <button
+            onClick={() => setCurrentTab('router_manager')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium transition-colors ${
+              currentTab === 'router_manager' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Wifi className="w-5 h-5 mb-0.5 text-cyan-400" />
+            <span>WiFi Hub</span>
+          </button>
+        )}
+        {userRole === 'owner' && (
+          <button
+            onClick={() => setCurrentTab('crypto_radar')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium transition-colors ${
+              currentTab === 'crypto_radar' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Coins className="w-5 h-5 mb-0.5 text-amber-400" />
+            <span>Radar</span>
+          </button>
+        )}
+        <button
+          onClick={() => setIsMobileMenuOpen(true)}
+          className="flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium text-slate-400 hover:text-slate-200 transition-colors"
+        >
+          <Menu className="w-5 h-5 mb-0.5 text-cyan-400" />
+          <span>Menu</span>
+        </button>
+      </nav>
+
+      {/* Owner User & Role Management Modal */}
+      <UserRoleManagerModal
+        isOpen={isRoleManagerOpen}
+        onClose={() => setIsRoleManagerOpen(false)}
+      />
+
+      {/* Bottom Telemetry Footer */}
+      <Footer isCollapsed={isCollapsed} fps={fps} />
+    </div>
+  );
+}
+
+export default App;
