@@ -44,6 +44,24 @@ try:
 except Exception:
     pass
 
+# Ensure Opus is loaded for crystal-clear voice streaming
+if not discord.opus.is_loaded():
+    for opus_candidate in ["libopus.so.0", "libopus.so", "opus", "libopus-0.x86.dll", "libopus-0.x64.dll"]:
+        try:
+            discord.opus.load_opus(opus_candidate)
+            if discord.opus.is_loaded():
+                print(f"[OPUS] Successfully loaded Opus library: {opus_candidate}")
+                break
+        except Exception:
+            pass
+
+# Check Discord DAVE E2EE Voice Encryption library
+try:
+    import davey
+    print("[DAVE/VOICE] Davey E2EE voice protocol library is ready and loaded.")
+except ImportError:
+    print("[DAVE/VOICE WARNING] davey library is not installed. Run 'pip install davey'.")
+
 load_dotenv()
 
 # Intents configuration

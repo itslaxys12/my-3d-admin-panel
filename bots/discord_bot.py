@@ -24,6 +24,21 @@ from discord.ext import commands
 if PROJECT_DIR not in sys.path:
     sys.path.insert(0, PROJECT_DIR)
 
+# Ensure Opus is loaded for crystal-clear voice streaming
+if not discord.opus.is_loaded():
+    for opus_candidate in ["libopus.so.0", "libopus.so", "opus", "libopus-0.x86.dll", "libopus-0.x64.dll"]:
+        try:
+            discord.opus.load_opus(opus_candidate)
+            if discord.opus.is_loaded():
+                break
+        except Exception:
+            pass
+
+try:
+    import davey
+except ImportError:
+    pass
+
 load_dotenv()
 
 
