@@ -700,7 +700,7 @@ async def join_voice(ctx):
     voice_client = ctx.voice_client
 
     try:
-        if voice_client:
+        if voice_client and voice_client.is_connected():
             if voice_client.channel.id == channel.id:
                 embed = discord.Embed(
                     title="🔊 Already Connected!",
@@ -710,7 +710,12 @@ async def join_voice(ctx):
                 return await ctx.send(embed=embed)
             await voice_client.move_to(channel)
         else:
-            voice_client = await channel.connect(reconnect=True, timeout=10.0, self_deaf=True)
+            if voice_client:
+                try:
+                    await voice_client.disconnect(force=True)
+                except Exception:
+                    pass
+            voice_client = await channel.connect(reconnect=True, timeout=25.0, self_deaf=True)
 
         latency = round(bot.latency * 1000)
         embed = discord.Embed(
@@ -722,9 +727,13 @@ async def join_voice(ctx):
         await ctx.send(embed=embed)
         print(f"[VOICE] 🔊 Joined channel '{channel.name}' in '{ctx.guild.name}'")
 
+    except asyncio.TimeoutError:
+        print("[VOICE ERROR] Connection timed out")
+        await ctx.send("❌ Failed to join voice channel: `Discord voice connection timed out. Please try again.`")
     except Exception as exc:
-        print(f"[VOICE ERROR] Failed to connect: {exc}")
-        await ctx.send(f"❌ Failed to join voice channel: `{exc}`")
+        err_msg = str(exc).strip() or type(exc).__name__
+        print(f"[VOICE ERROR] Failed to connect: {err_msg}")
+        await ctx.send(f"❌ Failed to join voice channel: `{err_msg}`")
 
 
 @bot.command(name="leave", aliases=["dc", "disconnect"], help="Disconnects from the voice channel")
@@ -763,15 +772,33 @@ async def play_song(ctx, *, query: str = None):
 
     channel = ctx.author.voice.channel
 
-    # 2. Connect or move voice client instantly
+    # 2. Connect or move voice client with robust reconnection
     voice_client = ctx.voice_client
-    if not voice_client:
+    if voice_client and not voice_client.is_connected():
         try:
-            voice_client = await channel.connect(reconnect=True, timeout=10.0, self_deaf=True)
+            await voice_client.disconnect(force=True)
+        except Exception:
+            pass
+        voice_client = None
+
+    if voice_client is None:
+        try:
+            voice_client = await channel.connect(reconnect=True, timeout=25.0, self_deaf=True)
+        except asyncio.TimeoutError:
+            return await ctx.send("❌ Could not connect to voice channel: `Discord voice connection timed out. Please try again.`")
         except Exception as exc:
-            return await ctx.send(f"❌ Could not connect to voice channel: `{exc}`")
+            err_msg = str(exc).strip() or type(exc).__name__
+            return await ctx.send(f"❌ Could not connect to voice channel: `{err_msg}`")
     elif voice_client.channel.id != channel.id:
-        await voice_client.move_to(channel)
+        try:
+            await voice_client.move_to(channel)
+        except Exception:
+            try:
+                await voice_client.disconnect(force=True)
+                voice_client = await channel.connect(reconnect=True, timeout=25.0, self_deaf=True)
+            except Exception as exc:
+                err_msg = str(exc).strip() or type(exc).__name__
+                return await ctx.send(f"❌ Could not connect to voice channel: `{err_msg}`")
 
     # 3. Check for local fast-track song (e.g. Ravyn Lenae - Love Me Not)
     local_song_path = BASE_DIR.parent / "public" / "assets" / "audio" / "love_me_not.mp3"
@@ -851,9 +878,32 @@ async def play_song(ctx, *, query: str = None):
         webpage_url = video_data.get("webpage_url", "https://youtube.com")
         uploader = video_data.get("uploader", "YouTube")
 
-        # Stop previous audio immediately
-        if voice_client.is_playing():
-            voice_client.stop()
+        # Stop previous audio safely
+        if voice_client.is_playing() or voice_client.is_paused():
+            try:
+                voice_client.stop()
+                await asyncio.sleep(0.3)
+            except Exception:
+                pass
+
+        # Verify voice client is firmly connected before initiating playback
+        for _ in range(8):
+            if voice_client.is_connected():
+                break
+            await asyncio.sleep(0.4)
+
+        if not voice_client.is_connected():
+            try:
+                await voice_client.disconnect(force=True)
+            except Exception:
+                pass
+            try:
+                voice_client = await channel.connect(reconnect=True, timeout=20.0, self_deaf=True)
+            except Exception as exc:
+                err_msg = str(exc).strip() or type(exc).__name__
+                if search_msg:
+                    return await search_msg.edit(content=f"❌ Error connecting to voice channel: `{err_msg}`")
+                return await ctx.send(f"❌ Error connecting to voice channel: `{err_msg}`")
 
         # Stream ultra-fast low-latency audio via FFmpeg
         if video_data.get("is_local"):
@@ -863,7 +913,23 @@ async def play_song(ctx, *, query: str = None):
         volume = voice_volumes.get(ctx.guild.id, 1.25)
         audio_source = discord.PCMVolumeTransformer(raw_source, volume=volume)
 
-        voice_client.play(audio_source)
+        try:
+            voice_client.play(audio_source)
+        except discord.ClientException as ce:
+            if "not connected" in str(ce).lower():
+                try:
+                    await voice_client.disconnect(force=True)
+                except Exception:
+                    pass
+                voice_client = await channel.connect(reconnect=True, timeout=20.0, self_deaf=True)
+                if video_data.get("is_local"):
+                    raw_source = discord.FFmpegPCMAudio(stream_url, options="-vn -b:a 192k -ar 48000")
+                else:
+                    raw_source = discord.FFmpegPCMAudio(stream_url, **FFMPEG_OPTIONS)
+                audio_source = discord.PCMVolumeTransformer(raw_source, volume=volume)
+                voice_client.play(audio_source)
+            else:
+                raise ce
         current_song_info[ctx.guild.id] = {
             "title": title,
             "url": webpage_url,

@@ -23,7 +23,7 @@ import UserRoleManagerModal from './components/modals/UserRoleManagerModal';
 import useDevToolsSecurity from './hooks/useDevToolsSecurity';
 import use3DScene from './hooks/use3DScene';
 import { MODEL_PRESETS, APP_CONFIG } from './utils/constants';
-import { Box, Sparkles, Film, Eye, Globe, Bot, Lock, Crown, ShieldAlert } from 'lucide-react';
+import { Box, Sparkles, Film, Eye, Globe, Bot, Lock, Crown, ShieldAlert, LayoutDashboard, Coins, Activity, Menu } from 'lucide-react';
 
 export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -32,6 +32,7 @@ export function App() {
 
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState(MODEL_PRESETS[0]);
   const [activeBgTexture, setActiveBgTexture] = useState(() => {
     return localStorage.getItem('gmx_active_background') || '';
@@ -280,21 +281,24 @@ export function App() {
         onOpenSettings={() => setCurrentTab('settings')}
         onLogout={handleLogout}
         onOpenRoleManager={() => setIsRoleManagerOpen(true)}
+        onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
       />
 
-      {/* Collapsible Sidebar with Role awareness */}
+      {/* Collapsible Sidebar with Role awareness and Mobile Drawer */}
       <Sidebar
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}
         isCollapsed={isCollapsed}
         setIsCollapsed={setIsCollapsed}
+        isMobileOpen={isMobileMenuOpen}
+        setIsMobileOpen={setIsMobileMenuOpen}
         userRole={userRole}
       />
 
-      {/* Main Content Area */}
+      {/* Main Content Area (Responsive margins for phones, tablets & desktops) */}
       <main
-        className={`flex-1 transition-all duration-300 pt-20 pb-14 px-4 sm:px-8 relative z-10 ${
-          isCollapsed ? 'ml-20' : 'ml-64'
+        className={`flex-1 transition-all duration-300 pt-16 md:pt-20 pb-20 md:pb-14 px-3 sm:px-8 relative z-10 ml-0 ${
+          isCollapsed ? 'md:ml-20' : 'md:ml-64'
         }`}
       >
         <AnimatePresence mode="wait">
@@ -309,6 +313,55 @@ export function App() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {/* Mobile Bottom Quick Navigation Bar (Active on phones for thumb-friendly navigation) */}
+      <nav className="fixed bottom-0 left-0 right-0 z-30 h-14 bg-slate-950/95 border-t border-slate-800/80 backdrop-blur-xl flex items-center justify-around px-2 md:hidden">
+        <button
+          onClick={() => setCurrentTab('dashboard')}
+          className={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium transition-colors ${
+            currentTab === 'dashboard' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <LayoutDashboard className="w-5 h-5 mb-0.5" />
+          <span>Core</span>
+        </button>
+        <button
+          onClick={() => setCurrentTab('bot_control')}
+          className={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium transition-colors ${
+            currentTab === 'bot_control' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Bot className="w-5 h-5 mb-0.5" />
+          <span>Bot Hub</span>
+        </button>
+        {userRole === 'owner' && (
+          <button
+            onClick={() => setCurrentTab('crypto_radar')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium transition-colors ${
+              currentTab === 'crypto_radar' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Coins className="w-5 h-5 mb-0.5 text-amber-400" />
+            <span>Radar</span>
+          </button>
+        )}
+        <button
+          onClick={() => setCurrentTab('analytics')}
+          className={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium transition-colors ${
+            currentTab === 'analytics' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Activity className="w-5 h-5 mb-0.5" />
+          <span>Analytics</span>
+        </button>
+        <button
+          onClick={() => setIsMobileMenuOpen(true)}
+          className="flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium text-slate-400 hover:text-slate-200 transition-colors"
+        >
+          <Menu className="w-5 h-5 mb-0.5 text-cyan-400" />
+          <span>Menu</span>
+        </button>
+      </nav>
 
       {/* Global Background Welcome Theme Music Player */}
       <BackgroundMusicPlayer isOwner={userRole === 'owner'} />

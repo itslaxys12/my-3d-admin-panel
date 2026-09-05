@@ -30,8 +30,11 @@ export function GlassCard({
     default: 'border-slate-700/50 hover:border-slate-500/50 hover:shadow-lg',
   };
 
+  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0));
+  const enableTilt = tiltEffect && !isTouchDevice;
+
   const handleMouseMove = (e) => {
-    if (!tiltEffect || !cardRef.current) return;
+    if (!enableTilt || !cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -52,7 +55,7 @@ export function GlassCard({
   };
 
   const handleMouseLeave = () => {
-    if (!tiltEffect) return;
+    if (!enableTilt) return;
     setRotateX(0);
     setRotateY(0);
     setGlarePos((prev) => ({ ...prev, opacity: 0 }));

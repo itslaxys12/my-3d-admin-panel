@@ -11,11 +11,12 @@ import {
   LogOut,
   Bot,
   Crown,
+  Menu,
 } from 'lucide-react';
 import AnimatedButton from '../UI/AnimatedButton';
 import { APP_CONFIG } from '../../utils/constants';
 
-export function Navbar({ isCollapsed, onOpenSettings, onLogout, onOpenRoleManager }) {
+export function Navbar({ isCollapsed, onOpenSettings, onLogout, onOpenRoleManager, onToggleMobileMenu }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -34,10 +35,28 @@ export function Navbar({ isCollapsed, onOpenSettings, onLogout, onOpenRoleManage
 
   return (
     <header
-      className={`fixed top-0 right-0 z-20 h-16 border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-xl transition-all duration-300 flex items-center justify-between px-6 ${
-        isCollapsed ? 'left-20' : 'left-64'
+      className={`fixed top-0 right-0 z-30 h-16 border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-xl transition-all duration-300 flex items-center justify-between px-3 sm:px-6 left-0 ${
+        isCollapsed ? 'md:left-20' : 'md:left-64'
       }`}
     >
+      {/* Mobile Menu Hamburger Button & Compact Brand */}
+      <div className="flex items-center gap-2.5 md:hidden">
+        <button
+          onClick={onToggleMobileMenu}
+          className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-emerald-400 hover:text-white hover:border-emerald-500/40 active:scale-95 transition-all shadow-[0_0_10px_rgba(0,255,157,0.2)]"
+          title="Open Menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg overflow-hidden border border-emerald-400/50 shadow-[0_0_10px_rgba(0,255,157,0.3)] bg-black flex-shrink-0">
+            <img src="/assets/images/gmx_logo.jpg" alt="Logo" className="w-full h-full object-cover" />
+          </div>
+          <span className="font-extrabold text-xs tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400 font-heading">
+            GMX MATRIX
+          </span>
+        </div>
+      </div>
       {/* Search Bar */}
       <div className="relative max-w-md w-full hidden sm:block">
         <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />

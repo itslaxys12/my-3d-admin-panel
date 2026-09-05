@@ -14,6 +14,7 @@ import {
   Globe,
   Lock,
   Coins,
+  X,
 } from 'lucide-react';
 import { NAV_ITEMS, APP_CONFIG } from '../../utils/constants';
 
@@ -28,53 +29,74 @@ const ICON_MAP = {
   Box,
 };
 
-export function Sidebar({ currentTab, setCurrentTab, isCollapsed, setIsCollapsed, userRole = 'owner' }) {
+export function Sidebar({ currentTab, setCurrentTab, isCollapsed, setIsCollapsed, isMobileOpen = false, setIsMobileOpen, userRole = 'owner' }) {
   const [laserActiveTab, setLaserActiveTab] = useState(null);
 
   const handleTabClick = (tabId) => {
     setCurrentTab(tabId);
     setLaserActiveTab(tabId);
+    if (setIsMobileOpen) {
+      setIsMobileOpen(false);
+    }
     setTimeout(() => {
       setLaserActiveTab(null);
     }, 800);
   };
 
   return (
-    <aside
-      className={`fixed top-0 left-0 bottom-0 z-30 flex flex-col justify-between transition-all duration-300 ease-in-out border-r border-slate-800/80 bg-slate-950/85 backdrop-blur-2xl ${
-        isCollapsed ? 'w-20' : 'w-64'
-      }`}
-    >
-      {/* Sidebar Header */}
-      <div>
-        <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800/80">
-          {!isCollapsed && (
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl overflow-hidden border border-emerald-400 shadow-[0_0_15px_rgba(0,255,157,0.4)] flex-shrink-0 bg-black">
+    <>
+      {/* Mobile Backdrop Overlay */}
+      {isMobileOpen && (
+        <div
+          onClick={() => setIsMobileOpen && setIsMobileOpen(false)}
+          className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm md:hidden"
+        />
+      )}
+
+      <aside
+        className={`fixed top-0 bottom-0 z-50 flex flex-col justify-between transition-all duration-300 ease-in-out border-r border-slate-800/80 bg-slate-950/95 md:bg-slate-950/85 backdrop-blur-2xl ${
+          isMobileOpen ? 'left-0 w-72 shadow-2xl shadow-emerald-500/10' : '-left-full md:left-0'
+        } ${isCollapsed ? 'md:w-20' : 'md:w-64'}`}
+      >
+        {/* Sidebar Header */}
+        <div>
+          <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800/80">
+            {(!isCollapsed || isMobileOpen) && (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl overflow-hidden border border-emerald-400 shadow-[0_0_15px_rgba(0,255,157,0.4)] flex-shrink-0 bg-black">
+                  <img src="/assets/images/gmx_logo.jpg" alt="GMX Logo" className="w-full h-full object-cover" />
+                </div>
+                <div>
+                  <h1 className="text-base font-extrabold tracking-wider font-heading text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-300 to-purple-400 leading-tight">
+                    GLITCH MATRIX
+                  </h1>
+                  <p className="text-[10px] font-mono text-emerald-400">GMX // CYBER COMMAND</p>
+                </div>
+              </div>
+            )}
+
+            {isCollapsed && !isMobileOpen && (
+              <div className="w-10 h-10 mx-auto rounded-xl overflow-hidden border border-emerald-400 shadow-[0_0_15px_rgba(0,255,157,0.4)] flex items-center justify-center bg-black">
                 <img src="/assets/images/gmx_logo.jpg" alt="GMX Logo" className="w-full h-full object-cover" />
               </div>
-              <div>
-                <h1 className="text-base font-extrabold tracking-wider font-heading text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-300 to-purple-400 leading-tight">
-                  GLITCH MATRIX
-                </h1>
-                <p className="text-[10px] font-mono text-emerald-400">GMX // CYBER COMMAND</p>
-              </div>
-            </div>
-          )}
+            )}
 
-          {isCollapsed && (
-            <div className="w-10 h-10 mx-auto rounded-xl overflow-hidden border border-emerald-400 shadow-[0_0_15px_rgba(0,255,157,0.4)] flex items-center justify-center bg-black">
-              <img src="/assets/images/gmx_logo.jpg" alt="GMX Logo" className="w-full h-full object-cover" />
-            </div>
-          )}
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-cyan-400 hover:border-cyan-500/30 transition-colors hidden md:block"
+            >
+              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
 
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-cyan-400 hover:border-cyan-500/30 transition-colors hidden md:block"
-          >
-            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-          </button>
-        </div>
+            {/* Close button for Mobile Drawer */}
+            <button
+              onClick={() => setIsMobileOpen && setIsMobileOpen(false)}
+              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-rose-400 hover:border-rose-500/30 transition-colors md:hidden"
+              title="Close Menu"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
 
         {/* Navigation Items with Laser Line Beam Click Effect */}
         <nav className="p-3 space-y-2 mt-2">
@@ -167,7 +189,8 @@ export function Sidebar({ currentTab, setCurrentTab, isCollapsed, setIsCollapsed
         </div>
       )}
     </aside>
-  );
+  </>
+);
 }
 
 export default Sidebar;

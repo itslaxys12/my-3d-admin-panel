@@ -12,9 +12,24 @@ import React, { useEffect, useRef, useState } from 'react';
 export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
   const canvasRef = useRef(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Canvas particle rain & mist overlay
   useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile, { passive: true });
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Canvas particle rain & mist overlay (Only on Desktop for 0% battery/CPU drain on phones)
+  useEffect(() => {
+    // If mobile, do not run canvas animation loop to eliminate 100% of mobile frame drops and lag!
+    if (window.innerWidth < 768 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      return;
+    }
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: true });
@@ -110,9 +125,9 @@ export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
     };
   }, []);
 
-  // Parallax translation
-  const offsetX = (mousePos.x || 0) * 12;
-  const offsetY = (mousePos.y || 0) * 8;
+  // Parallax translation (disabled on mobile)
+  const offsetX = isMobile ? 0 : (mousePos.x || 0) * 12;
+  const offsetY = isMobile ? 0 : (mousePos.y || 0) * 8;
 
   return (
     <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none bg-[#030712]">
@@ -120,7 +135,7 @@ export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
       <div
         className="absolute inset-[-4%] w-[108%] h-[108%] transition-transform duration-700 ease-out will-change-transform"
         style={{
-          transform: `translate3d(${-offsetX}px, ${offsetY}px, 0) scale(1.04)`,
+          transform: isMobile ? 'scale(1.02)' : `translate3d(${-offsetX}px, ${offsetY}px, 0) scale(1.04)`,
         }}
       >
         <img
@@ -131,16 +146,18 @@ export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
             isLoaded ? 'opacity-90' : 'opacity-0'
           }`}
           style={{
-            animation: 'kenBurnsSubtle 32s ease-in-out infinite alternate',
+            animation: isMobile ? 'none' : 'kenBurnsSubtle 32s ease-in-out infinite alternate',
           }}
         />
       </div>
 
-      {/* Lightweight 60 FPS Rain & Mist Particle Canvas */}
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 w-full h-full pointer-events-none mix-blend-screen opacity-70"
-      />
+      {/* Lightweight 60 FPS Rain & Mist Particle Canvas (Desktop only) */}
+      {!isMobile && (
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full pointer-events-none mix-blend-screen opacity-70"
+        />
+      )}
 
       {/* Cyber Dark Gradient Vignette for perfect text contrast & UI readability */}
       <div className="absolute inset-0 bg-gradient-to-t from-[#030712] via-transparent to-[#030712]/70 opacity-80" />
