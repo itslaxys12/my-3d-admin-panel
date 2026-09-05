@@ -9,10 +9,8 @@ export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Matrix Core', icon: 'LayoutDashboard', badge: null },
   { id: 'bot_control', label: 'GMX Bot Hub', icon: 'Bot', badge: 'Discord' },
   { id: 'bot_invite', label: 'Bot Invite Studio', icon: 'Bot', badge: 'GMX' },
-  { id: 'analytics', label: '3D Analytics', icon: 'Activity', badge: 'Live' },
-  { id: 'media', label: 'Media & Visuals', icon: 'Film', badge: 'New' },
   { id: 'crypto_radar', label: 'Crypto Moonshot Radar', icon: 'Coins', badge: 'VIP Owner', ownerOnly: true },
-  { id: 'router_manager', label: 'WiFi & Router Hub', icon: 'Wifi', badge: 'Active' },
+  { id: 'router_manager', label: 'WiFi & Router Hub', icon: 'Wifi', badge: 'VIP Owner', ownerOnly: true },
   { id: 'settings', label: 'Settings', icon: 'Settings', badge: null },
 ];
 
@@ -91,12 +89,14 @@ export const BOT_STATUS_DATA = {
 };
 
 export const BOT_COMMANDS = [
+  { command: '!findmac [mac]', desc: 'Find device IP, connection status & router in real-time', category: 'WiFi Defense' },
+  { command: '!setname [mac] [name]', desc: 'Approve MAC & save custom label directly to website', category: 'WiFi Defense' },
+  { command: '!devices', desc: 'List active online and auto-blacklisted router devices', category: 'WiFi Defense' },
+  { command: '!macblacklist [mac]', desc: 'Instantly blacklist and block a rogue Wi-Fi MAC address', category: 'WiFi Defense' },
   { command: '/status', desc: 'Display real-time Bot cluster health and WebGL latency', category: 'General' },
   { command: '/tg broadcast [msg]', desc: 'Broadcast instant announcement to all Telegram channels', category: 'Telegram' },
   { command: '/voice join', desc: 'Connect Glitch Voice AI synthesizer to voice channel', category: 'Voice AI' },
   { command: '/security audit', desc: 'Perform real-time role & permission security vulnerability scan', category: 'Security' },
-  { command: '/matrix sync', desc: 'Synchronize 3D Earth nodes with Discord & Telegram telemetry', category: '3D Matrix' },
-  { command: '/play [query]', desc: 'Stream high-fidelity cyber audio with spatial equalizer', category: 'Music' },
   { command: '/purge [count]', desc: 'Safely bulk delete spam messages with security logging', category: 'Admin' },
 ];
 

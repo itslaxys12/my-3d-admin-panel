@@ -15,6 +15,9 @@ export default defineConfig({
     host: true,
     allowedHosts: true,
     open: false,
+    watch: {
+      ignored: ['**/UPLOAD_TO_GITHUB/**', '**/*.zip', '**/bots/data/**'],
+    },
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8765',

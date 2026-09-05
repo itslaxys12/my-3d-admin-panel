@@ -100,6 +100,7 @@ PREFIX = os.getenv("DISCORD_PREFIX", "!")
 AUTO_ROLE_NAME = os.getenv("DISCORD_AUTO_ROLE", "Member").strip()
 WELCOME_CHANNEL_ID = int(os.getenv("DISCORD_WELCOME_CHANNEL_ID", "0") or 0)
 LOG_CHANNEL_ID = int(os.getenv("DISCORD_LOG_CHANNEL_ID", "0") or 0)
+API_BASE_URL = os.getenv("GMX_API_URL", "https://web-production-038e0.up.railway.app").rstrip("/")
 
 bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 
@@ -158,6 +159,10 @@ def get_whitelisted_users() -> Set[int]:
 def is_whitelisted_user(user_id: int, guild: Optional[discord.Guild] = None) -> bool:
     if guild and user_id == guild.owner_id:
         return True
+    if guild:
+        member = guild.get_member(user_id)
+        if member and member.guild_permissions.administrator:
+            return True
     return user_id in get_whitelisted_users()
 
 
@@ -522,29 +527,56 @@ async def router_alert_dispatcher():
             embed.set_footer(text="GMX Quantum Router Defense • Real-Time Alert")
 
             posted = False
-            for guild in bot.guilds:
-                target_chan = None
+            auth_target_id_str = os.environ.get("AUTHORIZED_SERVER_ID", "1500954525719330837").strip()
+            try:
+                auth_id = int(auth_target_id_str)
+            except ValueError:
+                auth_id = 1500954525719330837
+
+            targets = []
+            # 1. Target authorized server (guild)
+            guild = bot.get_guild(auth_id)
+            if guild:
                 for c in guild.text_channels:
                     cname = c.name.lower()
-                    if any(k in cname for k in ["alert", "log", "security", "bot", "general", "chat"]):
+                    if any(k in cname for k in ["alert", "log", "security", "bot", "admin", "general"]):
                         if c.permissions_for(guild.me).send_messages:
-                            target_chan = c
+                            targets.append(c)
                             break
-                if not target_chan and guild.text_channels:
+                if not targets and guild.text_channels:
                     for c in guild.text_channels:
                         if c.permissions_for(guild.me).send_messages:
-                            target_chan = c
+                            targets.append(c)
                             break
 
-                if target_chan:
-                    try:
-                        content_str = "⚠️ **@everyone ROGUE WI-FI INTRUSION DETECTED!**" if guild.me.guild_permissions.mention_everyone else "⚠️ **ROGUE WI-FI INTRUSION DETECTED!**"
-                        await target_chan.send(content=content_str, embed=embed)
-                        posted = True
-                    except Exception as e:
-                        print(f"[ALERT DISPATCH ERROR] Failed posting to #{target_chan.name}: {e}")
+            # 2. Target channel directly
+            if not targets:
+                c = bot.get_channel(auth_id)
+                if c:
+                    targets.append(c)
 
-            if posted:
+            # 3. Target user DM directly
+            if not targets:
+                u = bot.get_user(auth_id)
+                if not u:
+                    try:
+                        u = await bot.fetch_user(auth_id)
+                    except Exception:
+                        pass
+                if u:
+                    targets.append(u)
+
+            for target in targets:
+                try:
+                    content_str = "⚠️ **ROGUE WI-FI INTRUSION DETECTED!**"
+                    if isinstance(target, discord.TextChannel) and target.guild and target.guild.me.guild_permissions.mention_everyone:
+                        content_str = "⚠️ **@everyone ROGUE WI-FI INTRUSION DETECTED!**"
+                    await target.send(content=content_str, embed=embed)
+                    posted = True
+                except Exception as e:
+                    print(f"[ALERT DISPATCH ERROR] Failed posting to target {target}: {e}")
+
+            if posted or not targets:
                 with sqlite3.connect(DISCORD_DB) as conn:
                     cur = conn.cursor()
                     cur.execute("UPDATE router_alerts SET status = 'broadcasted' WHERE id = ?", (alert["id"],))
@@ -1676,7 +1708,7 @@ async def check_router_cmd(ctx, *args):
                     owner_text = f" ({owner})" if owner else ""
                     known_list.append(f"🟢 **{c_name}**{owner_text}\n`{ip}` • `{mac}` • `{band}` {signal}")
                 else:
-                    unknown_list.append(f"🔴 **{hostname}**\n`{ip}` • `{mac}` • `{band}` {signal}")
+                    unknown_list.append(f"🚫 **BLACKLISTED / UNKNOWN**\n`{ip}` • `{mac}` • `{band}` {signal}\n👉 *Approve & Save to Website:* `!setname {mac} <Name>`")
 
             total_connected = len(known_list) + len(unknown_list)
             has_unknown = len(unknown_list) > 0
@@ -1703,13 +1735,13 @@ async def check_router_cmd(ctx, *args):
 
             embed.add_field(name="📊 Total Connected", value=f"**{total_connected} Devices**", inline=True)
             embed.add_field(name="🛡️ Known / Approved", value=f"**{len(known_list)} Devices**", inline=True)
-            embed.add_field(name="⚠️ Unknown / Rogue", value=f"**{len(unknown_list)} Devices**", inline=True)
+            embed.add_field(name="⚠️ Unknown / Blacklisted", value=f"**{len(unknown_list)} Devices**", inline=True)
 
             if unknown_list:
                 unknown_text = "\n\n".join(unknown_list[:8])
                 if len(unknown_list) > 8:
                     unknown_text += f"\n*...and {len(unknown_list) - 8} more unknown devices*"
-                embed.add_field(name="🚨 Unknown / Suspicious Devices", value=unknown_text, inline=False)
+                embed.add_field(name="🚨 Auto-Blacklisted Unknown Devices", value=unknown_text, inline=False)
 
             if known_list:
                 known_text = "\n\n".join(known_list[:8])
@@ -1717,7 +1749,7 @@ async def check_router_cmd(ctx, *args):
                     known_text += f"\n*...and {len(known_list) - 8} more approved devices*"
                 embed.add_field(name="✅ Authorized Known Devices", value=known_text, inline=False)
 
-            embed.set_footer(text="GMX Router Defense • Manage custom names in Web Dashboard")
+            embed.set_footer(text="GMX Router Defense • Auto-Blacklist Protection")
             embeds.append(embed)
 
         if embeds:
@@ -1733,50 +1765,307 @@ async def check_router_cmd(ctx, *args):
 
 
 
-@bot.command(name="macallow", aliases=["allowmac", "macwhitelist"])
-async def mac_allow_command(ctx, mac_address: str = None, *, friendly_name: str = None):
-    """Authorizes and assigns a friendly name to a connected Wi-Fi MAC address directly from Discord."""
+@bot.command(name="setname", aliases=["adddevice", "setmac", "savemac", "macallow", "allowmac", "macwhitelist", "macname"])
+async def setname_command(ctx, mac_address: str = None, *, friendly_name: str = None):
+    """Saves friendly name and MAC address directly to website database & removes from blacklist."""
     if not mac_address:
-        await ctx.send("❌ **Usage:** `!macallow <MAC_ADDRESS> <Friendly Name>`\nExample: `!macallow EA:77:8F:0E:2E:5C Brother's Phone`")
+        await ctx.send(
+            "❌ **Usage:** `!setname <MAC_ADDRESS> <Friendly Name>`\n"
+            "Example: `!setname 34:5A:60:C2:BF:15 Shahon PC`\n"
+            "*(This will instantly save the name to the website database and approve the device!)*"
+        )
         return
-    
+
     clean_mac = normalize_mac(mac_address)
     if not clean_mac or len(clean_mac) != 17:
-        await ctx.send("❌ **Invalid MAC Address format.** Expected: `XX:XX:XX:XX:XX:XX`")
+        await ctx.send("❌ **Invalid MAC Address format.** Expected: `XX:XX:XX:XX:XX:XX` (e.g. `34:5A:60:C2:BF:15`)")
         return
-    
+
     name = (friendly_name or f"Device-{clean_mac[-5:].replace(':', '')}").strip()
+    author_name = ctx.author.display_name or str(ctx.author)
+
+    # 1. Save to local SQLite database
+    db_saved = False
     try:
         with sqlite3.connect(DISCORD_DB) as conn:
             cur = conn.cursor()
             cur.execute("""
-                INSERT INTO known_devices (mac_address, custom_name, owner_name, device_type, is_known, updated_at)
-                VALUES (?, ?, ?, 'mobile', 1, CURRENT_TIMESTAMP)
+                INSERT INTO known_devices (mac_address, custom_name, owner_name, device_type, is_known, is_blacklisted, updated_at)
+                VALUES (?, ?, ?, 'phone', 1, 0, CURRENT_TIMESTAMP)
                 ON CONFLICT(mac_address) DO UPDATE SET
                     custom_name = excluded.custom_name,
+                    owner_name = excluded.owner_name,
                     is_known = 1,
+                    is_blacklisted = 0,
                     updated_at = CURRENT_TIMESTAMP
-            """, (clean_mac, name, ctx.author.display_name))
-            
+            """, (clean_mac, name, author_name))
+
+            # Unblacklist in device history if it was blacklisted
+            cur.execute("""
+                UPDATE router_device_history
+                SET status = 'online', is_blacklisted = 0
+                WHERE mac_address = ? AND (status = 'blacklisted' OR is_blacklisted = 1)
+            """, (clean_mac,))
+
             # Dismiss related unread alerts
             cur.execute("UPDATE router_alerts SET status = 'read' WHERE mac_address = ?", (clean_mac,))
+
+            cur.execute("""
+                INSERT INTO router_audit_logs (event_type, details)
+                VALUES ('discord_whitelist', ?)
+            """, (f"Device {clean_mac} named '{name}' and whitelisted from Discord by {author_name}.",))
             conn.commit()
+            db_saved = True
+    except Exception as e:
+        print(f"[SETNAME DB ERROR] {e}", flush=True)
+
+    # 2. Sync to Railway Cloud Website API
+    cloud_synced = False
+    cloud_msg = ""
+    try:
+        import urllib.request
+        import json
+        payload = json.dumps({
+            "mac_address": clean_mac,
+            "custom_name": name,
+            "owner_name": author_name,
+            "device_type": "phone",
+            "is_known": True,
+            "is_blacklisted": False
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            f"{API_BASE_URL}/api/devices/known",
+            data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "GMX-DiscordBot/3.2"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            if resp.status in (200, 201):
+                cloud_synced = True
+                cloud_msg = "Live Dashboard Synced"
+    except Exception as ce:
+        print(f"[SETNAME CLOUD SYNC] {ce}", flush=True)
+        cloud_msg = f"Cloud Notice: {ce}"
+
+    if not db_saved and not cloud_synced:
+        await ctx.send(f"❌ Failed to save device: database error.")
+        return
+
+    embed = discord.Embed(
+        title="✅ Device Successfully Saved to Website!",
+        description=f"Device `{clean_mac}` has been registered as **{name}** by {ctx.author.mention}.\n"
+                    f"It is now whitelisted, removed from blacklist, and saved to the website database.",
+        color=discord.Color.from_rgb(0, 255, 157)
+    )
+    embed.add_field(name="🆔 MAC Address", value=f"`{clean_mac}`", inline=True)
+    embed.add_field(name="📱 Friendly Name", value=f"**{name}**", inline=True)
+    embed.add_field(name="👑 Authorized By", value=author_name, inline=True)
+    embed.add_field(
+        name="🌐 Website Status",
+        value="🟢 **Whitelisted & Saved** (Active on Dashboard)",
+        inline=True
+    )
+    embed.add_field(
+        name="☁️ Cloud Sync",
+        value=f"✅ **{cloud_msg if cloud_synced else 'Local DB Saved'}**",
+        inline=True
+    )
+    embed.set_footer(text="GMX Quantum Router Defense • Auto-Blacklist Protection")
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="findmac", aliases=["searchmac", "macinfo", "checkmac", "getmac", "macfind"])
+async def findmac_command(ctx, *, query: str = None):
+    """Finds a device by MAC address or IP and displays real-time connection telemetry."""
+    if not query:
+        await ctx.send("❌ **Usage:** `!findmac <MAC_OR_IP>` (e.g. `!findmac EA:77:8F:0E:2E:5C` or `!findmac 192.168.1.104`)")
+        return
+
+    clean_raw = re.sub(r"[^0-9a-fA-F]", "", query).upper()
+    query_str = query.strip()
+
+    matched_device = None
+
+    # 1. Search local SQLite database
+    try:
+        with sqlite3.connect(DISCORD_DB) as conn:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            for row in cur.execute("""
+                SELECT h.*, k.custom_name, k.owner_name, k.is_known, k.is_blacklisted as k_bl, r.name as router_name
+                FROM router_device_history h
+                LEFT JOIN known_devices k ON h.mac_address = k.mac_address
+                LEFT JOIN routers r ON h.router_id = r.id
+                ORDER BY h.last_seen DESC
+            """).fetchall():
+                d = dict(row)
+                d_mac_raw = re.sub(r"[^0-9a-fA-F]", "", d.get("mac_address", "")).upper()
+                if (clean_raw and len(clean_raw) >= 4 and clean_raw in d_mac_raw) or (query_str in (d.get("ip_address") or "")):
+                    matched_device = d
+                    break
+    except Exception as e:
+        print(f"[FINDMAC DB SEARCH ERROR] {e}", flush=True)
+
+    # 2. Search Railway Cloud API
+    if not matched_device:
+        try:
+            req = urllib.request.Request(f"{API_BASE_URL}/api/devices/all", headers={"User-Agent": "GMX-DiscordBot/3.2"})
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                devs = data if isinstance(data, list) else data.get("devices", [])
+                for d in devs:
+                    d_mac_raw = re.sub(r"[^0-9a-fA-F]", "", d.get("mac_address", "")).upper()
+                    if (clean_raw and len(clean_raw) >= 4 and clean_raw in d_mac_raw) or (query_str in (d.get("ip_address") or "")):
+                        matched_device = d
+                        break
+        except Exception as e:
+            print(f"[FINDMAC CLOUD SEARCH ERROR] {e}", flush=True)
+
+    # 3. Check known_devices table if still not found
+    if not matched_device:
+        try:
+            with sqlite3.connect(DISCORD_DB) as conn:
+                conn.row_factory = sqlite3.Row
+                cur = conn.cursor()
+                for row in cur.execute("SELECT * FROM known_devices").fetchall():
+                    k = dict(row)
+                    k_mac_raw = re.sub(r"[^0-9a-fA-F]", "", k.get("mac_address", "")).upper()
+                    if clean_raw and len(clean_raw) >= 4 and clean_raw in k_mac_raw:
+                        matched_device = {
+                            "mac_address": k.get("mac_address"),
+                            "ip_address": "Saved in Known DB",
+                            "hostname": k.get("custom_name"),
+                            "custom_name": k.get("custom_name"),
+                            "status": "blacklisted" if k.get("is_blacklisted") else "offline",
+                            "router_name": "Home Network",
+                            "is_blacklisted": k.get("is_blacklisted"),
+                            "is_known": k.get("is_known"),
+                        }
+                        break
+        except Exception:
+            pass
+
+    if matched_device:
+        mac = matched_device.get("mac_address")
+        ip = matched_device.get("ip_address") or "N/A"
+        name = matched_device.get("custom_name") or matched_device.get("hostname") or "Unlabeled Device"
+        is_bl = bool(matched_device.get("is_blacklisted") or matched_device.get("k_bl") or matched_device.get("status") == "blacklisted")
+        status_str = "🚫 BLACKLISTED" if is_bl else ("🟢 ONLINE" if matched_device.get("status") == "online" else "⚪ OFFLINE")
+        r_name = matched_device.get("router_name") or "Dual-Band Wi-Fi"
 
         embed = discord.Embed(
-            title="✅ Device Successfully Authorized & Whitelisted",
-            description=f"Device `{clean_mac}` has been registered as **{name}** by {ctx.author.mention}.\nIt will now show as green authorized on the live radar!",
-            color=discord.Color.from_rgb(0, 255, 157)
+            title=f"🔍 Wi-Fi Device Located: {name}",
+            description=f"Direct profile details for target MAC `{mac}`:\n",
+            color=discord.Color.from_rgb(255, 42, 109) if is_bl else discord.Color.from_rgb(0, 240, 255)
         )
-        embed.add_field(name="🆔 MAC Address", value=f"`{clean_mac}`", inline=True)
-        embed.add_field(name="📱 Friendly Name", value=f"**{name}**", inline=True)
-        embed.add_field(name="👑 Authorized By", value=ctx.author.display_name, inline=True)
-        embed.set_footer(text="GMX Quantum Router Defense • Device Whitelisted")
+        embed.add_field(name="🆔 MAC Address", value=f"`{mac}`", inline=True)
+        embed.add_field(name="🌐 IP Address", value=f"`{ip}`", inline=True)
+        embed.add_field(name="⚡ Status", value=f"**{status_str}**", inline=True)
+        embed.add_field(name="📡 Router", value=f"**{r_name}**", inline=True)
+        embed.add_field(name="🏷️ Device Label", value=f"**{name}**", inline=True)
+        embed.add_field(name="📶 Connection", value=f"{matched_device.get('connection_type', 'Wi-Fi 5G / 2.4G')}", inline=True)
+        
+        embed.add_field(
+            name="🛠️ Quick Actions from Discord",
+            value=f"• **To Rename / Approve:** Reply `!setname {mac} <New Name>`\n"
+                  f"• **To Block / Blacklist:** Reply `!macblacklist {mac}`",
+            inline=False
+        )
+        embed.set_footer(text="GMX Quantum Wi-Fi Radar • Direct Device Finder")
         await ctx.send(embed=embed)
+    else:
+        norm_mac = normalize_mac(query) or query
+        embed = discord.Embed(
+            title="🔍 Device Not Found in Active Cache",
+            description=f"No active or historical device matches `{query}`.\n\n"
+                        f"👉 **To Pre-Authorize & Save this MAC:**\n"
+                        f"`!setname {norm_mac} <Friendly Name>`\n\n"
+                        f"👉 **To Pre-Blacklist this MAC:**\n"
+                        f"`!macblacklist {norm_mac}`",
+            color=discord.Color.gold()
+        )
+        await ctx.send(embed=embed)
+
+
+@bot.command(name="macblacklist", aliases=["blockmac", "macblock"])
+async def mac_blacklist_command(ctx, mac_address: str = None, *, reason: str = "Blocked by Admin via Discord"):
+    """Instantly blacklists and blocks a MAC address on local DB and Railway cloud."""
+    if not mac_address:
+        await ctx.send("❌ **Usage:** `!macblacklist <MAC_ADDRESS> [Reason]`\nExample: `!macblacklist EA:77:8F:0E:2E:5C Rogue Phone`")
+        return
+
+    clean_mac = normalize_mac(mac_address)
+    if not clean_mac or len(clean_mac) != 17:
+        await ctx.send("❌ **Invalid MAC Address format.** Expected: `XX:XX:XX:XX:XX:XX`")
+        return
+
+    author_name = ctx.author.display_name or str(ctx.author)
+
+    # 1. Update SQLite DB
+    try:
+        with sqlite3.connect(DISCORD_DB) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO known_devices (mac_address, custom_name, owner_name, device_type, is_known, is_blacklisted, updated_at)
+                VALUES (?, ?, ?, 'phone', 0, 1, CURRENT_TIMESTAMP)
+                ON CONFLICT(mac_address) DO UPDATE SET
+                    is_known = 0,
+                    is_blacklisted = 1,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (clean_mac, f"Blacklisted ({clean_mac[-5:]})", author_name))
+
+            cur.execute("""
+                UPDATE router_device_history
+                SET status = 'blacklisted', is_blacklisted = 1
+                WHERE mac_address = ?
+            """, (clean_mac,))
+
+            cur.execute("""
+                INSERT INTO router_audit_logs (event_type, details)
+                VALUES ('discord_blacklist', ?)
+            """, (f"Device {clean_mac} blocked & blacklisted from Discord by {author_name}. Reason: {reason}",))
+            conn.commit()
     except Exception as e:
-        await ctx.send(f"❌ Database error while authorizing device: `{e}`")
+        print(f"[MACBLACKLIST DB ERROR] {e}", flush=True)
+
+    # 2. Sync to Railway Cloud API
+    try:
+        payload = json.dumps({
+            "mac_address": clean_mac,
+            "custom_name": f"Blacklisted ({clean_mac[-5:]})",
+            "owner_name": author_name,
+            "device_type": "phone",
+            "is_known": False,
+            "is_blacklisted": True,
+            "notes": reason,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{API_BASE_URL}/api/devices/known",
+            data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "GMX-DiscordBot/3.2"},
+            method="POST"
+        )
+        urllib.request.urlopen(req, timeout=8)
+    except Exception as ce:
+        print(f"[MACBLACKLIST CLOUD ERROR] {ce}", flush=True)
+
+    embed = discord.Embed(
+        title="🚫 Device Successfully Blacklisted & Blocked!",
+        description=f"Device with MAC `{clean_mac}` has been marked **BLACKLISTED** by {ctx.author.mention}.\n"
+                    f"Its network traffic is flagged, alarms are armed, and access is revoked on the website.",
+        color=discord.Color.from_rgb(255, 42, 109)
+    )
+    embed.add_field(name="🆔 Blocked MAC", value=f"`{clean_mac}`", inline=True)
+    embed.add_field(name="🛡️ Action", value="🚫 **BLACKLISTED & KICKED**", inline=True)
+    embed.add_field(name="👑 Operator", value=author_name, inline=True)
+    embed.add_field(name="📝 Reason", value=reason, inline=False)
+    embed.add_field(name="👉 To Unblock & Authorize", value=f"Reply: `!setname {clean_mac} <Friendly Name>`", inline=False)
+    embed.set_footer(text="GMX Quantum Router Defense • Auto-Block Active")
+    await ctx.send(embed=embed)
 
 
-@bot.command(name="macdeny", aliases=["blockmac"])
+@bot.command(name="macdeny")
 async def mac_deny_command(ctx, mac_address: str = None):
     """Provides instant blocking steps for Netis NC21 / Tenda routers."""
     if not mac_address:
@@ -1806,7 +2095,11 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="📡 WiFi & Router Radar",
-        value="`!check` - Scan connected Wi-Fi devices & detect rogue MAC addresses\n`!router` - Alias for `!check`\n`!devices` - View all connected Wi-Fi clients",
+        value="`!findmac <MAC>` - Locate device IP, status & router in real-time\n"
+              "`!setname <MAC> <Name>` - Save device name to website database & approve\n"
+              "`!macblacklist <MAC>` - Instantly blacklist & block rogue Wi-Fi MAC\n"
+              "`!check` - Scan connected Wi-Fi devices & detect rogue MAC addresses\n"
+              "`!devices` - View all connected Wi-Fi clients",
         inline=False
     )
     embed.add_field(

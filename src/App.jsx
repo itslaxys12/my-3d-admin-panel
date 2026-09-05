@@ -7,18 +7,13 @@ import Footer from './components/layout/Footer';
 import Dashboard from './views/Dashboard';
 import BotController from './views/BotController';
 import BotInvitePage from './views/BotInvitePage';
-import Analytics from './views/Analytics';
 import Settings from './views/Settings';
 import Login from './views/Login';
-import ScrollVideoPlayer from './components/media/ScrollVideoPlayer';
-import ImageGallery from './components/media/ImageGallery';
 import CryptoRadarView from './components/crypto/CryptoRadarView';
 import RouterManager from './views/RouterManager';
-import InteractiveEarth from './components/3d/InteractiveEarth';
 import InteractiveModel from './components/3d/InteractiveModel';
 import GlassCard from './components/UI/GlassCard';
 import SecurityLockdown from './components/security/SecurityLockdown';
-import BackgroundMusicPlayer from './components/media/BackgroundMusicPlayer';
 import AnimatedWallpaperBackground from './components/media/AnimatedWallpaperBackground';
 import UserRoleManagerModal from './components/modals/UserRoleManagerModal';
 import useDevToolsSecurity from './hooks/useDevToolsSecurity';
@@ -139,10 +134,10 @@ export function App() {
                   Bot Invite Studio
                 </button>
                 <button
-                  onClick={() => setCurrentTab('media')}
+                  onClick={() => setCurrentTab('router_manager')}
                   className="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-200 font-mono text-xs font-bold hover:bg-slate-700 transition-all"
                 >
-                  View Showcase Media
+                  WiFi Router Hub
                 </button>
               </div>
             </div>
@@ -152,66 +147,6 @@ export function App() {
 
       case 'bot_invite':
         return <BotInvitePage onBackToDashboard={() => setCurrentTab('bot_control')} />;
-
-      case 'analytics':
-        return <Analytics />;
-
-      case 'media':
-        return (
-          <div className="space-y-8 pb-12">
-            <div className="p-6 rounded-2xl bg-slate-900/70 border border-cyan-500/20 backdrop-blur-xl">
-              <div className="flex items-center gap-2 mb-1">
-                <Film className="w-5 h-5 text-cyan-400" />
-                <h2 className="text-xl font-bold text-slate-100 font-heading">3D Visuals & Media Center</h2>
-              </div>
-              <p className="text-xs text-slate-400">
-                Experience volumetric high-definition video playback with 1-click fullscreen, audio unmute, and parallax galleries.
-              </p>
-            </div>
-
-            {/* High-Definition Smooth Video Player */}
-            <ScrollVideoPlayer
-              videoSrc="/assets/videos/earth_planet.mp4"
-              title="3D Universe & Planet Earth Cinematic Stream"
-              subtitle="Full 1080p stream with audio controls and 1-click full screen"
-            />
-
-            {/* 3D Perspective Image Showcase */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Eye className="w-4 h-4 text-purple-400" />
-                  <h3 className="text-lg font-bold text-slate-100 font-heading">3D Parallax Texture Gallery</h3>
-                </div>
-                <span className="text-xs font-mono text-slate-400">Hover cards to tilt in 3D space</span>
-              </div>
-              <ImageGallery />
-            </div>
-          </div>
-        );
-
-      case 'earth_lab':
-        return (
-          <div className="space-y-6 pb-12">
-            <div className="p-6 rounded-2xl bg-slate-900/70 border border-cyan-500/20 backdrop-blur-xl">
-              <div className="flex items-center gap-2 mb-1">
-                <Globe className="w-5 h-5 text-cyan-400" />
-                <h2 className="text-xl font-bold text-slate-100 font-heading">3D Planet Earth & Universe Theater</h2>
-              </div>
-              <p className="text-xs text-slate-400">
-                Direct cinematic space stream without spinning obstruction. Click video to play/pause or maximize to full screen.
-              </p>
-            </div>
-
-            {/* Edge-to-Edge Cinematic Video Stream */}
-            <InteractiveEarth
-              height="580px"
-              showControls={true}
-              title="3D Universe & Planet Earth Cinematic Stream"
-              videoSrc="/assets/videos/earth_planet.mp4"
-            />
-          </div>
-        );
 
       case 'crypto_radar':
         // Strictly guarded for Owner only
@@ -246,6 +181,35 @@ export function App() {
         return <CryptoRadarView />;
 
       case 'router_manager':
+        // Strictly guarded for Owner role only
+        if (userRole !== 'owner') {
+          return (
+            <div className="p-8 sm:p-12 rounded-3xl bg-slate-950/90 border border-cyan-500/40 text-center space-y-5 max-w-xl mx-auto my-12 shadow-2xl backdrop-blur-xl font-mono">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-cyan-500/10 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-[0_0_25px_rgba(6,182,212,0.3)]">
+                <Lock className="w-8 h-8 animate-pulse text-amber-400" />
+              </div>
+              <div>
+                <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-bold">
+                  VIP OWNER CLEARANCE REQUIRED
+                </span>
+                <h2 className="text-xl sm:text-2xl font-black text-white mt-3 font-heading">
+                  Restricted WiFi & Router Hub
+                </h2>
+                <p className="text-xs text-slate-400 mt-2 leading-relaxed font-sans">
+                  WiFi ও রাউটার কন্ট্রোল হাব, কানেক্টেড ডিভাইসের রাডার ও ম্যাক ব্লক কনফিগারেশন শুধুমাত্র <strong>Owner</strong> রোলের জন্য সংরক্ষিত।
+                </p>
+              </div>
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <button
+                  onClick={() => setCurrentTab('dashboard')}
+                  className="px-5 py-2.5 rounded-xl bg-cyan-500 text-black font-mono text-xs font-bold hover:bg-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all"
+                >
+                  Return to Dashboard
+                </button>
+              </div>
+            </div>
+          );
+        }
         return <RouterManager userRole={userRole} />;
 
       case 'settings':
@@ -338,15 +302,17 @@ export function App() {
           <Bot className="w-5 h-5 mb-0.5" />
           <span>Bot Hub</span>
         </button>
-        <button
-          onClick={() => setCurrentTab('router_manager')}
-          className={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium transition-colors ${
-            currentTab === 'router_manager' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Wifi className="w-5 h-5 mb-0.5 text-cyan-400" />
-          <span>WiFi Hub</span>
-        </button>
+        {userRole === 'owner' && (
+          <button
+            onClick={() => setCurrentTab('router_manager')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium transition-colors ${
+              currentTab === 'router_manager' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Wifi className="w-5 h-5 mb-0.5 text-cyan-400" />
+            <span>WiFi Hub</span>
+          </button>
+        )}
         {userRole === 'owner' && (
           <button
             onClick={() => setCurrentTab('crypto_radar')}
@@ -359,15 +325,6 @@ export function App() {
           </button>
         )}
         <button
-          onClick={() => setCurrentTab('analytics')}
-          className={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium transition-colors ${
-            currentTab === 'analytics' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Activity className="w-5 h-5 mb-0.5" />
-          <span>Analytics</span>
-        </button>
-        <button
           onClick={() => setIsMobileMenuOpen(true)}
           className="flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium text-slate-400 hover:text-slate-200 transition-colors"
         >
@@ -375,9 +332,6 @@ export function App() {
           <span>Menu</span>
         </button>
       </nav>
-
-      {/* Global Background Welcome Theme Music Player */}
-      <BackgroundMusicPlayer isOwner={userRole === 'owner'} />
 
       {/* Owner User & Role Management Modal */}
       <UserRoleManagerModal

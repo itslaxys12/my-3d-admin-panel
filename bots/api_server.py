@@ -28,8 +28,8 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -184,11 +184,104 @@ def init_router_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        try:
+            conn.execute("ALTER TABLE known_devices ADD COLUMN is_blacklisted INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE router_device_history ADD COLUMN is_blacklisted INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
     print("[ROUTER DB] Initialized routers, known_devices, device_history, and router_alerts tables.")
 
+def init_security_bans_db():
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS security_bans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip_address TEXT NOT NULL,
+                username TEXT,
+                banned_until REAL NOT NULL,
+                reason TEXT DEFAULT 'DevTools / Inspect violation',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_secbans_ip ON security_bans(ip_address, banned_until)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_secbans_user ON security_bans(username, banned_until)")
+        conn.commit()
+    print("[SECURITY DB] Initialized security_bans table.")
+
 init_web_auth_db()
 init_router_db()
+init_security_bans_db()
+
+# ─── Security Ban In-Memory Store & Helper Functions ──────────────────────────
+ACTIVE_IP_BANS: Dict[str, float] = {}
+ACTIVE_USER_BANS: Dict[str, float] = {}
+
+def get_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return "127.0.0.1"
+
+def is_ip_banned(ip: str) -> tuple[bool, int]:
+    if not ip:
+        return False, 0
+    now = time.time()
+    # Check in-memory first for 0ms fast path
+    if ip in ACTIVE_IP_BANS:
+        rem = ACTIVE_IP_BANS[ip] - now
+        if rem > 0:
+            return True, int(rem)
+        else:
+            del ACTIVE_IP_BANS[ip]
+    # Check persistent SQLite database
+    try:
+        with sqlite3.connect(DISCORD_DB) as conn:
+            row = conn.execute(
+                "SELECT banned_until FROM security_bans WHERE ip_address = ? AND banned_until > ? ORDER BY banned_until DESC LIMIT 1",
+                (ip, now)
+            ).fetchone()
+            if row:
+                rem = row[0] - now
+                ACTIVE_IP_BANS[ip] = row[0]
+                return True, int(rem)
+    except Exception:
+        pass
+    return False, 0
+
+def is_user_banned(username: Optional[str]) -> tuple[bool, int]:
+    if not username:
+        return False, 0
+    u = username.strip().lower()
+    now = time.time()
+    if u in ACTIVE_USER_BANS:
+        rem = ACTIVE_USER_BANS[u] - now
+        if rem > 0:
+            return True, int(rem)
+        else:
+            del ACTIVE_USER_BANS[u]
+    try:
+        with sqlite3.connect(DISCORD_DB) as conn:
+            row = conn.execute(
+                "SELECT banned_until FROM security_bans WHERE LOWER(username) = ? AND banned_until > ? ORDER BY banned_until DESC LIMIT 1",
+                (u, now)
+            ).fetchone()
+            if row:
+                rem = row[0] - now
+                ACTIVE_USER_BANS[u] = row[0]
+                return True, int(rem)
+    except Exception:
+        pass
+    return False, 0
 
 def get_active_script() -> str:
     if SCRIPT_STATE_FILE.exists():
@@ -209,6 +302,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def security_ban_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    path = request.url.path
+    # Allow security reporting and status endpoints, docs and static assets
+    if path in ["/api/security/ban", "/api/security/status", "/docs", "/openapi.json"] or path.startswith("/assets/"):
+        return await call_next(request)
+    
+    client_ip = get_client_ip(request)
+    banned, rem = is_ip_banned(client_ip)
+    if banned:
+        return JSONResponse(
+            status_code=403,
+            content={
+                "detail": f"IP [{client_ip}] is banned for 3 minutes due to DevTools/Inspect inspection. Remaining: {rem}s.",
+                "banned": True,
+                "remaining_seconds": rem,
+                "ip": client_ip,
+            }
+        )
+    return await call_next(request)
+
 
 # ─── Process Helpers ──────────────────────────────────────────────────────────
 
@@ -303,6 +420,103 @@ class CommandRequest(BaseModel):
     command: str
 
 
+class SecurityBanRequest(BaseModel):
+    username: Optional[str] = None
+    reason: Optional[str] = "DevTools / Inspect violation"
+
+
+@app.post("/api/security/ban")
+async def trigger_security_ban(req: SecurityBanRequest, request: Request):
+    client_ip = get_client_ip(request)
+    now = time.time()
+    banned_until = now + 180  # 3 minutes = 180 seconds
+    uname = (req.username or "").strip()
+
+    ACTIVE_IP_BANS[client_ip] = banned_until
+    if uname:
+        ACTIVE_USER_BANS[uname.lower()] = banned_until
+
+    blacklisted_macs = []
+
+    try:
+        with sqlite3.connect(DISCORD_DB) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO security_bans (ip_address, username, banned_until, reason) VALUES (?, ?, ?, ?)",
+                (client_ip, uname, banned_until, req.reason or "DevTools / Inspect violation")
+            )
+
+            # Match client IP with connected router devices
+            cur.execute("SELECT router_id, mac_address, hostname FROM router_device_history WHERE ip_address = ?", (client_ip,))
+            matched_devices = cur.fetchall()
+
+            # If client_ip is loopback, check if there is an Admin PC or local host device
+            if not matched_devices and client_ip in ("127.0.0.1", "::1"):
+                cur.execute("SELECT router_id, mac_address, hostname FROM router_device_history WHERE hostname LIKE '%Admin%' LIMIT 1")
+                matched_devices = cur.fetchall()
+
+            for r_id, mac, hname in matched_devices:
+                if mac:
+                    blacklisted_macs.append(mac)
+                    # Automatically blacklist rogue inspector device
+                    cur.execute("""
+                        INSERT INTO known_devices (mac_address, custom_name, owner_name, device_type, notes, is_known, is_blacklisted, updated_at)
+                        VALUES (?, '🚫 Blacklisted Inspect Violator', 'Security Defense System', 'violator', ?, 0, 1, CURRENT_TIMESTAMP)
+                        ON CONFLICT(mac_address) DO UPDATE SET
+                            is_blacklisted = 1,
+                            is_known = 0,
+                            notes = excluded.notes,
+                            updated_at = CURRENT_TIMESTAMP
+                    """, (mac, f"Banned for {req.reason or 'DevTools violation'} from IP {client_ip}"))
+
+                    # Update status in router_device_history
+                    cur.execute("""
+                        UPDATE router_device_history
+                        SET status = 'blacklisted', is_blacklisted = 1
+                        WHERE mac_address = ?
+                    """, (mac,))
+
+                    # Register intrusion alert
+                    cur.execute("""
+                        INSERT INTO router_alerts (router_id, router_name, mac_address, ip_address, hostname, alert_type, message, status)
+                        VALUES (?, 'Router Defense', ?, ?, ?, 'blacklisted', ?, 'unread')
+                    """, (r_id, mac, client_ip, hname or 'DevTools Violator', f"🚨 INTRUDER BLACKLISTED: Device MAC {mac} ({client_ip}) triggered DevTools / Inspect Ban ({req.reason})."))
+
+            conn.commit()
+    except Exception as e:
+        print(f"[SECURITY BAN DB ERROR] {e}")
+
+    print(f"[SECURITY ALERT] 3-Minute BAN imposed on IP: {client_ip} | User: {uname or 'Anonymous'} | Reason: {req.reason} | Blacklisted MACs: {blacklisted_macs}")
+
+    return {
+        "status": "banned",
+        "ip": client_ip,
+        "username": uname,
+        "banned_until": banned_until,
+        "remaining_seconds": 180,
+        "blacklisted_macs": blacklisted_macs,
+        "message": "3-minute IP and account ban enforced. Associated hardware MAC automatically blacklisted.",
+    }
+
+
+@app.get("/api/security/status")
+async def get_security_ban_status(request: Request, username: Optional[str] = None):
+    client_ip = get_client_ip(request)
+    ip_banned, ip_rem = is_ip_banned(client_ip)
+    user_banned, user_rem = is_user_banned(username) if username else (False, 0)
+    
+    is_banned = ip_banned or user_banned
+    rem = max(ip_rem, user_rem)
+
+    return {
+        "banned": is_banned,
+        "ip": client_ip,
+        "remaining_seconds": rem if is_banned else 0,
+        "ip_banned": ip_banned,
+        "user_banned": user_banned,
+    }
+
+
 # ─── Auth Pydantic Models & Endpoints ──────────────────────────────────────────
 
 class RegisterRequest(BaseModel):
@@ -324,8 +538,23 @@ class UpdateRoleRequest(BaseModel):
 
 
 @app.post("/api/auth/register")
-def register_user(req: RegisterRequest):
+def register_user(req: RegisterRequest, request: Request):
+    client_ip = get_client_ip(request)
+    ip_banned, ip_rem = is_ip_banned(client_ip)
+    if ip_banned:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Registration blocked. Your IP [{client_ip}] is banned for {ip_rem} more seconds due to security violation."
+        )
+
     username = req.username.strip()
+    user_banned, user_rem = is_user_banned(username)
+    if user_banned:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Registration blocked. The username '{username}' is banned for {user_rem} more seconds due to security violation."
+        )
+
     email = req.email.strip().lower()
     password = req.password.strip()
 
@@ -377,12 +606,27 @@ def register_user(req: RegisterRequest):
 
 
 @app.post("/api/auth/login")
-def login_user(req: LoginRequest):
+def login_user(req: LoginRequest, request: Request):
+    client_ip = get_client_ip(request)
+    ip_banned, ip_rem = is_ip_banned(client_ip)
+    if ip_banned:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Login blocked. Your IP [{client_ip}] is banned for {ip_rem} more seconds due to security violation."
+        )
+
     identifier = req.username_or_email.strip()
     password = req.password.strip()
 
     if not identifier or not password:
         raise HTTPException(400, "Username/Email and Password are required.")
+
+    user_banned, user_rem = is_user_banned(identifier)
+    if user_banned:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Login blocked. Account '{identifier}' is banned for {user_rem} more seconds due to security violation."
+        )
 
     # Master Owner check: shahon / admin with secret password shahonazakiya
     is_master_owner = (identifier.lower() in ["shahon", "shahon@glitchmatrix.io", "admin"]) and (password in ["shahonazakiya", "admin123"])
@@ -1452,6 +1696,7 @@ class KnownDeviceRequest(BaseModel):
     device_type: Optional[str] = "phone"
     notes: Optional[str] = ""
     is_known: Optional[bool] = True
+    is_blacklisted: Optional[bool] = False
 
 
 class RouterSyncReport(BaseModel):
@@ -1548,8 +1793,20 @@ async def run_router_scan_async(router_id: int) -> dict:
                 is_recognized = bool(known_map[mac]["is_known"])
                 custom_name = known_map[mac]["custom_name"]
 
-            # If UNKNOWN MAC detected -> Check alert de-duplication (15 min cooldown)
+            # If UNKNOWN MAC detected -> Auto-Blacklist & Block immediately
             if not is_recognized:
+                cur.execute("""
+                    INSERT INTO known_devices (mac_address, custom_name, owner_name, device_type, notes, is_known, is_blacklisted, updated_at)
+                    VALUES (?, '🚫 Blacklisted Rogue Device', 'Auto-Blacklist Defense', 'unknown', 'Auto-blacklisted upon detection', 0, 1, CURRENT_TIMESTAMP)
+                    ON CONFLICT(mac_address) DO UPDATE SET
+                        is_blacklisted = 1,
+                        is_known = 0,
+                        updated_at = CURRENT_TIMESTAMP
+                """, (mac,))
+
+                dev_status = 'blacklisted'
+                dev_blacklisted = 1
+
                 cur.execute("""
                     SELECT id FROM router_alerts
                     WHERE router_id = ? AND mac_address = ? AND status = 'unread'
@@ -1558,10 +1815,10 @@ async def run_router_scan_async(router_id: int) -> dict:
                 recent_alert = cur.fetchone()
 
                 if not recent_alert:
-                    alert_msg = f"Unknown MAC address {mac} connected ({ip} - {hostname}) on {router['name']}."
+                    alert_msg = f"🚨 AUTO-BLACKLISTED: Rogue MAC {mac} ({ip} - {hostname}) immediately blacklisted & blocked on {router['name']}."
                     cur.execute("""
                         INSERT INTO router_alerts (router_id, router_name, mac_address, ip_address, hostname, alert_type, message, status)
-                        VALUES (?, ?, ?, ?, ?, 'unknown_mac', ?, 'unread')
+                        VALUES (?, ?, ?, ?, ?, 'blacklisted', ?, 'unread')
                     """, (router_id, router["name"], mac, ip, hostname, alert_msg))
                     alert_id = cur.lastrowid
                     
@@ -1572,7 +1829,7 @@ async def run_router_scan_async(router_id: int) -> dict:
                         "mac_address": mac,
                         "ip_address": ip,
                         "hostname": hostname,
-                        "alert_type": "unknown_mac",
+                        "alert_type": "blacklisted",
                         "message": alert_msg,
                         "created_at": now_iso,
                         "status": "unread"
@@ -1581,21 +1838,25 @@ async def run_router_scan_async(router_id: int) -> dict:
 
                     cur.execute("""
                         INSERT INTO router_audit_logs (event_type, details, router_id)
-                        VALUES ('unknown_mac_detected', ?, ?)
-                    """, (f"Alert #{alert_id}: Unknown device {mac} ({hostname}) detected.", router_id))
+                        VALUES ('auto_blacklist', ?, ?)
+                    """, (f"🚨 AUTO-BLACKLIST: Rogue device {mac} ({hostname}) automatically blacklisted & blocked.", router_id))
+            else:
+                dev_status = 'online'
+                dev_blacklisted = 0
 
             # Upsert into device history table
             cur.execute("""
-                INSERT INTO router_device_history (router_id, mac_address, ip_address, hostname, connection_type, signal_strength, status, last_seen)
-                VALUES (?, ?, ?, ?, ?, ?, 'online', CURRENT_TIMESTAMP)
+                INSERT INTO router_device_history (router_id, mac_address, ip_address, hostname, connection_type, signal_strength, status, is_blacklisted, last_seen)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(router_id, mac_address) DO UPDATE SET
                     ip_address = excluded.ip_address,
                     hostname = excluded.hostname,
                     connection_type = excluded.connection_type,
                     signal_strength = excluded.signal_strength,
-                    status = 'online',
+                    status = excluded.status,
+                    is_blacklisted = excluded.is_blacklisted,
                     last_seen = CURRENT_TIMESTAMP
-            """, (router_id, mac, ip, hostname, conn_type, signal))
+            """, (router_id, mac, ip, hostname, conn_type, signal, dev_status, dev_blacklisted))
 
         # Mark devices not seen in this scan as offline for this router
         if seen_macs:
@@ -1912,61 +2173,82 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
             if mac in known_map:
                 is_recognized = bool(known_map[mac]["is_known"])
 
-            # If device just connected / reconnected with password and is NOT whitelisted
-            if is_new_connect and not is_recognized:
+            # If device is NOT whitelisted -> Immediately Auto-Blacklist & Block
+            if not is_recognized:
                 cur.execute("""
-                    SELECT id FROM router_alerts
-                    WHERE router_id = ? AND mac_address = ? AND status = 'unread'
-                    AND datetime(created_at) > datetime('now', '-5 minutes')
-                """, (router_id, mac))
-                recent_alert = cur.fetchone()
+                    INSERT INTO known_devices (mac_address, custom_name, owner_name, device_type, notes, is_known, is_blacklisted, updated_at)
+                    VALUES (?, '🚫 Blacklisted Rogue Device', 'Auto-Blacklist Defense', 'unknown', 'Auto-blacklisted upon detection', 0, 1, CURRENT_TIMESTAMP)
+                    ON CONFLICT(mac_address) DO UPDATE SET
+                        is_blacklisted = 1,
+                        is_known = 0,
+                        updated_at = CURRENT_TIMESTAMP
+                """, (mac,))
 
-                if not recent_alert:
-                    alert_msg = f"Unknown MAC {mac} connected ({ip} - {hostname} [{conn_type}]) on {router['name']}."
-                    cur.execute("""
-                        INSERT INTO router_alerts (router_id, router_name, mac_address, ip_address, hostname, alert_type, message, status)
-                        VALUES (?, ?, ?, ?, ?, 'unknown_mac', ?, 'unread')
-                    """, (router_id, router["name"], mac, ip, hostname, alert_msg))
-                    alert_id = cur.lastrowid
+                dev_status = 'blacklisted'
+                dev_blacklisted = 1
 
-                    new_unknowns.append({
-                        "id": alert_id,
-                        "router_id": router_id,
-                        "router_name": router["name"],
-                        "mac_address": mac,
-                        "ip_address": ip,
-                        "hostname": hostname,
-                        "connection_type": conn_type,
-                        "signal": signal,
-                        "alert_type": "unknown_mac",
-                        "message": alert_msg,
-                        "created_at": now_iso,
-                        "status": "unread"
-                    })
+                if is_new_connect:
                     cur.execute("""
-                        INSERT INTO router_audit_logs (event_type, details, router_id)
-                        VALUES ('unknown_mac_alert', ?, ?)
-                    """, (f"🚨 INTRUSION ALERT: Unrecognized device {mac} ({ip} [{conn_type}]) connected with password.", router_id))
+                        SELECT id FROM router_alerts
+                        WHERE router_id = ? AND mac_address = ? AND status = 'unread'
+                        AND datetime(created_at) > datetime('now', '-5 minutes')
+                    """, (router_id, mac))
+                    recent_alert = cur.fetchone()
+
+                    if not recent_alert:
+                        alert_msg = f"🚨 AUTO-BLACKLISTED: Rogue MAC {mac} ({ip} - {hostname}) immediately blacklisted & blocked on {router['name']}."
+                        cur.execute("""
+                            INSERT INTO router_alerts (router_id, router_name, mac_address, ip_address, hostname, alert_type, message, status)
+                            VALUES (?, ?, ?, ?, ?, 'blacklisted', ?, 'unread')
+                        """, (router_id, router["name"], mac, ip, hostname, alert_msg))
+                        alert_id = cur.lastrowid
+
+                        new_unknowns.append({
+                            "id": alert_id,
+                            "router_id": router_id,
+                            "router_name": router["name"],
+                            "mac_address": mac,
+                            "ip_address": ip,
+                            "hostname": hostname,
+                            "connection_type": conn_type,
+                            "signal": signal,
+                            "alert_type": "blacklisted",
+                            "message": alert_msg,
+                            "created_at": now_iso,
+                            "status": "unread"
+                        })
+                        cur.execute("""
+                            INSERT INTO router_audit_logs (event_type, details, router_id)
+                            VALUES ('auto_blacklist', ?, ?)
+                        """, (f"🚨 AUTO-BLACKLIST: Rogue MAC {mac} ({ip} [{conn_type}]) immediately blacklisted & blocked.", router_id))
 
             elif is_new_connect and is_recognized:
+                is_device_bl = bool(known_map.get(mac, {}).get("is_blacklisted", 0))
+                dev_status = 'blacklisted' if is_device_bl else 'online'
+                dev_blacklisted = 1 if is_device_bl else 0
                 cname = known_map[mac].get("custom_name", "Known Device")
                 cur.execute("""
                     INSERT INTO router_audit_logs (event_type, details, router_id)
                     VALUES ('device_connected', ?, ?)
                 """, (f"Authorized device '{cname}' ({mac} - {ip} [{conn_type}]) connected.", router_id))
+            else:
+                is_device_bl = bool(known_map.get(mac, {}).get("is_blacklisted", 0))
+                dev_status = 'blacklisted' if is_device_bl else 'online'
+                dev_blacklisted = 1 if is_device_bl else 0
 
-            # Upsert into router_device_history as ONLINE
+            # Upsert into router_device_history
             cur.execute("""
-                INSERT INTO router_device_history (router_id, mac_address, ip_address, hostname, connection_type, signal_strength, status, last_seen)
-                VALUES (?, ?, ?, ?, ?, ?, 'online', CURRENT_TIMESTAMP)
+                INSERT INTO router_device_history (router_id, mac_address, ip_address, hostname, connection_type, signal_strength, status, is_blacklisted, last_seen)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(router_id, mac_address) DO UPDATE SET
                     ip_address = excluded.ip_address,
                     hostname = excluded.hostname,
                     connection_type = excluded.connection_type,
                     signal_strength = excluded.signal_strength,
-                    status = 'online',
+                    status = excluded.status,
+                    is_blacklisted = excluded.is_blacklisted,
                     last_seen = CURRENT_TIMESTAMP
-            """, (router_id, mac, ip, hostname, conn_type, signal))
+            """, (router_id, mac, ip, hostname, conn_type, signal, dev_status, dev_blacklisted))
 
         # 4. Instant Disconnect Detection: Mark any previously online device not in current scan as OFFLINE
         for p_mac, p_status in prev_status_map.items():
@@ -2036,12 +2318,14 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
 
 @app.get("/api/routers/{router_id}/devices")
 def get_router_devices(router_id: int):
-    """Get connected devices for a specific router, annotated with known/custom names."""
+    """Get connected devices for a specific router, annotated with known/custom names and blacklist status."""
     with sqlite3.connect(DISCORD_DB) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("""
-            SELECT h.*, k.custom_name, k.owner_name, k.device_type, k.is_known, r.name as router_name
+            SELECT h.*, k.custom_name, k.owner_name, k.device_type, k.is_known,
+                   COALESCE(k.is_blacklisted, h.is_blacklisted, 0) as is_blacklisted,
+                   r.name as router_name
             FROM router_device_history h
             LEFT JOIN known_devices k ON h.mac_address = k.mac_address
             LEFT JOIN routers r ON h.router_id = r.id
@@ -2055,12 +2339,14 @@ def get_router_devices(router_id: int):
 
 @app.get("/api/devices/all")
 def get_all_detected_devices():
-    """Get all connected devices across all monitored routers."""
+    """Get all connected devices across all monitored routers, including blacklist status."""
     with sqlite3.connect(DISCORD_DB) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("""
-            SELECT h.*, k.custom_name, k.owner_name, k.device_type, k.is_known, r.name as router_name, r.brand as router_brand
+            SELECT h.*, k.custom_name, k.owner_name, k.device_type, k.is_known,
+                   COALESCE(k.is_blacklisted, h.is_blacklisted, 0) as is_blacklisted,
+                   r.name as router_name, r.brand as router_brand
             FROM router_device_history h
             LEFT JOIN known_devices k ON h.mac_address = k.mac_address
             LEFT JOIN routers r ON h.router_id = r.id
@@ -2070,7 +2356,8 @@ def get_all_detected_devices():
 
     return {
         "total_devices": len(devices),
-        "online_devices": len([d for d in devices if d.get("status") == "online"]),
+        "online_devices": len([d for d in devices if d.get("status") == "online" and not d.get("is_blacklisted")]),
+        "blacklisted_devices": len([d for d in devices if d.get("status") == "blacklisted" or d.get("is_blacklisted")]),
         "devices": devices
     }
 
@@ -2097,25 +2384,34 @@ def register_known_device(req: KnownDeviceRequest):
     if not mac or not name:
         raise HTTPException(status_code=400, detail="MAC address and custom name are required.")
 
+    is_blacklisted = 1 if req.is_blacklisted else 0
+    is_known = 1 if req.is_known else 0
+
     with sqlite3.connect(DISCORD_DB) as conn:
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO known_devices (mac_address, custom_name, owner_name, device_type, notes, is_known, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            INSERT INTO known_devices (mac_address, custom_name, owner_name, device_type, notes, is_known, is_blacklisted, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(mac_address) DO UPDATE SET
                 custom_name = excluded.custom_name,
                 owner_name = excluded.owner_name,
                 device_type = excluded.device_type,
                 notes = excluded.notes,
                 is_known = excluded.is_known,
+                is_blacklisted = excluded.is_blacklisted,
                 updated_at = CURRENT_TIMESTAMP
         """, (
             mac, name, req.owner_name or "", req.device_type or "phone",
-            req.notes or "", 1 if req.is_known else 0
+            req.notes or "", is_known, is_blacklisted
         ))
 
-        # If user marked this device as known, mark associated unread alerts as read
-        if req.is_known:
+        # If device is approved as known & not blacklisted, clear blacklist in history and dismiss alerts
+        if is_known and not is_blacklisted:
+            cur.execute("""
+                UPDATE router_device_history
+                SET status = 'online', is_blacklisted = 0
+                WHERE mac_address = ? AND (status = 'blacklisted' OR is_blacklisted = 1)
+            """, (mac,))
             cur.execute("""
                 UPDATE router_alerts
                 SET status = 'read'
@@ -2125,10 +2421,10 @@ def register_known_device(req: KnownDeviceRequest):
         cur.execute("""
             INSERT INTO router_audit_logs (event_type, details)
             VALUES ('device_whitelisted', ?)
-        """, (f"Device {mac} labeled as '{name}' (Known={req.is_known})",))
+        """, (f"Device {mac} labeled as '{name}' (Known={is_known}, Blacklisted={is_blacklisted})",))
         conn.commit()
 
-    return {"success": True, "mac_address": mac, "custom_name": name, "message": f"Device {mac} mapped to '{name}'."}
+    return {"success": True, "mac_address": mac, "custom_name": name, "message": f"Device {mac} mapped to '{name}' and synced to website database."}
 
 
 @app.delete("/api/devices/known/{mac_address}")
