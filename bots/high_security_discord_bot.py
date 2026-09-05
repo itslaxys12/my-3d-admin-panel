@@ -58,7 +58,7 @@ if sys.platform == "win32":
         pass
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
 # Ensure FFmpeg is available in PATH automatically on Windows/Linux
@@ -477,6 +477,80 @@ async def disable_native_automod_blocking(guild: discord.Guild):
         print(f"[AUTOMOD OVERRIDE] Could not adjust native rules in '{guild.name}': {err}", flush=True)
 
 
+# ─── ROGUE WI-FI DEVICE INTRUSION DISPATCHER ─────────────────────────────────
+
+@tasks.loop(seconds=15)
+async def router_alert_dispatcher():
+    """Periodically inspects router_alerts for unread rogue MAC detections and posts alerts to Discord."""
+    try:
+        if not bot.is_ready():
+            return
+
+        unread = []
+        with sqlite3.connect(DISCORD_DB) as conn:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT * FROM router_alerts
+                WHERE status = 'unread'
+                ORDER BY id ASC LIMIT 5
+            """)
+            unread = [dict(r) for r in cur.fetchall()]
+
+        if not unread:
+            return
+
+        for alert in unread:
+            mac = alert.get("mac_address", "Unknown MAC")
+            ip = alert.get("ip_address", "Unknown IP")
+            host = alert.get("hostname", "Unknown Device")
+            rname = alert.get("router_name", "Home Wi-Fi Router")
+
+            embed = discord.Embed(
+                title="🚨 INTRUSION ALERT: Unknown Wi-Fi Device Connected",
+                description=f"An unrecognized MAC address has connected to your Wi-Fi network **`{rname}`**.\n"
+                            f"Use `!check` or visit the Web Dashboard to assign an identity or whitelist this device.",
+                color=discord.Color.from_rgb(255, 42, 109),
+                timestamp=datetime.now()
+            )
+            embed.add_field(name="⚠️ MAC Address", value=f"`{mac}`", inline=True)
+            embed.add_field(name="🌐 Assigned IP", value=f"`{ip}`", inline=True)
+            embed.add_field(name="📱 Device Hostname", value=f"**{host}**", inline=True)
+            embed.set_footer(text="GMX Quantum Router Defense • Real-Time Alert")
+
+            posted = False
+            for guild in bot.guilds:
+                target_chan = None
+                for c in guild.text_channels:
+                    cname = c.name.lower()
+                    if any(k in cname for k in ["alert", "log", "security", "bot", "general", "chat"]):
+                        if c.permissions_for(guild.me).send_messages:
+                            target_chan = c
+                            break
+                if not target_chan and guild.text_channels:
+                    for c in guild.text_channels:
+                        if c.permissions_for(guild.me).send_messages:
+                            target_chan = c
+                            break
+
+                if target_chan:
+                    try:
+                        content_str = "⚠️ **@everyone ROGUE WI-FI INTRUSION DETECTED!**" if guild.me.guild_permissions.mention_everyone else "⚠️ **ROGUE WI-FI INTRUSION DETECTED!**"
+                        await target_chan.send(content=content_str, embed=embed)
+                        posted = True
+                    except Exception as e:
+                        print(f"[ALERT DISPATCH ERROR] Failed posting to #{target_chan.name}: {e}")
+
+            if posted:
+                with sqlite3.connect(DISCORD_DB) as conn:
+                    cur = conn.cursor()
+                    cur.execute("UPDATE router_alerts SET status = 'broadcasted' WHERE id = ?", (alert["id"],))
+                    conn.commit()
+
+    except Exception:
+        pass
+
+
 # ─── BOT EVENTS ──────────────────────────────────────────────────────────────
 
 @bot.event
@@ -486,14 +560,19 @@ async def on_ready():
     print(f"🛡️ High-Security Anti-Nuke Shield: ACTIVE", flush=True)
     print(f"👑 Auto-Role System: ARMED (Default: '{get_auto_role_name()}')", flush=True)
     print(f"🔊 High-Definition Voice Audio Engine: READY (192kbps / 48kHz)", flush=True)
+    print(f"📡 Wi-Fi Rogue MAC Intrusion Radar: ARMED & MONITORING", flush=True)
     print(f"🌐 Connected to {len(bot.guilds)} Server(s)", flush=True)
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", flush=True)
 
     activity = discord.Activity(
         type=discord.ActivityType.listening,
-        name=f"{PREFIX}song | {PREFIX}help | GMX Matrix"
+        name=f"{PREFIX}song | {PREFIX}check | GMX Matrix"
     )
     await bot.change_presence(status=discord.Status.online, activity=activity)
+
+    if not router_alert_dispatcher.is_running():
+        router_alert_dispatcher.start()
+        print("🚨 [ROUTER DISPATCHER] Background Wi-Fi intrusion alert daemon started.")
 
     # Automatically disable native block popups across all connected servers
     for g in bot.guilds:

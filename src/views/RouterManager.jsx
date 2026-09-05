@@ -778,6 +778,15 @@ export function RouterManager({ userRole = 'owner' }) {
                   </option>
                 ))}
               </select>
+
+              <button
+                onClick={fetchAllData}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-mono font-bold flex items-center gap-1.5 transition-all"
+                title="Refresh Devices"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
             </div>
           </div>
 
@@ -824,9 +833,18 @@ export function RouterManager({ userRole = 'owner' }) {
                             <DevIcon className="w-4 h-4" />
                           </div>
                           <div className="min-w-0">
-                            <h4 className="text-sm font-bold text-white truncate">
-                              {dev.custom_name || dev.hostname || 'Unknown Device'}
-                            </h4>
+                            <div className="flex items-center gap-1.5">
+                              <h4 className="text-sm font-bold text-white truncate">
+                                {dev.custom_name || dev.hostname || 'Unknown Device'}
+                              </h4>
+                              <button
+                                onClick={() => openWhitelistModal(dev)}
+                                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-emerald-400 transition-colors"
+                                title="Edit Device Name"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                             <p className="text-[10px] font-mono text-slate-400 truncate">
                               {dev.owner_name ? `Owner: ${dev.owner_name}` : dev.hostname || 'Unlabeled Host'}
                             </p>
@@ -891,13 +909,14 @@ export function RouterManager({ userRole = 'owner' }) {
                     <div className="mt-3.5 pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
                       <button
                         onClick={() => openWhitelistModal(dev)}
-                        className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold transition-all ${
+                        className={`w-full py-2 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                           isKnown
-                            ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                            ? 'bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700'
                             : 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_15px_rgba(0,255,157,0.3)] font-black'
                         }`}
                       >
-                        {isKnown ? 'Edit Name / Role' : 'Whitelist & Name'}
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>{isKnown ? 'Edit Name & Details' : 'Set Friendly Name & Whitelist'}</span>
                       </button>
                     </div>
                   </div>

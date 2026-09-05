@@ -146,3 +146,32 @@
     linear-gradient(to right, rgba(56, 189, 248, 0.05) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(56, 189, 248, 0.05) 1px, transparent 1px);
 }
+
+/* ─── Cross-Browser Performance Booster (Firefox, Brave, Chrome, Edge) ─── */
+html {
+  scroll-behavior: smooth;
+  text-size-adjust: 100%;
+}
+
+/* Optimize backdrop-filter compositing for Firefox & Brave */
+@supports (-moz-appearance: none) {
+  .backdrop-blur-xl,
+  .backdrop-blur-2xl,
+  .backdrop-blur-lg,
+  .backdrop-blur-md,
+  .glass-panel,
+  .glass-card-purple {
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    transform: translateZ(0);
+    will-change: auto;
+  }
+}
+
+/* Hardware-accelerated GPU compositing for cards to eliminate scroll lag */
+.glass-panel,
+.glass-panel-hover,
+.glass-card-purple {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
