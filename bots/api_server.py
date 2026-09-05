@@ -1860,8 +1860,16 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
         cur.execute("SELECT * FROM routers WHERE id = ?", (router_id,))
         row = cur.fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail="Router not found")
+            # Smart fallback: Find Netis or matching IP or first router
+            cur.execute("SELECT * FROM routers WHERE brand LIKE '%Netis%' OR ip_address LIKE '%192.168.1.%' ORDER BY id DESC LIMIT 1")
+            row = cur.fetchone()
+        if not row:
+            cur.execute("SELECT * FROM routers ORDER BY id DESC LIMIT 1")
+            row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="No routers configured")
         router = dict(row)
+        router_id = router["id"]
 
     now_iso = datetime.now(timezone.utc).isoformat()
     seen_macs = set()
