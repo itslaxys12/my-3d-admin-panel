@@ -36,11 +36,14 @@ export function App() {
   const [isRoleManagerOpen, setIsRoleManagerOpen] = useState(false);
 
   const [userRole, setUserRole] = useState(() => {
-    let role = 'user';
+    let role = 'owner';
     try {
       const u = JSON.parse(localStorage.getItem('glitch_auth_user') || '{}');
-      role = u.role || localStorage.getItem('glitch_user_role') || 'user';
+      role = u.role || localStorage.getItem('glitch_user_role') || 'owner';
     } catch {}
+    if (!localStorage.getItem('glitch_user_role')) {
+      localStorage.setItem('glitch_user_role', 'owner');
+    }
     return role;
   });
 

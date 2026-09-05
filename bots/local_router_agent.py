@@ -152,27 +152,53 @@ def get_host_network_identity():
 
     return host_ip, host_mac
 
-def ping_probe_quick():
+def extract_subnet_prefix(ip: str) -> str:
+    """Extracts first 3 octets e.g. 192.168.1 from 192.168.1.1"""
+    parts = (ip or "").strip().split(".")
+    if len(parts) >= 3:
+        return f"{parts[0]}.{parts[1]}.{parts[2]}"
+    return ""
+
+def get_target_subnets(routers: list = None) -> list:
+    subnets = {"192.168.1", "192.168.0"}
+    if routers:
+        for r in routers:
+            sn = extract_subnet_prefix(r.get("ip_address", ""))
+            if sn:
+                subnets.add(sn)
+    return list(subnets)
+
+def is_in_subnets(ip: str, subnets: list) -> bool:
+    for s in subnets:
+        if ip.startswith(s + "."):
+            return True
+    return False
+
+def ping_probe_quick(subnets: list = None):
     """
-    Rapid concurrent probe across active DHCP client ranges (192.168.1.x and 192.168.0.x)
-    using 70 threads with 100ms wait to refresh Windows kernel ARP tables instantly.
+    Rapid concurrent probe across active DHCP client ranges for all router subnets
+    using 80 threads with 80ms wait to refresh Windows kernel ARP tables instantly.
     """
-    subnets = ["192.168.1", "192.168.0"]
+    if not subnets:
+        subnets = ["192.168.1", "192.168.0"]
+
     def _probe(target_ip):
         subprocess.run(["ping", "-n", "1", "-w", "80", target_ip], capture_output=True)
 
     targets = []
     for s in subnets:
-        targets.extend([f"{s}.{i}" for i in range(1, 15)])
-        targets.extend([f"{s}.{i}" for i in range(100, 135)])
+        targets.extend([f"{s}.{i}" for i in range(1, 20)])
+        targets.extend([f"{s}.{i}" for i in range(100, 140)])
 
-    with ThreadPoolExecutor(max_workers=70) as pool:
+    with ThreadPoolExecutor(max_workers=80) as pool:
         pool.map(_probe, targets)
 
-def get_kernel_arp_devices() -> dict:
-    """Uses Windows native GetIpNetTable for 0ms direct kernel ARP query across subnets."""
+def get_kernel_arp_devices(subnets: list = None) -> dict:
+    """Uses Windows native GetIpNetTable for 0ms direct kernel ARP query across all dynamic subnets."""
     if not HAS_WIN_IPHLP:
         return {}
+    if not subnets:
+        subnets = ["192.168.1", "192.168.0"]
 
     try:
         buf_size = 65536
@@ -192,7 +218,7 @@ def get_kernel_arp_devices() -> dict:
             row = MIB_IPNETROW.from_buffer_copy(raw_bytes[offset : offset + row_size])
             offset += row_size
             ip = socket.inet_ntoa(struct.pack("<I", row.dwAddr))
-            if (ip.startswith("192.168.1.") or ip.startswith("192.168.0.")) and row.dwType in [3, 4]:
+            if is_in_subnets(ip, subnets) and row.dwType in [3, 4]:
                 mac = ":".join(f"{b:02X}" for b in row.bPhysAddr[:row.dwPhysAddrLen])
                 if mac and mac != "FF:FF:FF:FF:FF:FF" and not mac.startswith("01:00:5E"):
                     results[mac] = ip
@@ -200,12 +226,13 @@ def get_kernel_arp_devices() -> dict:
     except Exception:
         return {}
 
-def scan_local_clients(full_probe=False) -> list:
-    """Sweeps network and returns active devices from the ARP table."""
+def scan_local_clients(full_probe=False, routers: list = None) -> list:
+    """Sweeps network and returns active devices from the ARP table for all router subnets."""
+    subnets = get_target_subnets(routers)
     if full_probe:
-        ping_probe_quick()
+        ping_probe_quick(subnets)
 
-    kernel_devices = get_kernel_arp_devices()
+    kernel_devices = get_kernel_arp_devices(subnets)
     devices = []
     seen_macs = set()
 
@@ -251,7 +278,7 @@ def scan_local_clients(full_probe=False) -> list:
             if len(parts) >= 2:
                 ip = parts[0]
                 mac_raw = parts[1]
-                if re.match(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$", ip) and (ip.startswith("192.168.1.") or ip.startswith("192.168.0.")):
+                if re.match(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$", ip) and is_in_subnets(ip, subnets):
                     mac = normalize_mac(mac_raw)
                     if mac and mac not in seen_macs and mac != "FF:FF:FF:FF:FF:FF":
                         if ip.startswith("224.") or ip.startswith("239.") or ip.endswith(".255"):
@@ -370,30 +397,29 @@ def sync_to_cloud(router_id: int, devices: list, router_name: str = "") -> bool:
         return False
 
 def sync_all_routers(routers: list, all_clients: list):
-    """Dispatches appropriate device telemetry to Netis and Tenda routers."""
+    """Dispatches appropriate device telemetry dynamically to all configured routers."""
     for r in routers:
         r_id = r.get("id")
         r_name = r.get("name", "Router")
         r_ip = r.get("ip_address", "")
+        r_subnet = extract_subnet_prefix(r_ip)
         
-        if "192.168.0." in r_ip:
-            # Tenda router: filter for 192.168.0.x or sync all active clients
-            tenda_clients = [c for c in all_clients if c["ip"].startswith("192.168.0.")]
-            if not tenda_clients:
-                tenda_clients = all_clients
-            sync_to_cloud(r_id, tenda_clients, router_name=r_name)
+        # Filter clients belonging to this router's subnet
+        if r_subnet:
+            router_clients = [c for c in all_clients if c["ip"].startswith(r_subnet + ".")]
         else:
-            # Netis router: filter for 192.168.1.x or sync all active clients
-            netis_clients = [c for c in all_clients if not c["ip"].startswith("192.168.0.")]
-            if not netis_clients:
-                netis_clients = all_clients
-            sync_to_cloud(r_id, netis_clients, router_name=r_name)
+            router_clients = all_clients
+            
+        # If no clients explicitly match this subnet, fallback to all clients
+        if not router_clients and all_clients:
+            router_clients = all_clients
+
+        sync_to_cloud(r_id, router_clients, router_name=r_name)
 
 def main():
     safe_print("=================================================================")
-    safe_print("    GMX REAL-TIME NETIS & TENDA WI-FI RADAR AGENT v3.2           ")
+    safe_print("    GMX REAL-TIME MULTI-ROUTER WI-FI RADAR AGENT v3.3           ")
     safe_print("=================================================================")
-    safe_print(f"  Gateways Monitored: {ROUTER_IP} (Netis) & 192.168.0.1 (Tenda)")
     safe_print(f"  Cloud Backend URL:  {API_BASE_URL}")
     safe_print(f"  Ultra-Fast Radar:   Every {SYNC_INTERVAL} seconds")
     safe_print(f"  Direct Kernel ARP:  {'ACTIVE' if HAS_WIN_IPHLP else 'STANDBY'}")
@@ -405,7 +431,8 @@ def main():
     safe_print("Monitoring local Wi-Fi active devices in real-time... Press Ctrl+C to stop.\n")
 
     safe_print("[INIT] Performing initial network sweep...")
-    ping_probe_quick()
+    subnets = get_target_subnets(routers)
+    ping_probe_quick(subnets)
 
     previous_active_macs = set()
     iteration = 0
@@ -413,8 +440,12 @@ def main():
     while True:
         try:
             iteration += 1
-            do_probe = (iteration % 4 == 1)
-            clients = scan_local_clients(full_probe=do_probe)
+            # Dynamically refresh routers every 3 cycles so newly added routers are instantly detected!
+            if iteration % 3 == 1:
+                routers = fetch_all_target_routers()
+
+            do_probe = (iteration % 3 == 1)
+            clients = scan_local_clients(full_probe=do_probe, routers=routers)
             current_active_macs = {c["mac"] for c in clients}
 
             new_connected = current_active_macs - previous_active_macs

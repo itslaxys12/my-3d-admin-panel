@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldAlert,
-  Cpu,
   Layers,
   Bot,
   Globe,
@@ -163,33 +162,6 @@ export function Sidebar({ currentTab, setCurrentTab, isCollapsed, setIsCollapsed
           })}
         </nav>
       </div>
-
-      {/* Sidebar Footer Widget */}
-      {!isCollapsed ? (
-        <div className="p-4 m-3 rounded-xl bg-slate-900/80 border border-cyan-500/20 backdrop-blur-md">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-cyan-400" />
-              <span className="text-xs font-semibold text-slate-200">GPU & BOT VRAM</span>
-            </div>
-            <span className="text-[11px] font-mono text-cyan-300 font-bold">168 MB</span>
-          </div>
-
-          {/* VRAM Progress Bar */}
-          <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-cyan-400 to-purple-500 w-[68%] rounded-full shadow-[0_0_8px_#00f0ff]" />
-          </div>
-
-          <div className="flex items-center justify-between mt-2 text-[10px] text-slate-400 font-mono">
-            <span>Anti-Nuke Armed</span>
-            <span className="text-emerald-400">64 Guilds</span>
-          </div>
-        </div>
-      ) : (
-        <div className="p-3 text-center">
-          <div className="w-3 h-3 mx-auto rounded-full bg-emerald-400 animate-ping" />
-        </div>
-      )}
     </aside>
   </>
 );
