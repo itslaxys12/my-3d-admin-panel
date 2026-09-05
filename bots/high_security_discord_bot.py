@@ -31,17 +31,23 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 try:
-    from routers import (
-        get_router_adapter,
-        normalize_mac,
-        decrypt_password,
-    )
-except ImportError:
-    from bots.routers import (
-        get_router_adapter,
-        normalize_mac,
-        decrypt_password,
-    )
+    try:
+        from routers import (
+            get_router_adapter,
+            normalize_mac,
+            decrypt_password,
+        )
+    except ImportError:
+        from bots.routers import (
+            get_router_adapter,
+            normalize_mac,
+            decrypt_password,
+        )
+except Exception as e:
+    print(f"[ROUTER IMPORT WARNING] {e}")
+    def normalize_mac(m): return str(m or '').upper()
+    def decrypt_password(p): return str(p or '')
+    def get_router_adapter(r, timeout=4): return None
 
 # Configure UTF-8 encoding on Windows consoles
 if sys.platform == "win32":

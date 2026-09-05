@@ -10,8 +10,13 @@ import re
 import time
 from typing import Dict, List, Optional, Any
 
-import requests
-from requests.auth import HTTPBasicAuth
+try:
+    import requests
+    from requests.auth import HTTPBasicAuth
+except ImportError:
+    requests = None
+    HTTPBasicAuth = None
+
 from .base import BaseRouterAdapter, normalize_mac
 
 
@@ -28,13 +33,16 @@ class NetisNC21Adapter(BaseRouterAdapter):
         timeout: int = 5,
     ):
         super().__init__(host, port, username, password, use_https, timeout)
-        self.session = requests.Session()
-        # Set Basic Auth automatically for endpoints that challenge HTTP 401
-        self.session.auth = HTTPBasicAuth(self.username, self.password)
-        self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) NetisClient/2.1",
-            "Accept": "application/json, text/html, */*",
-        })
+        if requests is not None:
+            self.session = requests.Session()
+            if HTTPBasicAuth:
+                self.session.auth = HTTPBasicAuth(self.username, self.password)
+            self.session.headers.update({
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) NetisClient/2.1",
+                "Accept": "application/json, text/html, */*",
+            })
+        else:
+            self.session = None
 
     def test_connection(self) -> Dict[str, Any]:
         """Tests connectivity and credentials against Netis NC21."""

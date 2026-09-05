@@ -85,21 +85,30 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 try:
-    from routers import (
-        get_router_adapter,
-        normalize_mac,
-        encrypt_password,
-        decrypt_password,
-        sanitize_router_dict,
-    )
-except ImportError:
-    from bots.routers import (
-        get_router_adapter,
-        normalize_mac,
-        encrypt_password,
-        decrypt_password,
-        sanitize_router_dict,
-    )
+    try:
+        from routers import (
+            get_router_adapter,
+            normalize_mac,
+            encrypt_password,
+            decrypt_password,
+            sanitize_router_dict,
+        )
+    except ImportError:
+        from bots.routers import (
+            get_router_adapter,
+            normalize_mac,
+            encrypt_password,
+            decrypt_password,
+            sanitize_router_dict,
+        )
+except Exception as e:
+    print(f"[ROUTER IMPORT WARNING] {e}")
+    # Fallback dummy functions so api_server never crashes
+    def normalize_mac(m): return str(m or '').upper()
+    def encrypt_password(p): return str(p or '')
+    def decrypt_password(p): return str(p or '')
+    def sanitize_router_dict(r): return dict(r)
+    def get_router_adapter(r, timeout=5): return None
 
 def init_router_db():
     DATA_DIR.mkdir(parents=True, exist_ok=True)

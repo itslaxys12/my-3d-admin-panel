@@ -10,7 +10,11 @@ import time
 import urllib.parse
 from typing import Dict, List, Optional, Any
 
-import requests
+try:
+    import requests
+except ImportError:
+    requests = None
+
 from .base import BaseRouterAdapter, normalize_mac
 
 
@@ -27,12 +31,15 @@ class TendaAdapter(BaseRouterAdapter):
         timeout: int = 5,
     ):
         super().__init__(host, port, username, password, use_https, timeout)
-        self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "X-Requested-With": "XMLHttpRequest",
-        })
+        if requests is not None:
+            self.session = requests.Session()
+            self.session.headers.update({
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "X-Requested-With": "XMLHttpRequest",
+            })
+        else:
+            self.session = None
 
     def _get_password_md5(self) -> str:
         """Tenda routers commonly hash the admin password with MD5."""
