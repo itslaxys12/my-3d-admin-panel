@@ -55,13 +55,13 @@ export function Sidebar({ currentTab, setCurrentTab, isCollapsed, setIsCollapsed
       )}
 
       <aside
-        className={`fixed top-0 bottom-0 z-50 flex flex-col justify-between transition-all duration-300 ease-in-out border-r border-slate-800/80 bg-slate-950/95 md:bg-slate-950/85 backdrop-blur-2xl ${
+        className={`fixed top-0 bottom-0 z-50 flex flex-col justify-between transition-all duration-300 ease-in-out border-r border-cyan-500/20 bg-slate-950/45 md:bg-slate-950/35 backdrop-blur-xl shadow-[4px_0_30px_rgba(0,0,0,0.6)] ${
           isMobileOpen ? 'left-0 w-72 shadow-2xl shadow-emerald-500/10' : '-left-full md:left-0'
         } ${isCollapsed ? 'md:w-20' : 'md:w-64'}`}
       >
         {/* Sidebar Header */}
         <div>
-          <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800/80">
+          <div className="h-16 flex items-center justify-between px-4 border-b border-cyan-500/20 bg-slate-900/30">
             {(!isCollapsed || isMobileOpen) && (
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl overflow-hidden border border-emerald-400 shadow-[0_0_15px_rgba(0,255,157,0.4)] flex-shrink-0 bg-black">

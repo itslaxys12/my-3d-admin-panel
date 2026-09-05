@@ -1,18 +1,79 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-/**
- * AnimatedWallpaperBackground:
- * Renders the clean cinematic anime warrior wallpaper with:
- * 1. Hardware-accelerated slow Ken Burns breathing motion & subtle pan.
- * 2. High-performance, lightweight 60 FPS rain drizzle & mist particle canvas.
- * 3. Reactive mouse parallax.
- * 4. Dark cyber vignette for crisp text contrast.
- * Optimized for Chrome, Firefox, and Brave with near-zero CPU/GPU overhead.
- */
+export const WALLPAPER_LIST = [
+  {
+    id: 'large-cherry-blossom-tree',
+    title: 'Sakura Blossom Tree',
+    category: 'Anime Nature',
+    video: '/assets/wallpapers/large-cherry-blossom-tree.mp4',
+    image: '/assets/wallpapers/large-cherry-blossom-tree.jpg',
+  },
+  {
+    id: 'tokyo-midnight-rain',
+    title: 'Tokyo Midnight Rain',
+    category: 'Anime Rain',
+    video: '/assets/wallpapers/tokyo-midnight-rain.mp4',
+    image: '/assets/wallpapers/tokyo-midnight-rain.jpg',
+  },
+  {
+    id: 'twilight-at-mount-fuji',
+    title: 'Twilight at Mount Fuji',
+    category: 'Sunset Nature',
+    video: '/assets/wallpapers/twilight-at-mount-fuji.mp4',
+    image: '/assets/wallpapers/twilight-at-mount-fuji.jpg',
+  },
+  {
+    id: 'orange-train-at-sunset',
+    title: 'Orange Train at Sunset',
+    category: 'Anime Sunset',
+    video: '/assets/wallpapers/orange-train-at-sunset.mp4',
+    image: '/assets/wallpapers/orange-train-at-sunset.jpg',
+  },
+  {
+    id: 'rainy-forest',
+    title: 'Peaceful Rainy Forest',
+    category: 'Green Nature',
+    video: '/assets/wallpapers/rainy-forest.mp4',
+    image: '/assets/wallpapers/rainy-forest.jpg',
+  },
+  {
+    id: 'snowfall-in-forest',
+    title: 'Snowfall in Forest',
+    category: 'Winter Nature',
+    video: '/assets/wallpapers/snowfall-in-forest.mp4',
+    image: '/assets/wallpapers/snowfall-in-forest.jpg',
+  },
+  {
+    id: 'mist-over-the-pines',
+    title: 'Mist Over the Pines',
+    category: 'Misty Mountains',
+    video: '/assets/wallpapers/mist-over-the-pines.mp4',
+    image: '/assets/wallpapers/mist-over-the-pines.jpg',
+  },
+];
+
 export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
   const canvasRef = useRef(null);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const videoRef = useRef(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [activeWallpaperId, setActiveWallpaperId] = useState(() => {
+    return localStorage.getItem('gmx_active_wallpaper') || 'large-cherry-blossom-tree';
+  });
+  const [isVideoReady, setIsVideoReady] = useState(false);
+
+  const activeWallpaper =
+    WALLPAPER_LIST.find((w) => w.id === activeWallpaperId) || WALLPAPER_LIST[0];
+
+  useEffect(() => {
+    const handleStorage = (e) => {
+      if (e.detail) {
+        setActiveWallpaperId(e.detail);
+        setIsVideoReady(false);
+      }
+    };
+    window.addEventListener('gmx_wallpaper_changed', handleStorage);
+    return () => window.removeEventListener('gmx_wallpaper_changed', handleStorage);
+  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -23,12 +84,9 @@ export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Canvas particle rain & mist overlay (Only on Desktop for 0% battery/CPU drain on phones)
+  // Canvas particle rain & mist overlay
   useEffect(() => {
-    // If mobile, do not run canvas animation loop to eliminate 100% of mobile frame drops and lag!
-    if (window.innerWidth < 768 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-      return;
-    }
+    if (isMobile) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -46,23 +104,13 @@ export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
     };
     window.addEventListener('resize', handleResize, { passive: true });
 
-    // 40 gentle rain streaks (ultra-low CPU overhead)
-    const raindrops = Array.from({ length: 45 }, () => ({
+    // 35 gentle atmospheric particles
+    const particles = Array.from({ length: 35 }, () => ({
       x: Math.random() * width,
       y: Math.random() * height,
-      len: 12 + Math.random() * 18,
-      speed: 4 + Math.random() * 5,
-      opacity: 0.15 + Math.random() * 0.25,
-    }));
-
-    // 15 floating mist/fog particles
-    const mistParticles = Array.from({ length: 15 }, () => ({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      radius: 40 + Math.random() * 70,
-      vx: (Math.random() - 0.5) * 0.3,
-      vy: (Math.random() - 0.5) * 0.2,
-      opacity: 0.04 + Math.random() * 0.06,
+      len: 10 + Math.random() * 15,
+      speed: 2 + Math.random() * 3,
+      opacity: 0.12 + Math.random() * 0.2,
     }));
 
     let lastTime = performance.now();
@@ -73,45 +121,23 @@ export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
 
       ctx.clearRect(0, 0, width, height);
 
-      // Render rain
-      ctx.strokeStyle = '#a5f3fc';
+      ctx.strokeStyle = '#67e8f9';
       ctx.lineWidth = 1;
-      for (let i = 0; i < raindrops.length; i++) {
-        const drop = raindrops[i];
-        ctx.globalAlpha = drop.opacity;
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        ctx.globalAlpha = p.opacity;
         ctx.beginPath();
-        ctx.moveTo(drop.x, drop.y);
-        ctx.lineTo(drop.x - 2, drop.y + drop.len);
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - 1.5, p.y + p.len);
         ctx.stroke();
 
-        drop.y += drop.speed * (delta * 60);
-        drop.x -= 0.5 * (delta * 60);
+        p.y += p.speed * (delta * 60);
+        p.x -= 0.3 * (delta * 60);
 
-        if (drop.y > height) {
-          drop.y = -drop.len;
-          drop.x = Math.random() * (width + 50);
+        if (p.y > height) {
+          p.y = -p.len;
+          p.x = Math.random() * (width + 40);
         }
-      }
-
-      // Render soft mist particles
-      for (let i = 0; i < mistParticles.length; i++) {
-        const m = mistParticles[i];
-        ctx.globalAlpha = m.opacity;
-        const grad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.radius);
-        grad.addColorStop(0, 'rgba(165, 243, 252, 0.4)');
-        grad.addColorStop(1, 'rgba(165, 243, 252, 0)');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        m.x += m.vx * (delta * 60);
-        m.y += m.vy * (delta * 60);
-
-        if (m.x < -m.radius) m.x = width + m.radius;
-        if (m.x > width + m.radius) m.x = -m.radius;
-        if (m.y < -m.radius) m.y = height + m.radius;
-        if (m.y > height + m.radius) m.y = -m.radius;
       }
 
       animId = requestAnimationFrame(render);
@@ -123,46 +149,61 @@ export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', handleResize);
     };
-  }, []);
+  }, [isMobile]);
 
-  // Parallax translation (disabled on mobile)
-  const offsetX = isMobile ? 0 : (mousePos.x || 0) * 12;
-  const offsetY = isMobile ? 0 : (mousePos.y || 0) * 8;
+  const offsetX = isMobile ? 0 : (mousePos.x || 0) * 10;
+  const offsetY = isMobile ? 0 : (mousePos.y || 0) * 6;
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none bg-[#030712]">
-      {/* Anime Samurai Wallpaper Image with Ken Burns breathing animation */}
+    <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none bg-[#02040a]">
+      {/* Container with Ken Burns & Parallax */}
       <div
         className="absolute inset-[-4%] w-[108%] h-[108%] transition-transform duration-700 ease-out will-change-transform"
         style={{
-          transform: isMobile ? 'scale(1.02)' : `translate3d(${-offsetX}px, ${offsetY}px, 0) scale(1.04)`,
+          transform: isMobile ? 'scale(1.02)' : `translate3d(${-offsetX}px, ${offsetY}px, 0) scale(1.03)`,
         }}
       >
-        <img
-          src="/assets/images/samurai_bg.jpg"
-          alt="Cinematic Anime Warrior Background"
-          onLoad={() => setIsLoaded(true)}
-          className={`w-full h-full object-cover object-center filter brightness-[0.75] contrast-[1.08] saturate-[1.1] transition-opacity duration-1000 ${
-            isLoaded ? 'opacity-90' : 'opacity-0'
+        {/* Animated 60 FPS Video Loop */}
+        <video
+          ref={videoRef}
+          key={activeWallpaper.video}
+          src={activeWallpaper.video}
+          poster={activeWallpaper.image}
+          autoPlay
+          loop
+          muted
+          playsInline
+          onLoadedData={() => setIsVideoReady(true)}
+          className={`w-full h-full object-cover object-center filter brightness-[0.70] contrast-[1.08] saturate-[1.12] transition-opacity duration-1000 ${
+            isVideoReady ? 'opacity-90' : 'opacity-40'
           }`}
           style={{
-            animation: isMobile ? 'none' : 'kenBurnsSubtle 32s ease-in-out infinite alternate',
+            animation: isMobile ? 'none' : 'kenBurnsSubtle 35s ease-in-out infinite alternate',
           }}
         />
+
+        {/* Fallback HD Image Poster if Video Still Buffering */}
+        {!isVideoReady && (
+          <img
+            src={activeWallpaper.image}
+            alt={activeWallpaper.title}
+            className="absolute inset-0 w-full h-full object-cover object-center filter brightness-[0.70] contrast-[1.08] saturate-[1.12]"
+          />
+        )}
       </div>
 
-      {/* Lightweight 60 FPS Rain & Mist Particle Canvas (Desktop only) */}
+      {/* Gentle Particle Overlay */}
       {!isMobile && (
         <canvas
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full pointer-events-none mix-blend-screen opacity-70"
+          className="absolute inset-0 w-full h-full pointer-events-none mix-blend-screen opacity-60"
         />
       )}
 
-      {/* Cyber Dark Gradient Vignette for perfect text contrast & UI readability */}
-      <div className="absolute inset-0 bg-gradient-to-t from-[#030712] via-transparent to-[#030712]/70 opacity-80" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_30%,#030712_85%)] opacity-85" />
-      <div className="absolute inset-0 bg-slate-950/25 backdrop-blur-[0.5px]" />
+      {/* Cyber Subtle Dark Vignette & Mesh Tint */}
+      <div className="absolute inset-0 bg-gradient-to-t from-[#02040a]/90 via-transparent to-[#02040a]/75 opacity-70" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_35%,#02040a_90%)] opacity-75" />
+      <div className="absolute inset-0 bg-slate-950/20 backdrop-blur-[0.3px]" />
     </div>
   );
 }

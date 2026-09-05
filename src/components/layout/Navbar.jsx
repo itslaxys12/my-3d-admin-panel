@@ -16,7 +16,7 @@ import {
 import AnimatedButton from '../UI/AnimatedButton';
 import { APP_CONFIG } from '../../utils/constants';
 
-export function Navbar({ isCollapsed, onOpenSettings, onLogout, onOpenRoleManager, onToggleMobileMenu }) {
+export function Navbar({ isCollapsed, onOpenSettings, onLogout, onOpenRoleManager, onToggleMobileMenu, onOpenWallpapers }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,7 +35,7 @@ export function Navbar({ isCollapsed, onOpenSettings, onLogout, onOpenRoleManage
 
   return (
     <header
-      className={`fixed top-0 right-0 z-30 h-16 border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-xl transition-all duration-300 flex items-center justify-between px-3 sm:px-6 left-0 ${
+      className={`fixed top-0 right-0 z-30 h-16 border-b border-cyan-500/20 bg-slate-950/45 backdrop-blur-xl transition-all duration-300 flex items-center justify-between px-3 sm:px-6 left-0 ${
         isCollapsed ? 'md:left-20' : 'md:left-64'
       }`}
     >
@@ -79,6 +79,18 @@ export function Navbar({ isCollapsed, onOpenSettings, onLogout, onOpenRoleManage
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span>GLITCH BOT ONLINE • 14ms</span>
         </div>
+
+        {/* Anime Nature Live Wallpapers Switcher */}
+        {onOpenWallpapers && (
+          <button
+            onClick={onOpenWallpapers}
+            className="px-2.5 py-1.5 rounded-xl bg-slate-900/80 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 hover:border-emerald-400/60 hover:shadow-[0_0_15px_rgba(0,255,157,0.35)] active:scale-95 transition-all flex items-center gap-1.5"
+            title="Anime Nature Live Wallpapers (MotionBGS)"
+          >
+            <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
+            <span className="hidden sm:inline text-xs font-mono font-bold">Wallpapers</span>
+          </button>
+        )}
 
         {/* Fullscreen Toggle */}
         <button

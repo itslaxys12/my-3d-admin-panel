@@ -54,6 +54,7 @@ export function RouterManager({ userRole = 'owner' }) {
   const [deviceFilter, setDeviceFilter] = useState('all'); // 'all' | 'unknown' | 'known'
   const [statusFilter, setStatusFilter] = useState('online'); // 'online' | 'offline' | 'all' (default: online only)
   const [routerFilter, setRouterFilter] = useState('all');
+  const [quickMacQuery, setQuickMacQuery] = useState('');
 
   // Instant Permission Alert State (when new device connects with password)
   const [permissionAlert, setPermissionAlert] = useState(null);
@@ -166,7 +167,7 @@ export function RouterManager({ userRole = 'owner' }) {
 
   useEffect(() => {
     fetchAllData();
-    const timer = setInterval(fetchAllData, 15000); // Polling fallback
+    const timer = setInterval(fetchAllData, 5000); // 5s ultra-fast radar polling
     return () => clearInterval(timer);
   }, []);
 
@@ -197,7 +198,18 @@ export function RouterManager({ userRole = 'owner' }) {
             triggerAudioChime();
             setPermissionAlert(payload.data);
             fetchAllData();
-          } else if (payload.type === 'DEVICE_DISCONNECTED' || payload.type === 'SCAN_COMPLETED' || payload.type === 'RADAR_STATE_UPDATED') {
+          } else if (payload.type === 'DEVICE_DISCONNECTED') {
+            const discMac = payload.data?.mac_address;
+            if (discMac) {
+              setDevices((prev) =>
+                prev.map((d) => (d.mac_address === discMac ? { ...d, status: 'offline' } : d))
+              );
+            }
+            fetchAllData();
+          } else if (payload.type === 'DEVICE_CONNECTED') {
+            triggerAudioChime();
+            fetchAllData();
+          } else if (payload.type === 'SCAN_COMPLETED' || payload.type === 'RADAR_STATE_UPDATED') {
             fetchAllData();
           }
         } catch {
@@ -397,23 +409,58 @@ export function RouterManager({ userRole = 'owner' }) {
     }
   };
 
+  const handleQuickBlacklist = async (mac, name = '') => {
+    if (!window.confirm(`Add MAC [${mac}] to Blacklist and block access?`)) return;
+    try {
+      await safeFetchJson('/api/devices/known', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mac_address: mac,
+          custom_name: name || 'Blacklisted Rogue Device',
+          is_known: false,
+          is_blacklisted: true,
+        }),
+      });
+      await fetchAllData();
+      setActionSuccessMsg(`MAC ${mac} moved to Blacklist.`);
+      setTimeout(() => setActionSuccessMsg(null), 4000);
+    } catch (err) {
+      alert(`Blacklist error: ${err.message}`);
+    }
+  };
+
   // Counts
-  const onlineCount = useMemo(() => devices.filter((d) => d.status === 'online').length, [devices]);
-  const offlineCount = useMemo(() => devices.filter((d) => d.status !== 'online').length, [devices]);
+  const blacklistedCount = useMemo(
+    () => devices.filter((d) => d.status === 'blacklisted' || Boolean(d.is_blacklisted)).length,
+    [devices]
+  );
+  const onlineCount = useMemo(
+    () => devices.filter((d) => d.status === 'online' && !d.is_blacklisted).length,
+    [devices]
+  );
+  const offlineCount = useMemo(
+    () => devices.filter((d) => d.status !== 'online' && d.status !== 'blacklisted' && !d.is_blacklisted).length,
+    [devices]
+  );
 
   // ─── Filtered Devices Computation ──────────────────────────────────────────
   const filteredDevices = useMemo(() => {
     return devices.filter((d) => {
-      // Status filter (Active Online vs Disconnected History)
-      if (statusFilter === 'online' && d.status !== 'online') return false;
-      if (statusFilter === 'offline' && d.status === 'online') return false;
+      const isBlacklisted = Boolean(d.is_blacklisted || d.status === 'blacklisted');
+
+      // Status filter (Active Online vs Disconnected vs Blacklisted)
+      if (statusFilter === 'blacklisted' && !isBlacklisted) return false;
+      if (statusFilter === 'online' && (d.status !== 'online' || isBlacklisted)) return false;
+      if (statusFilter === 'offline' && (d.status === 'online' || isBlacklisted)) return false;
 
       // Router filter
       if (routerFilter !== 'all' && String(d.router_id) !== String(routerFilter)) {
         return false;
       }
-      // Known / Unknown filter
-      const isKnown = Boolean(d.is_known);
+      // Known / Unknown / Blacklisted filter
+      const isKnown = Boolean(d.is_known && !isBlacklisted);
+      if (deviceFilter === 'blacklisted' && !isBlacklisted) return false;
       if (deviceFilter === 'known' && !isKnown) return false;
       if (deviceFilter === 'unknown' && isKnown) return false;
 
@@ -436,6 +483,37 @@ export function RouterManager({ userRole = 'owner' }) {
       return true;
     });
   }, [devices, statusFilter, routerFilter, deviceFilter, searchQuery]);
+
+  // ─── Quick MAC Lookup Match Computation ────────────────────────────────────
+  const quickMacMatch = useMemo(() => {
+    const raw = quickMacQuery.trim().replace(/[^a-fA-F0-9]/g, '').toLowerCase();
+    if (!raw || raw.length < 2) return null;
+
+    // Search in connected / active devices list first
+    const foundInDevices = devices.find((d) => {
+      const dMac = (d.mac_address || '').replace(/[^a-fA-F0-9]/g, '').toLowerCase();
+      return dMac === raw || (raw.length >= 4 && dMac.includes(raw));
+    });
+
+    if (foundInDevices) return foundInDevices;
+
+    // Search in known / saved devices list
+    const foundInKnown = knownDevices.find((k) => {
+      const kMac = (k.mac_address || '').replace(/[^a-fA-F0-9]/g, '').toLowerCase();
+      return kMac === raw || (raw.length >= 4 && kMac.includes(raw));
+    });
+
+    if (foundInKnown) {
+      return {
+        ...foundInKnown,
+        ip_address: 'Saved in History',
+        status: foundInKnown.is_blacklisted ? 'blacklisted' : 'offline',
+        hostname: foundInKnown.custom_name || 'Known Client',
+      };
+    }
+
+    return null;
+  }, [quickMacQuery, devices, knownDevices]);
 
   // Device type icon selector helper
   const getDeviceIcon = (type) => {
@@ -660,19 +738,19 @@ export function RouterManager({ userRole = 'owner' }) {
           </div>
         </div>
 
-        {/* Card 4: Unknown MAC Alerts */}
+        {/* Card 4: Blacklisted Rogue Devices */}
         <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/70 border border-rose-500/20 backdrop-blur-xl flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
-              Rogue Alerts
+              Blacklisted Devices
             </span>
             <ShieldAlert className="w-4 h-4 text-rose-400" />
           </div>
           <div className="mt-2">
             <div className="text-xl sm:text-2xl font-black font-mono text-rose-400">
-              {alertsData.unread_count || 0}
+              {blacklistedCount}
             </div>
-            <p className="text-[10px] font-mono text-slate-400 mt-0.5">Unread Intrusion Alerts</p>
+            <p className="text-[10px] font-mono text-slate-400 mt-0.5">Auto-Blocked Rogue MACs</p>
           </div>
         </div>
       </div>
@@ -756,6 +834,139 @@ export function RouterManager({ userRole = 'owner' }) {
       {/* ─── TAB 1: CONNECTED DEVICES RADAR ────────────────────────────────── */}
       {activeTab === 'devices' && (
         <div className="space-y-4">
+          {/* ─── Dedicated Quick MAC Address Finder & Inspection Tool ───────── */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-900/95 via-slate-950/90 to-slate-900/95 border border-cyan-500/40 backdrop-blur-xl shadow-xl space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.3)]">
+                  <Zap className="w-4 h-4 text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold font-heading text-white flex items-center gap-2">
+                    <span>QUICK MAC ADDRESS FINDER & INSPECTION TOOL</span>
+                    <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-mono font-bold border border-cyan-500/40">
+                      LIVE FINDER
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    যেকোনো ফরম্যাটে MAC এড্রেস দিন — নিমিষে ডিভাইস খুঁজে বের করুন এবং সরাসরি ব্লক বা নাম সেভ করুন।
+                  </p>
+                </div>
+              </div>
+              {quickMacQuery && (
+                <button
+                  onClick={() => setQuickMacQuery('')}
+                  className="text-xs font-mono text-slate-400 hover:text-white px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 transition-all self-start sm:self-auto"
+                >
+                  Clear Search
+                </button>
+              )}
+            </div>
+
+            {/* Input Bar */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-cyan-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={quickMacQuery}
+                onChange={(e) => setQuickMacQuery(e.target.value)}
+                placeholder="Enter Target MAC (e.g. EA:77:8F:0E:2E:5C or EA778F0E2E5C or 34-5A...)"
+                className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 font-mono tracking-wider focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 shadow-inner"
+              />
+            </div>
+
+            {/* Live Search Match Result */}
+            {quickMacQuery.trim().length >= 2 && (
+              <div className="mt-2">
+                {quickMacMatch ? (
+                  <div className="p-3.5 rounded-xl bg-slate-900/90 border border-emerald-500/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-[0_0_25px_rgba(0,255,157,0.15)]">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        quickMacMatch.is_blacklisted || quickMacMatch.status === 'blacklisted'
+                          ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                          : quickMacMatch.status === 'online'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                          : 'bg-slate-800 text-slate-400 border border-slate-700'
+                      }`}>
+                        <Radio className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-white font-mono truncate">
+                            {quickMacMatch.custom_name || quickMacMatch.hostname || 'Device Client'}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                            quickMacMatch.is_blacklisted || quickMacMatch.status === 'blacklisted'
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                              : quickMacMatch.status === 'online'
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700'
+                          }`}>
+                            {quickMacMatch.is_blacklisted || quickMacMatch.status === 'blacklisted'
+                              ? '🚫 BLACKLISTED'
+                              : quickMacMatch.status === 'online'
+                              ? '🟢 ACTIVE ONLINE'
+                              : '⚪ DISCONNECTED'}
+                          </span>
+                          {quickMacMatch.router_name && (
+                            <span className="px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-[10px] font-mono border border-cyan-500/20">
+                              {quickMacMatch.router_name}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400 mt-1 flex-wrap">
+                          <span>IP: <strong className="text-cyan-300">{quickMacMatch.ip_address || 'N/A'}</strong></span>
+                          <span>•</span>
+                          <span>MAC: <strong className="text-white">{quickMacMatch.mac_address}</strong></span>
+                          {quickMacMatch.connection_type && (
+                            <>
+                              <span>•</span>
+                              <span>Band: <strong className="text-emerald-300">{quickMacMatch.connection_type}</strong></span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-shrink-0">
+                      <button
+                        onClick={() => openWhitelistModal(quickMacMatch)}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-1 transition-all"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        <span>Whitelist / Name</span>
+                      </button>
+
+                      {!(quickMacMatch.is_blacklisted || quickMacMatch.status === 'blacklisted') && (
+                        <button
+                          onClick={() => handleQuickBlacklist(quickMacMatch.mac_address, quickMacMatch.custom_name || quickMacMatch.hostname)}
+                          className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-mono font-bold flex items-center gap-1 transition-all"
+                        >
+                          <ShieldAlert className="w-3.5 h-3.5" />
+                          <span>Blacklist MAC</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between text-xs text-slate-400 font-mono">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
+                      <span>No active or saved device found matching "{quickMacQuery}".</span>
+                    </div>
+                    <button
+                      onClick={() => openWhitelistModal({ mac_address: quickMacQuery.trim() })}
+                      className="px-2.5 py-1 rounded bg-slate-800 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/20 text-xs font-mono"
+                    >
+                      Pre-Authorize This MAC
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Controls Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-900/70 border border-slate-800">
             <div className="relative flex-1">
@@ -776,6 +987,7 @@ export function RouterManager({ userRole = 'owner' }) {
                 className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 font-mono focus:outline-none focus:border-emerald-500/50"
               >
                 <option value="all">Filter: All Statuses</option>
+                <option value="blacklisted">🚫 Blacklisted (Auto-Blocked)</option>
                 <option value="unknown">🚨 Unknown / Rogue Only</option>
                 <option value="known">🛡️ Known / Approved Only</option>
               </select>
@@ -804,7 +1016,7 @@ export function RouterManager({ userRole = 'owner' }) {
             </div>
           </div>
 
-          {/* Status Sub-filter Bar (Active Online vs Disconnected) */}
+          {/* Status Sub-filter Bar (Active Online vs Blacklisted vs Disconnected) */}
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <button
               onClick={() => setStatusFilter('online')}
@@ -816,6 +1028,18 @@ export function RouterManager({ userRole = 'owner' }) {
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span>ACTIVE ONLINE ({onlineCount})</span>
+            </button>
+
+            <button
+              onClick={() => setStatusFilter('blacklisted')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all ${
+                statusFilter === 'blacklisted'
+                  ? 'bg-rose-600/30 text-rose-300 border border-rose-500 shadow-[0_0_15px_rgba(255,42,109,0.3)]'
+                  : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+              <span>BLACKLISTED ({blacklistedCount})</span>
             </button>
 
             <button
@@ -858,14 +1082,17 @@ export function RouterManager({ userRole = 'owner' }) {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {filteredDevices.map((dev) => {
-                const isKnown = Boolean(dev.is_known);
+                const isBlacklisted = Boolean(dev.is_blacklisted || dev.status === 'blacklisted');
+                const isKnown = Boolean(dev.is_known && !isBlacklisted);
                 const DevIcon = getDeviceIcon(dev.device_type);
 
                 return (
                   <div
                     key={`${dev.router_id}-${dev.mac_address}`}
                     className={`p-4 rounded-2xl transition-all duration-300 backdrop-blur-xl relative overflow-hidden flex flex-col justify-between ${
-                      isKnown
+                      isBlacklisted
+                        ? 'bg-rose-950/40 border-2 border-rose-600/80 shadow-[0_0_25px_rgba(255,42,109,0.3)]'
+                        : isKnown
                         ? 'bg-slate-900/70 border border-emerald-500/25 hover:border-emerald-500/40 shadow-[0_0_15px_rgba(0,255,157,0.05)]'
                         : 'bg-rose-950/30 border-2 border-rose-500/50 hover:border-rose-500 shadow-[0_0_20px_rgba(255,42,109,0.15)]'
                     }`}
@@ -876,7 +1103,9 @@ export function RouterManager({ userRole = 'owner' }) {
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div
                             className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                              isKnown
+                              isBlacklisted
+                                ? 'bg-rose-600/30 text-rose-300 border border-rose-500/70 animate-pulse'
+                                : isKnown
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                                 : 'bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse'
                             }`}
@@ -886,7 +1115,7 @@ export function RouterManager({ userRole = 'owner' }) {
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
                               <h4 className="text-sm font-bold text-white truncate">
-                                {dev.custom_name || dev.hostname || 'Unknown Device'}
+                                {dev.custom_name || dev.hostname || (isBlacklisted ? 'Blacklisted Device' : 'Unknown Device')}
                               </h4>
                               <button
                                 onClick={() => openWhitelistModal(dev)}
@@ -902,15 +1131,17 @@ export function RouterManager({ userRole = 'owner' }) {
                           </div>
                         </div>
 
-                        {/* Known vs Rogue Badge */}
+                        {/* Known vs Blacklisted vs Rogue Badge */}
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold flex-shrink-0 ${
-                            isKnown
+                            isBlacklisted
+                              ? 'bg-rose-600/30 text-rose-300 border border-rose-500/70'
+                              : isKnown
                               ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                               : 'bg-rose-500/30 text-rose-300 border border-rose-500/50'
                           }`}
                         >
-                          {isKnown ? 'APPROVED' : 'ROGUE / UNKNOWN'}
+                          {isBlacklisted ? '🚫 BLACKLISTED' : isKnown ? 'APPROVED' : 'ROGUE / UNKNOWN'}
                         </span>
                       </div>
 
@@ -947,7 +1178,12 @@ export function RouterManager({ userRole = 'owner' }) {
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-slate-500 uppercase">Status & Band</span>
                           <div className="flex items-center gap-1.5">
-                            {dev.status === 'online' ? (
+                            {isBlacklisted ? (
+                              <span className="px-1.5 py-0.5 rounded bg-rose-600/30 text-[10px] text-rose-300 font-bold border border-rose-500/50 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                                BLOCKED
+                              </span>
+                            ) : dev.status === 'online' ? (
                               <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-[10px] text-emerald-300 font-bold border border-emerald-500/30 flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                                 LIVE
@@ -977,13 +1213,15 @@ export function RouterManager({ userRole = 'owner' }) {
                       <button
                         onClick={() => openWhitelistModal(dev)}
                         className={`w-full py-2 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                          isKnown
+                          isBlacklisted
+                            ? 'bg-gradient-to-r from-rose-600 to-emerald-500 text-white hover:brightness-110 shadow-[0_0_15px_rgba(0,255,157,0.4)] font-black'
+                            : isKnown
                             ? 'bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700'
                             : 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_15px_rgba(0,255,157,0.3)] font-black'
                         }`}
                       >
                         <Edit3 className="w-3.5 h-3.5" />
-                        <span>{isKnown ? 'Edit Name & Details' : 'Set Friendly Name & Whitelist'}</span>
+                        <span>{isBlacklisted ? 'Unblock & Set Friendly Name' : isKnown ? 'Edit Name & Details' : 'Set Friendly Name & Whitelist'}</span>
                       </button>
                     </div>
                   </div>

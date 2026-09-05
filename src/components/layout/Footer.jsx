@@ -4,7 +4,7 @@ import { Activity, ShieldCheck, Wifi, Zap } from 'lucide-react';
 export function Footer({ isCollapsed, fps = 412 }) {
   return (
     <footer
-      className={`fixed bottom-0 right-0 z-20 h-10 border-t border-slate-800/80 bg-slate-950/85 backdrop-blur-xl transition-all duration-300 flex items-center justify-between px-3 sm:px-6 text-xs text-slate-400 font-mono left-0 ${
+      className={`fixed bottom-0 right-0 z-20 h-10 border-t border-cyan-500/20 bg-slate-950/45 backdrop-blur-xl transition-all duration-300 flex items-center justify-between px-3 sm:px-6 text-xs text-slate-400 font-mono left-0 ${
         isCollapsed ? 'md:left-20' : 'md:left-64'
       }`}
     >

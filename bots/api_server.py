@@ -2137,6 +2137,7 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
     now_iso = datetime.now(timezone.utc).isoformat()
     seen_macs = set()
     new_unknowns = []
+    connected_list = []
     disconnected_list = []
 
     with sqlite3.connect(DISCORD_DB) as conn:
@@ -2231,6 +2232,14 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
                     INSERT INTO router_audit_logs (event_type, details, router_id)
                     VALUES ('device_connected', ?, ?)
                 """, (f"Authorized device '{cname}' ({mac} - {ip} [{conn_type}]) connected.", router_id))
+                connected_list.append({
+                    "router_id": router_id,
+                    "mac_address": mac,
+                    "hostname": hostname,
+                    "custom_name": cname,
+                    "ip_address": ip,
+                    "timestamp": now_iso
+                })
             else:
                 is_device_bl = bool(known_map.get(mac, {}).get("is_blacklisted", 0))
                 dev_status = 'blacklisted' if is_device_bl else 'online'
@@ -2294,6 +2303,9 @@ async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
 
     for disc in disconnected_list:
         await ws_manager.broadcast({"type": "DEVICE_DISCONNECTED", "data": disc})
+
+    for conn_dev in connected_list:
+        await ws_manager.broadcast({"type": "DEVICE_CONNECTED", "data": conn_dev})
 
     await ws_manager.broadcast({
         "type": "SCAN_COMPLETED",

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "large-cherry-blossom-tree",
+    "title": "Sakura Blossom Tree",
+    "video": "/assets/wallpapers/large-cherry-blossom-tree.mp4",
+    "image": "/assets/wallpapers/large-cherry-blossom-tree.jpg"
+  },
+  {
+    "id": "tokyo-midnight-rain",
+    "title": "Tokyo Midnight Rain",
+    "video": "/assets/wallpapers/tokyo-midnight-rain.mp4",
+    "image": "/assets/wallpapers/tokyo-midnight-rain.jpg"
+  },
+  {
+    "id": "twilight-at-mount-fuji",
+    "title": "Twilight at Mount Fuji",
+    "video": "/assets/wallpapers/twilight-at-mount-fuji.mp4",
+    "image": "/assets/wallpapers/twilight-at-mount-fuji.jpg"
+  },
+  {
+    "id": "orange-train-at-sunset",
+    "title": "Orange Train at Sunset",
+    "video": "/assets/wallpapers/orange-train-at-sunset.mp4",
+    "image": "/assets/wallpapers/orange-train-at-sunset.jpg"
+  },
+  {
+    "id": "rainy-forest",
+    "title": "Peaceful Rainy Forest",
+    "video": "/assets/wallpapers/rainy-forest.mp4",
+    "image": "/assets/wallpapers/rainy-forest.jpg"
+  },
+  {
+    "id": "snowfall-in-forest",
+    "title": "Snowfall in Forest",
+    "video": "/assets/wallpapers/snowfall-in-forest.mp4",
+    "image": "/assets/wallpapers/snowfall-in-forest.jpg"
+  },
+  {
+    "id": "mist-over-the-pines",
+    "title": "Mist Over the Pines",
+    "video": "/assets/wallpapers/mist-over-the-pines.mp4",
+    "image": "/assets/wallpapers/mist-over-the-pines.jpg"
+  }
+]

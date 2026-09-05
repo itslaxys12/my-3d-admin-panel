@@ -15,6 +15,7 @@ import InteractiveModel from './components/3d/InteractiveModel';
 import GlassCard from './components/UI/GlassCard';
 import SecurityLockdown from './components/security/SecurityLockdown';
 import AnimatedWallpaperBackground from './components/media/AnimatedWallpaperBackground';
+import WallpaperSwitcherModal from './components/media/WallpaperSwitcherModal';
 import UserRoleManagerModal from './components/modals/UserRoleManagerModal';
 import useDevToolsSecurity from './hooks/useDevToolsSecurity';
 import use3DScene from './hooks/use3DScene';
@@ -34,6 +35,7 @@ export function App() {
     return localStorage.getItem('gmx_active_background') || '';
   });
   const [isRoleManagerOpen, setIsRoleManagerOpen] = useState(false);
+  const [isWallpaperModalOpen, setIsWallpaperModalOpen] = useState(false);
 
   const [userRole, setUserRole] = useState(() => {
     let role = 'owner';
@@ -250,6 +252,7 @@ export function App() {
       <Navbar
         isCollapsed={isCollapsed}
         onOpenSettings={() => setCurrentTab('settings')}
+        onOpenWallpapers={() => setIsWallpaperModalOpen(true)}
         onLogout={handleLogout}
         onOpenRoleManager={() => setIsRoleManagerOpen(true)}
         onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -335,6 +338,12 @@ export function App() {
           <span>Menu</span>
         </button>
       </nav>
+
+      {/* Anime Nature Wallpaper Switcher Modal */}
+      <WallpaperSwitcherModal
+        isOpen={isWallpaperModalOpen}
+        onClose={() => setIsWallpaperModalOpen(false)}
+      />
 
       {/* Owner User & Role Management Modal */}
       <UserRoleManagerModal
