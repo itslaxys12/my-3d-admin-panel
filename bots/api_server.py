@@ -82,28 +82,6 @@ def init_web_auth_db():
 
 init_web_auth_db()
 
-def init_wifi_db():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(DISCORD_DB) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS wifi_clients (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                floor TEXT NOT NULL,
-                room TEXT,
-                phone TEXT,
-                duration TEXT,
-                bill_amount REAL DEFAULT 500,
-                paid_amount REAL DEFAULT 0,
-                status TEXT DEFAULT 'unpaid',
-                note TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.commit()
-
-init_wifi_db()
-
 def get_active_script() -> str:
     if SCRIPT_STATE_FILE.exists():
         s = SCRIPT_STATE_FILE.read_text(encoding="utf-8").strip()
@@ -401,79 +379,6 @@ def update_user_role(req: UpdateRoleRequest):
         conn.commit()
 
     return {"status": "success", "message": f"User role updated to '{req.new_role}'."}
-
-
-# ─── WiFi Floor Management Endpoints ──────────────────────────────────────────
-
-class WifiClientModel(BaseModel):
-    id: Optional[str] = None
-    name: str
-    floor: str
-    room: Optional[str] = ""
-    phone: Optional[str] = ""
-    duration: Optional[str] = ""
-    bill_amount: float = 500.0
-    paid_amount: float = 0.0
-    status: Optional[str] = "unpaid"
-    note: Optional[str] = ""
-
-@app.get("/api/wifi/clients")
-def get_wifi_clients():
-    with sqlite3.connect(DISCORD_DB) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, name, floor, room, phone, duration, bill_amount, paid_amount, status, note, updated_at FROM wifi_clients ORDER BY updated_at DESC")
-        rows = cursor.fetchall()
-    clients = [
-        {
-            "id": r[0],
-            "name": r[1],
-            "floor": r[2],
-            "room": r[3] or "",
-            "phone": r[4] or "",
-            "duration": r[5] or "",
-            "billAmount": float(r[6] or 0),
-            "paidAmount": float(r[7] or 0),
-            "status": r[8] or "unpaid",
-            "note": r[9] or "",
-            "updatedAt": r[10] or ""
-        }
-        for r in rows
-    ]
-    return {"status": "success", "clients": clients, "count": len(clients)}
-
-@app.post("/api/wifi/clients")
-def save_wifi_client(req: WifiClientModel):
-    client_id = req.id or f"wf-{int(time.time()*1000)}"
-    bill = float(req.bill_amount)
-    paid = float(req.paid_amount)
-    status = "paid" if paid >= bill and bill > 0 else "partial" if paid > 0 else "unpaid"
-    with sqlite3.connect(DISCORD_DB) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO wifi_clients (id, name, floor, room, phone, duration, bill_amount, paid_amount, status, note, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(id) DO UPDATE SET
-                name=excluded.name,
-                floor=excluded.floor,
-                room=excluded.room,
-                phone=excluded.phone,
-                duration=excluded.duration,
-                bill_amount=excluded.bill_amount,
-                paid_amount=excluded.paid_amount,
-                status=excluded.status,
-                note=excluded.note,
-                updated_at=CURRENT_TIMESTAMP
-        """, (client_id, req.name.strip(), req.floor, req.room.strip(), req.phone.strip(), req.duration.strip(), bill, paid, status, req.note.strip()))
-        conn.commit()
-    return {"status": "success", "id": client_id}
-
-@app.delete("/api/wifi/clients/{client_id}")
-def delete_wifi_client(client_id: str):
-    with sqlite3.connect(DISCORD_DB) as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM wifi_clients WHERE id = ?", (client_id,))
-        conn.commit()
-    return {"status": "success", "deleted_id": client_id}
 
 
 # ─── Bot Control Endpoints ────────────────────────────────────────────────────

@@ -12,7 +12,6 @@ export const NAV_ITEMS = [
   { id: 'analytics', label: '3D Analytics', icon: 'Activity', badge: 'Live' },
   { id: 'media', label: 'Media & Visuals', icon: 'Film', badge: 'New' },
   { id: 'crypto_radar', label: 'Crypto Moonshot Radar', icon: 'Coins', badge: 'VIP Owner', ownerOnly: true },
-  { id: 'wifi_manager', label: 'WiFi Control Hub', icon: 'Wifi', badge: '3 Floors' },
   { id: 'settings', label: 'Settings', icon: 'Settings', badge: null },
 ];
 
