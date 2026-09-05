@@ -11,9 +11,10 @@ import {
 import GlassCard from '../components/UI/GlassCard';
 import AnimatedButton from '../components/UI/AnimatedButton';
 import openDiscordBotInvite from '../utils/discordInvite';
+import { getApiBase } from '../utils/apiConfig';
 
-// Bot API base URL — uses relative path so it automatically works on local and public domains
-const API = '';
+// Bot API base URL — dynamically routes to Railway backend when on Vercel
+const API = getApiBase();
 
 // ─── Commands extracted from the real bot code ─────────────────────────────
 const BOT_COMMANDS = [

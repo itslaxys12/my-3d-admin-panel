@@ -37,6 +37,7 @@ import {
   Sparkles,
   Zap,
 } from 'lucide-react';
+import { getApiBase, getWsBase, safeFetchJson } from '../utils/apiConfig';
 
 export function RouterManager({ userRole = 'owner' }) {
   // ─── State Management ──────────────────────────────────────────────────────
@@ -83,10 +84,10 @@ export function RouterManager({ userRole = 'owner' }) {
 
   // Form states
   const [routerForm, setRouterForm] = useState({
-    name: '',
-    brand: 'Tenda',
-    model: 'TX2 Pro Wi-Fi 6',
-    ip_address: '192.168.0.1',
+    name: 'Netis NC21 Home Router',
+    brand: 'Netis',
+    model: 'NC21 Gigabit Dual-Band',
+    ip_address: '192.168.1.1',
     port: 80,
     use_https: false,
     username: 'admin',
@@ -139,11 +140,11 @@ export function RouterManager({ userRole = 'owner' }) {
   const fetchAllData = async () => {
     try {
       const [rRes, dRes, kRes, aRes, lRes] = await Promise.all([
-        fetch('/api/routers').then((r) => r.json()).catch(() => ({ routers: [] })),
-        fetch('/api/devices/all').then((r) => r.json()).catch(() => ({ devices: [] })),
-        fetch('/api/devices/known').then((r) => r.json()).catch(() => ({ known_devices: [] })),
-        fetch('/api/routers/alerts').then((r) => r.json()).catch(() => ({ unread_count: 0, alerts: [] })),
-        fetch('/api/routers/audit-logs').then((r) => r.json()).catch(() => ({ logs: [] })),
+        safeFetchJson('/api/routers').catch(() => ({ routers: [] })),
+        safeFetchJson('/api/devices/all').catch(() => ({ devices: [] })),
+        safeFetchJson('/api/devices/known').catch(() => ({ known_devices: [] })),
+        safeFetchJson('/api/routers/alerts').catch(() => ({ unread_count: 0, alerts: [] })),
+        safeFetchJson('/api/routers/audit-logs').catch(() => ({ logs: [] })),
       ]);
 
       setRouters(rRes.routers || []);
@@ -170,8 +171,7 @@ export function RouterManager({ userRole = 'owner' }) {
     let reconnectTimeout;
 
     const connectWS = () => {
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${proto}//${window.location.host}/ws`;
+      const wsUrl = `${getWsBase()}/ws`;
 
       ws = new WebSocket(wsUrl);
       wsRef.current = ws;
@@ -226,8 +226,7 @@ export function RouterManager({ userRole = 'owner' }) {
   const handleTestConnection = async (routerId) => {
     setTestingMap((prev) => ({ ...prev, [routerId]: true }));
     try {
-      const res = await fetch(`/api/routers/${routerId}/test`, { method: 'POST' });
-      const data = await res.json();
+      const data = await safeFetchJson(`/api/routers/${routerId}/test`, { method: 'POST' });
       setTestResults((prev) => ({ ...prev, [routerId]: data }));
     } catch (err) {
       setTestResults((prev) => ({
@@ -242,12 +241,12 @@ export function RouterManager({ userRole = 'owner' }) {
   const handleManualScan = async (routerId) => {
     setScanningMap((prev) => ({ ...prev, [routerId]: true }));
     try {
-      await fetch(`/api/routers/${routerId}/scan`, { method: 'POST' });
+      await safeFetchJson(`/api/routers/${routerId}/scan`, { method: 'POST' });
       await fetchAllData();
       setActionSuccessMsg(`Router #${routerId} scan completed!`);
       setTimeout(() => setActionSuccessMsg(null), 3500);
     } catch (err) {
-      console.error(err);
+      alert(`Scan note: ${err.message}`);
     } finally {
       setScanningMap((prev) => ({ ...prev, [routerId]: false }));
     }
@@ -257,7 +256,7 @@ export function RouterManager({ userRole = 'owner' }) {
     setLoading(true);
     for (const r of routers) {
       try {
-        await fetch(`/api/routers/${r.id}/scan`, { method: 'POST' });
+        await safeFetchJson(`/api/routers/${r.id}/scan`, { method: 'POST' });
       } catch {}
     }
     await fetchAllData();
@@ -265,8 +264,7 @@ export function RouterManager({ userRole = 'owner' }) {
 
   const handleSeedSample = async () => {
     try {
-      const res = await fetch('/api/routers/seed-sample', { method: 'POST' });
-      const data = await res.json();
+      const data = await safeFetchJson('/api/routers/seed-sample', { method: 'POST' });
       triggerAudioChime();
       await fetchAllData();
       setActionSuccessMsg(data.message || 'Sample routers and test devices seeded!');
@@ -279,19 +277,17 @@ export function RouterManager({ userRole = 'owner' }) {
   const handleSaveRouter = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/routers', {
+      await safeFetchJson('/api/routers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(routerForm),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed adding router');
       setIsAddModalOpen(false);
       setRouterForm({
-        name: '',
-        brand: 'Tenda',
-        model: 'TX2 Pro Wi-Fi 6',
-        ip_address: '192.168.0.1',
+        name: 'Netis NC21 Home Router',
+        brand: 'Netis',
+        model: 'NC21 Gigabit Dual-Band',
+        ip_address: '192.168.1.1',
         port: 80,
         use_https: false,
         username: 'admin',
@@ -303,7 +299,7 @@ export function RouterManager({ userRole = 'owner' }) {
       setActionSuccessMsg('Router added successfully!');
       setTimeout(() => setActionSuccessMsg(null), 3500);
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      alert(`Error adding router: ${err.message}`);
     }
   };
 
@@ -311,27 +307,25 @@ export function RouterManager({ userRole = 'owner' }) {
     e.preventDefault();
     if (!selectedRouter) return;
     try {
-      const res = await fetch(`/api/routers/${selectedRouter.id}`, {
+      await safeFetchJson(`/api/routers/${selectedRouter.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(routerForm),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed updating router');
       setIsEditModalOpen(false);
       setSelectedRouter(null);
       await fetchAllData();
       setActionSuccessMsg('Router settings saved!');
       setTimeout(() => setActionSuccessMsg(null), 3500);
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      alert(`Error updating router: ${err.message}`);
     }
   };
 
   const handleDeleteRouter = async (routerId, routerName) => {
     if (!window.confirm(`Delete router '${routerName}' and its device history?`)) return;
     try {
-      await fetch(`/api/routers/${routerId}`, { method: 'DELETE' });
+      await safeFetchJson(`/api/routers/${routerId}`, { method: 'DELETE' });
       await fetchAllData();
       setActionSuccessMsg(`Router '${routerName}' deleted.`);
       setTimeout(() => setActionSuccessMsg(null), 3500);
@@ -355,13 +349,11 @@ export function RouterManager({ userRole = 'owner' }) {
   const handleSaveWhitelist = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/devices/known', {
+      await safeFetchJson('/api/devices/known', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(whitelistTarget),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed mapping device');
       setIsWhitelistModalOpen(false);
       await fetchAllData();
       setActionSuccessMsg(`Device ${whitelistTarget.mac_address} authorized as "${whitelistTarget.custom_name}"!`);
@@ -374,7 +366,7 @@ export function RouterManager({ userRole = 'owner' }) {
   const handleDeleteKnownDevice = async (mac) => {
     if (!window.confirm(`Remove custom label for ${mac}?`)) return;
     try {
-      await fetch(`/api/devices/known/${encodeURIComponent(mac)}`, { method: 'DELETE' });
+      await safeFetchJson(`/api/devices/known/${encodeURIComponent(mac)}`, { method: 'DELETE' });
       await fetchAllData();
     } catch (err) {
       alert(`Error: ${err.message}`);
@@ -383,7 +375,7 @@ export function RouterManager({ userRole = 'owner' }) {
 
   const handleDismissAlert = async (alertId) => {
     try {
-      await fetch(`/api/routers/alerts/${alertId}/dismiss`, { method: 'POST' });
+      await safeFetchJson(`/api/routers/alerts/${alertId}/dismiss`, { method: 'POST' });
       await fetchAllData();
     } catch (err) {
       console.error(err);
@@ -392,7 +384,7 @@ export function RouterManager({ userRole = 'owner' }) {
 
   const handleClearAllAlerts = async () => {
     try {
-      await fetch('/api/routers/alerts/clear-all', { method: 'POST' });
+      await safeFetchJson('/api/routers/alerts/clear-all', { method: 'POST' });
       await fetchAllData();
     } catch (err) {
       console.error(err);

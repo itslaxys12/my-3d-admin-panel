@@ -1454,6 +1454,11 @@ class KnownDeviceRequest(BaseModel):
     is_known: Optional[bool] = True
 
 
+class RouterSyncReport(BaseModel):
+    devices: List[Dict[str, Any]]
+    source: Optional[str] = "local_agent"
+
+
 # ─── Router Scan Engine & Background Worker ──────────────────────────────────
 
 def sync_router_scan(router_data: dict) -> dict:
@@ -1824,6 +1829,15 @@ def test_router(router_id: int):
         return {"success": False, "message": f"Unsupported router brand '{router.get('brand')}'."}
 
     result = adapter.test_connection()
+    ip = router.get("ip_address", "")
+    is_private = ip.startswith(("192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.2", "172.3"))
+    if not result.get("success") and is_private:
+        result["is_local_ip"] = True
+        result["local_ip_guidance"] = (
+            f"Router IP {ip} is located on your private home network. Cloud servers (Railway) "
+            "cannot reach private local IPs across the internet. Run the Local Router Agent on your PC "
+            "connected to home Wi-Fi to sync devices continuously to this dashboard."
+        )
     return result
 
 
@@ -1832,6 +1846,132 @@ async def trigger_router_scan(router_id: int):
     """Trigger an immediate manual scan of the specified router."""
     res = await run_router_scan_async(router_id)
     return res
+
+
+@app.post("/api/routers/{router_id}/sync")
+async def sync_router_devices_report(router_id: int, report: RouterSyncReport):
+    """
+    Receives connected device reports pushed from a local router agent or test runner.
+    Enables real-time monitoring of home routers (e.g. Netis NC21 192.168.1.1) when server is in the cloud.
+    """
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM routers WHERE id = ?", (router_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Router not found")
+        router = dict(row)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    seen_macs = set()
+    new_unknowns = []
+
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        cur.execute("SELECT mac_address, custom_name, owner_name, is_known FROM known_devices")
+        known_map = {r["mac_address"]: dict(r) for r in cur.fetchall()}
+
+        for dev in report.devices:
+            raw_mac = dev.get("mac") or dev.get("mac_address") or ""
+            mac = normalize_mac(raw_mac)
+            if not mac:
+                continue
+
+            seen_macs.add(mac)
+            ip = dev.get("ip") or dev.get("ip_address") or ""
+            hostname = dev.get("hostname") or dev.get("name") or "Device"
+            conn_type = dev.get("connection_type") or "Wi-Fi"
+            signal = dev.get("signal") or dev.get("signal_strength") or "-60 dBm"
+
+            is_recognized = False
+            if mac in known_map:
+                is_recognized = bool(known_map[mac]["is_known"])
+
+            if not is_recognized:
+                cur.execute("""
+                    SELECT id FROM router_alerts
+                    WHERE router_id = ? AND mac_address = ? AND status = 'unread'
+                    AND datetime(created_at) > datetime('now', '-15 minutes')
+                """, (router_id, mac))
+                recent_alert = cur.fetchone()
+
+                if not recent_alert:
+                    alert_msg = f"Unknown MAC {mac} connected ({ip} - {hostname}) on {router['name']}."
+                    cur.execute("""
+                        INSERT INTO router_alerts (router_id, router_name, mac_address, ip_address, hostname, alert_type, message, status)
+                        VALUES (?, ?, ?, ?, ?, 'unknown_mac', ?, 'unread')
+                    """, (router_id, router["name"], mac, ip, hostname, alert_msg))
+                    alert_id = cur.lastrowid
+
+                    new_unknowns.append({
+                        "id": alert_id,
+                        "router_id": router_id,
+                        "router_name": router["name"],
+                        "mac_address": mac,
+                        "ip_address": ip,
+                        "hostname": hostname,
+                        "alert_type": "unknown_mac",
+                        "message": alert_msg,
+                        "created_at": now_iso,
+                        "status": "unread"
+                    })
+
+            cur.execute("""
+                INSERT INTO router_device_history (router_id, mac_address, ip_address, hostname, connection_type, signal_strength, status, last_seen)
+                VALUES (?, ?, ?, ?, ?, ?, 'online', CURRENT_TIMESTAMP)
+                ON CONFLICT(router_id, mac_address) DO UPDATE SET
+                    ip_address = excluded.ip_address,
+                    hostname = excluded.hostname,
+                    connection_type = excluded.connection_type,
+                    signal_strength = excluded.signal_strength,
+                    status = 'online',
+                    last_seen = CURRENT_TIMESTAMP
+            """, (router_id, mac, ip, hostname, conn_type, signal))
+
+        if seen_macs:
+            placeholders = ",".join("?" for _ in seen_macs)
+            cur.execute(f"""
+                UPDATE router_device_history
+                SET status = 'offline'
+                WHERE router_id = ? AND mac_address NOT IN ({placeholders})
+            """, [router_id] + list(seen_macs))
+
+        cur.execute("""
+            UPDATE routers
+            SET last_status = 'online', last_scan_at = CURRENT_TIMESTAMP, last_error = NULL
+            WHERE id = ?
+        """, (router_id,))
+
+        cur.execute("""
+            INSERT INTO router_audit_logs (event_type, details, router_id)
+            VALUES ('agent_sync', ?, ?)
+        """, (f"Synced {len(seen_macs)} devices from {report.source} ({len(new_unknowns)} new alerts).", router_id))
+
+        conn.commit()
+
+    for unk in new_unknowns:
+        await ws_manager.broadcast({"type": "UNKNOWN_DEVICE_DETECTED", "data": unk})
+
+    await ws_manager.broadcast({
+        "type": "SCAN_COMPLETED",
+        "data": {
+            "router_id": router_id,
+            "router_name": router["name"],
+            "device_count": len(seen_macs),
+            "unknown_count": len(new_unknowns),
+            "timestamp": now_iso
+        }
+    })
+
+    return {
+        "success": True,
+        "synced_count": len(seen_macs),
+        "new_unknown_alerts": len(new_unknowns),
+        "message": f"Successfully synced {len(seen_macs)} devices from {report.source}."
+    }
 
 
 @app.get("/api/routers/{router_id}/devices")

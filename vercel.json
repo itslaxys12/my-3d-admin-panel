@@ -4,6 +4,18 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://web-production-038e0.up.railway.app/api/:path*"
+    },
+    {
+      "source": "/ws/:path*",
+      "destination": "https://web-production-038e0.up.railway.app/ws/:path*"
+    },
+    {
+      "source": "/ws",
+      "destination": "https://web-production-038e0.up.railway.app/ws"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
