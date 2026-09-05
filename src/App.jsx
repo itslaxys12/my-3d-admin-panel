@@ -13,6 +13,7 @@ import Login from './views/Login';
 import ScrollVideoPlayer from './components/media/ScrollVideoPlayer';
 import ImageGallery from './components/media/ImageGallery';
 import CryptoRadarView from './components/crypto/CryptoRadarView';
+import RouterManager from './views/RouterManager';
 import InteractiveEarth from './components/3d/InteractiveEarth';
 import InteractiveModel from './components/3d/InteractiveModel';
 import GlassCard from './components/UI/GlassCard';
@@ -23,7 +24,7 @@ import UserRoleManagerModal from './components/modals/UserRoleManagerModal';
 import useDevToolsSecurity from './hooks/useDevToolsSecurity';
 import use3DScene from './hooks/use3DScene';
 import { MODEL_PRESETS, APP_CONFIG } from './utils/constants';
-import { Box, Sparkles, Film, Eye, Globe, Bot, Lock, Crown, ShieldAlert, LayoutDashboard, Coins, Activity, Menu } from 'lucide-react';
+import { Box, Sparkles, Film, Eye, Globe, Bot, Lock, Crown, ShieldAlert, LayoutDashboard, Coins, Activity, Menu, Wifi } from 'lucide-react';
 
 export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -244,6 +245,9 @@ export function App() {
         }
         return <CryptoRadarView />;
 
+      case 'router_manager':
+        return <RouterManager userRole={userRole} />;
+
       case 'settings':
         if (userRole === 'user') {
           return (
@@ -333,6 +337,15 @@ export function App() {
         >
           <Bot className="w-5 h-5 mb-0.5" />
           <span>Bot Hub</span>
+        </button>
+        <button
+          onClick={() => setCurrentTab('router_manager')}
+          className={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium transition-colors ${
+            currentTab === 'router_manager' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Wifi className="w-5 h-5 mb-0.5 text-cyan-400" />
+          <span>WiFi Hub</span>
         </button>
         {userRole === 'owner' && (
           <button

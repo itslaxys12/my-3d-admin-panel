@@ -15,6 +15,7 @@ import {
   Lock,
   Coins,
   X,
+  Wifi,
 } from 'lucide-react';
 import { NAV_ITEMS, APP_CONFIG } from '../../utils/constants';
 
@@ -25,6 +26,7 @@ const ICON_MAP = {
   Film,
   Globe,
   Coins,
+  Wifi,
   Settings,
   Box,
 };

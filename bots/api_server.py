@@ -80,7 +80,106 @@ def init_web_auth_db():
             print("[AUTH DB] Initialized web_users table and created default admin account.")
         conn.commit()
 
+# Router management adapters & encryption
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+try:
+    from routers import (
+        get_router_adapter,
+        normalize_mac,
+        encrypt_password,
+        decrypt_password,
+        sanitize_router_dict,
+    )
+except ImportError:
+    from bots.routers import (
+        get_router_adapter,
+        normalize_mac,
+        encrypt_password,
+        decrypt_password,
+        sanitize_router_dict,
+    )
+
+def init_router_db():
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS routers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                brand TEXT NOT NULL,
+                model TEXT DEFAULT 'Standard',
+                ip_address TEXT NOT NULL,
+                port INTEGER DEFAULT 80,
+                use_https INTEGER DEFAULT 0,
+                username TEXT DEFAULT 'admin',
+                password_encrypted TEXT NOT NULL,
+                monitoring_enabled INTEGER DEFAULT 1,
+                auto_scan_interval INTEGER DEFAULT 60,
+                last_status TEXT DEFAULT 'unknown',
+                last_scan_at TIMESTAMP,
+                last_error TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS known_devices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mac_address TEXT UNIQUE NOT NULL,
+                custom_name TEXT NOT NULL,
+                owner_name TEXT DEFAULT '',
+                device_type TEXT DEFAULT 'phone',
+                notes TEXT DEFAULT '',
+                is_known INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS router_device_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                router_id INTEGER NOT NULL,
+                mac_address TEXT NOT NULL,
+                ip_address TEXT,
+                hostname TEXT,
+                connection_type TEXT DEFAULT 'Wi-Fi',
+                signal_strength TEXT DEFAULT '-60 dBm',
+                status TEXT DEFAULT 'online',
+                first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(router_id, mac_address)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS router_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                router_id INTEGER NOT NULL,
+                router_name TEXT,
+                mac_address TEXT NOT NULL,
+                ip_address TEXT,
+                hostname TEXT,
+                alert_type TEXT DEFAULT 'unknown_mac',
+                message TEXT NOT NULL,
+                status TEXT DEFAULT 'unread',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS router_audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                details TEXT,
+                router_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+    print("[ROUTER DB] Initialized routers, known_devices, device_history, and router_alerts tables.")
+
 init_web_auth_db()
+init_router_db()
 
 def get_active_script() -> str:
     if SCRIPT_STATE_FILE.exists():
@@ -1259,6 +1358,756 @@ def get_forex_calendar(
         "timestamp_now_ms": int(now_bst.timestamp() * 1000),
         "total_events": len(sorted_events),
         "events": sorted_events
+    }
+
+
+# ─── ROUTER MAC MONITORING & DEVICE ALERT SYSTEM ─────────────────────────────
+
+class WebSocketConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: Dict[str, Any]):
+        dead = []
+        for connection in list(self.active_connections):
+            try:
+                await connection.send_json(message)
+            except Exception:
+                dead.append(connection)
+        for d in dead:
+            self.disconnect(d)
+
+ws_manager = WebSocketConnectionManager()
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except (WebSocketDisconnect, Exception):
+        ws_manager.disconnect(websocket)
+
+@app.websocket("/ws/router-alerts")
+async def websocket_router_alerts(websocket: WebSocket):
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except (WebSocketDisconnect, Exception):
+        ws_manager.disconnect(websocket)
+
+
+# ─── Router Pydantic Request Models ──────────────────────────────────────────
+
+class RouterCreateRequest(BaseModel):
+    name: str
+    brand: str  # 'Tenda' | 'Netis'
+    model: Optional[str] = "Standard"
+    ip_address: str
+    port: Optional[int] = 80
+    use_https: Optional[bool] = False
+    username: Optional[str] = "admin"
+    password: Optional[str] = ""
+    monitoring_enabled: Optional[bool] = True
+    auto_scan_interval: Optional[int] = 60
+
+
+class RouterUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    ip_address: Optional[str] = None
+    port: Optional[int] = None
+    use_https: Optional[bool] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    monitoring_enabled: Optional[bool] = None
+    auto_scan_interval: Optional[int] = None
+
+
+class KnownDeviceRequest(BaseModel):
+    mac_address: str
+    custom_name: str
+    owner_name: Optional[str] = ""
+    device_type: Optional[str] = "phone"
+    notes: Optional[str] = ""
+    is_known: Optional[bool] = True
+
+
+# ─── Router Scan Engine & Background Worker ──────────────────────────────────
+
+def sync_router_scan(router_data: dict) -> dict:
+    """Executes network connection & device fetch using the appropriate brand adapter."""
+    adapter = get_router_adapter(router_data)
+    if not adapter:
+        return {"success": False, "error": "No adapter found for router brand", "devices": []}
+
+    conn_res = adapter.test_connection()
+    if not conn_res.get("success") and not conn_res.get("authenticated"):
+        return {
+            "success": False,
+            "error": conn_res.get("message", "Router unreachable"),
+            "latency_ms": conn_res.get("latency_ms", 0),
+            "devices": []
+        }
+
+    raw_devices = adapter.get_connected_devices()
+    return {
+        "success": True,
+        "latency_ms": conn_res.get("latency_ms", 0),
+        "devices": raw_devices
+    }
+
+
+async def run_router_scan_async(router_id: int) -> dict:
+    """Orchestrates an async router scan, MAC normalization, unknown alerting, and DB sync."""
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM routers WHERE id = ?", (router_id,))
+        row = cur.fetchone()
+        if not row:
+            return {"error": "Router not found", "success": False}
+        router = dict(row)
+
+    # Decrypt password for adapter connection
+    router["password"] = decrypt_password(router.get("password_encrypted", ""))
+
+    # Run network I/O in worker thread so FastAPI remains non-blocking
+    result = await asyncio.to_thread(sync_router_scan, router)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    seen_macs = set()
+    new_unknowns = []
+
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        if not result.get("success"):
+            error_msg = result.get("error", "Router connection failed")
+            cur.execute("""
+                UPDATE routers 
+                SET last_status = 'offline', last_scan_at = CURRENT_TIMESTAMP, last_error = ? 
+                WHERE id = ?
+            """, (error_msg, router_id))
+            cur.execute("""
+                INSERT INTO router_audit_logs (event_type, details, router_id)
+                VALUES ('scan_offline', ?, ?)
+            """, (f"Scan failed: {error_msg}", router_id))
+            conn.commit()
+            return {"success": False, "error": error_msg, "devices": []}
+
+        devices = result.get("devices", [])
+        
+        # Load known devices lookup table
+        cur.execute("SELECT mac_address, custom_name, owner_name, is_known FROM known_devices")
+        known_map = {r["mac_address"]: dict(r) for r in cur.fetchall()}
+
+        for dev in devices:
+            raw_mac = dev.get("mac", "")
+            mac = normalize_mac(raw_mac)
+            if not mac:
+                continue
+
+            seen_macs.add(mac)
+            ip = dev.get("ip", "")
+            hostname = dev.get("hostname", "Unknown Device")
+            conn_type = dev.get("connection_type", "Wi-Fi")
+            signal = dev.get("signal", "-60 dBm")
+
+            # Check if recognized
+            is_recognized = False
+            custom_name = ""
+            if mac in known_map:
+                is_recognized = bool(known_map[mac]["is_known"])
+                custom_name = known_map[mac]["custom_name"]
+
+            # If UNKNOWN MAC detected -> Check alert de-duplication (15 min cooldown)
+            if not is_recognized:
+                cur.execute("""
+                    SELECT id FROM router_alerts
+                    WHERE router_id = ? AND mac_address = ? AND status = 'unread'
+                    AND datetime(created_at) > datetime('now', '-15 minutes')
+                """, (router_id, mac))
+                recent_alert = cur.fetchone()
+
+                if not recent_alert:
+                    alert_msg = f"Unknown MAC address {mac} connected ({ip} - {hostname}) on {router['name']}."
+                    cur.execute("""
+                        INSERT INTO router_alerts (router_id, router_name, mac_address, ip_address, hostname, alert_type, message, status)
+                        VALUES (?, ?, ?, ?, ?, 'unknown_mac', ?, 'unread')
+                    """, (router_id, router["name"], mac, ip, hostname, alert_msg))
+                    alert_id = cur.lastrowid
+                    
+                    alert_payload = {
+                        "id": alert_id,
+                        "router_id": router_id,
+                        "router_name": router["name"],
+                        "mac_address": mac,
+                        "ip_address": ip,
+                        "hostname": hostname,
+                        "alert_type": "unknown_mac",
+                        "message": alert_msg,
+                        "created_at": now_iso,
+                        "status": "unread"
+                    }
+                    new_unknowns.append(alert_payload)
+
+                    cur.execute("""
+                        INSERT INTO router_audit_logs (event_type, details, router_id)
+                        VALUES ('unknown_mac_detected', ?, ?)
+                    """, (f"Alert #{alert_id}: Unknown device {mac} ({hostname}) detected.", router_id))
+
+            # Upsert into device history table
+            cur.execute("""
+                INSERT INTO router_device_history (router_id, mac_address, ip_address, hostname, connection_type, signal_strength, status, last_seen)
+                VALUES (?, ?, ?, ?, ?, ?, 'online', CURRENT_TIMESTAMP)
+                ON CONFLICT(router_id, mac_address) DO UPDATE SET
+                    ip_address = excluded.ip_address,
+                    hostname = excluded.hostname,
+                    connection_type = excluded.connection_type,
+                    signal_strength = excluded.signal_strength,
+                    status = 'online',
+                    last_seen = CURRENT_TIMESTAMP
+            """, (router_id, mac, ip, hostname, conn_type, signal))
+
+        # Mark devices not seen in this scan as offline for this router
+        if seen_macs:
+            placeholders = ",".join("?" for _ in seen_macs)
+            cur.execute(f"""
+                UPDATE router_device_history
+                SET status = 'offline'
+                WHERE router_id = ? AND mac_address NOT IN ({placeholders})
+            """, [router_id] + list(seen_macs))
+
+        # Update router online telemetry
+        cur.execute("""
+            UPDATE routers 
+            SET last_status = 'online', last_scan_at = CURRENT_TIMESTAMP, last_error = NULL 
+            WHERE id = ?
+        """, (router_id,))
+
+        cur.execute("""
+            INSERT INTO router_audit_logs (event_type, details, router_id)
+            VALUES ('scan_completed', ?, ?)
+        """, (f"Scan completed: {len(seen_macs)} devices connected ({len(new_unknowns)} new unknown alerts).", router_id))
+        
+        conn.commit()
+
+    # Broadcast WebSocket alert notifications
+    for unk in new_unknowns:
+        await ws_manager.broadcast({"type": "UNKNOWN_DEVICE_DETECTED", "data": unk})
+
+    await ws_manager.broadcast({
+        "type": "SCAN_COMPLETED",
+        "data": {
+            "router_id": router_id,
+            "router_name": router["name"],
+            "device_count": len(seen_macs),
+            "unknown_count": len(new_unknowns),
+            "timestamp": now_iso
+        }
+    })
+
+    return {
+        "success": True,
+        "router_id": router_id,
+        "total_devices": len(seen_macs),
+        "new_unknown_alerts": len(new_unknowns),
+        "devices": devices
+    }
+
+
+async def router_scanner_loop():
+    """Background daemon loop periodically scanning enabled routers."""
+    print("[ROUTER SCANNER] Background automated router monitor activated.", flush=True)
+    while True:
+        try:
+            await asyncio.sleep(10)
+            active_routers = []
+            with sqlite3.connect(DISCORD_DB) as conn:
+                conn.row_factory = sqlite3.Row
+                cur = conn.cursor()
+                cur.execute("SELECT id, auto_scan_interval, last_scan_at FROM routers WHERE monitoring_enabled = 1")
+                active_routers = [dict(r) for r in cur.fetchall()]
+
+            for r in active_routers:
+                interval = max(30, int(r.get("auto_scan_interval") or 60))
+                last_scan = r.get("last_scan_at")
+                should_scan = False
+                if not last_scan:
+                    should_scan = True
+                else:
+                    try:
+                        clean_ts = str(last_scan).split(".")[0]
+                        dt = datetime.strptime(clean_ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                        if (datetime.now(timezone.utc) - dt).total_seconds() >= interval:
+                            should_scan = True
+                    except Exception:
+                        should_scan = True
+
+                if should_scan:
+                    await run_router_scan_async(r["id"])
+
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            await asyncio.sleep(10)
+
+
+@app.on_event("startup")
+async def start_router_background_worker():
+    init_router_db()
+    asyncio.create_task(router_scanner_loop())
+
+
+# ─── Router Management REST Endpoints ─────────────────────────────────────────
+
+@app.get("/api/routers")
+def list_routers():
+    """List all configured routers with redacted passwords and status counts."""
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM routers ORDER BY id DESC")
+        routers = [dict(r) for r in cur.fetchall()]
+
+        # Attach live stats per router
+        for r in routers:
+            cur.execute("""
+                SELECT COUNT(*) FROM router_device_history 
+                WHERE router_id = ? AND status = 'online'
+            """, (r["id"],))
+            r["connected_devices_count"] = cur.fetchone()[0]
+
+            cur.execute("""
+                SELECT COUNT(*) FROM router_alerts 
+                WHERE router_id = ? AND status = 'unread'
+            """, (r["id"],))
+            r["unread_alerts_count"] = cur.fetchone()[0]
+
+            r = sanitize_router_dict(r)
+
+    return {"routers": [sanitize_router_dict(r) for r in routers]}
+
+
+@app.post("/api/routers")
+def add_router(req: RouterCreateRequest):
+    """Add a new router to the system with encrypted administrative credentials."""
+    name = req.name.strip()
+    brand = req.brand.strip()
+    ip_addr = req.ip_address.strip()
+    if not name or not brand or not ip_addr:
+        raise HTTPException(status_code=400, detail="Name, brand, and IP address are required.")
+
+    enc_pass = encrypt_password(req.password or "")
+
+    with sqlite3.connect(DISCORD_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO routers (
+                name, brand, model, ip_address, port, use_https, username, password_encrypted,
+                monitoring_enabled, auto_scan_interval, last_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unknown')
+        """, (
+            name, brand, req.model or "Standard", ip_addr, req.port or 80,
+            1 if req.use_https else 0, req.username or "admin", enc_pass,
+            1 if req.monitoring_enabled else 0, max(15, req.auto_scan_interval or 60)
+        ))
+        router_id = cur.lastrowid
+        cur.execute("""
+            INSERT INTO router_audit_logs (event_type, details, router_id)
+            VALUES ('router_added', ?, ?)
+        """, (f"Added router '{name}' ({brand} - {ip_addr})", router_id))
+        conn.commit()
+
+    return {"success": True, "router_id": router_id, "message": f"Router '{name}' added successfully."}
+
+
+@app.put("/api/routers/{router_id}")
+def update_router(router_id: int, req: RouterUpdateRequest):
+    """Update router settings, intervals, and credentials."""
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM routers WHERE id = ?", (router_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Router not found")
+        current = dict(row)
+
+        new_name = req.name if req.name is not None else current["name"]
+        new_brand = req.brand if req.brand is not None else current["brand"]
+        new_model = req.model if req.model is not None else current["model"]
+        new_ip = req.ip_address if req.ip_address is not None else current["ip_address"]
+        new_port = req.port if req.port is not None else current["port"]
+        new_https = 1 if req.use_https else 0 if req.use_https is not None else current["use_https"]
+        new_user = req.username if req.username is not None else current["username"]
+        new_mon = 1 if req.monitoring_enabled else 0 if req.monitoring_enabled is not None else current["monitoring_enabled"]
+        new_int = max(15, req.auto_scan_interval) if req.auto_scan_interval is not None else current["auto_scan_interval"]
+
+        if req.password is not None and req.password != "":
+            enc_pass = encrypt_password(req.password)
+        else:
+            enc_pass = current["password_encrypted"]
+
+        cur.execute("""
+            UPDATE routers SET
+                name = ?, brand = ?, model = ?, ip_address = ?, port = ?, use_https = ?,
+                username = ?, password_encrypted = ?, monitoring_enabled = ?, auto_scan_interval = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (new_name, new_brand, new_model, new_ip, new_port, new_https, new_user, enc_pass, new_mon, new_int, router_id))
+
+        cur.execute("""
+            INSERT INTO router_audit_logs (event_type, details, router_id)
+            VALUES ('router_updated', ?, ?)
+        """, (f"Updated configuration for router '{new_name}'", router_id))
+        conn.commit()
+
+    return {"success": True, "message": "Router updated successfully."}
+
+
+@app.delete("/api/routers/{router_id}")
+def delete_router(router_id: int):
+    """Delete a router and purge its connected devices & alerts."""
+    with sqlite3.connect(DISCORD_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM routers WHERE id = ?", (router_id,))
+        cur.execute("DELETE FROM router_device_history WHERE router_id = ?", (router_id,))
+        cur.execute("DELETE FROM router_alerts WHERE router_id = ?", (router_id,))
+        cur.execute("""
+            INSERT INTO router_audit_logs (event_type, details, router_id)
+            VALUES ('router_deleted', ?, ?)
+        """, (f"Deleted router #{router_id}", router_id))
+        conn.commit()
+
+    return {"success": True, "message": f"Router #{router_id} deleted."}
+
+
+@app.post("/api/routers/{router_id}/test")
+def test_router(router_id: int):
+    """Perform a connectivity and authentication test on a router."""
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM routers WHERE id = ?", (router_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Router not found")
+        router = dict(row)
+
+    router["password"] = decrypt_password(router.get("password_encrypted", ""))
+    adapter = get_router_adapter(router)
+    if not adapter:
+        return {"success": False, "message": f"Unsupported router brand '{router.get('brand')}'."}
+
+    result = adapter.test_connection()
+    return result
+
+
+@app.post("/api/routers/{router_id}/scan")
+async def trigger_router_scan(router_id: int):
+    """Trigger an immediate manual scan of the specified router."""
+    res = await run_router_scan_async(router_id)
+    return res
+
+
+@app.get("/api/routers/{router_id}/devices")
+def get_router_devices(router_id: int):
+    """Get connected devices for a specific router, annotated with known/custom names."""
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT h.*, k.custom_name, k.owner_name, k.device_type, k.is_known, r.name as router_name
+            FROM router_device_history h
+            LEFT JOIN known_devices k ON h.mac_address = k.mac_address
+            LEFT JOIN routers r ON h.router_id = r.id
+            WHERE h.router_id = ?
+            ORDER BY h.status DESC, h.last_seen DESC
+        """, (router_id,))
+        devices = [dict(d) for d in cur.fetchall()]
+
+    return {"devices": devices}
+
+
+@app.get("/api/devices/all")
+def get_all_detected_devices():
+    """Get all connected devices across all monitored routers."""
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT h.*, k.custom_name, k.owner_name, k.device_type, k.is_known, r.name as router_name, r.brand as router_brand
+            FROM router_device_history h
+            LEFT JOIN known_devices k ON h.mac_address = k.mac_address
+            LEFT JOIN routers r ON h.router_id = r.id
+            ORDER BY h.status DESC, h.last_seen DESC
+        """)
+        devices = [dict(d) for d in cur.fetchall()]
+
+    return {
+        "total_devices": len(devices),
+        "online_devices": len([d for d in devices if d.get("status") == "online"]),
+        "devices": devices
+    }
+
+
+# ─── Known Devices CRUD Endpoints ─────────────────────────────────────────────
+
+@app.get("/api/devices/known")
+def list_known_devices():
+    """List all registered custom MAC address entries."""
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM known_devices ORDER BY custom_name ASC")
+        devices = [dict(d) for d in cur.fetchall()]
+
+    return {"known_devices": devices}
+
+
+@app.post("/api/devices/known")
+def register_known_device(req: KnownDeviceRequest):
+    """Assign or update a custom friendly name and whitelist status for a MAC address."""
+    mac = normalize_mac(req.mac_address)
+    name = req.custom_name.strip()
+    if not mac or not name:
+        raise HTTPException(status_code=400, detail="MAC address and custom name are required.")
+
+    with sqlite3.connect(DISCORD_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO known_devices (mac_address, custom_name, owner_name, device_type, notes, is_known, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(mac_address) DO UPDATE SET
+                custom_name = excluded.custom_name,
+                owner_name = excluded.owner_name,
+                device_type = excluded.device_type,
+                notes = excluded.notes,
+                is_known = excluded.is_known,
+                updated_at = CURRENT_TIMESTAMP
+        """, (
+            mac, name, req.owner_name or "", req.device_type or "phone",
+            req.notes or "", 1 if req.is_known else 0
+        ))
+
+        # If user marked this device as known, mark associated unread alerts as read
+        if req.is_known:
+            cur.execute("""
+                UPDATE router_alerts
+                SET status = 'read'
+                WHERE mac_address = ? AND status = 'unread'
+            """, (mac,))
+
+        cur.execute("""
+            INSERT INTO router_audit_logs (event_type, details)
+            VALUES ('device_whitelisted', ?)
+        """, (f"Device {mac} labeled as '{name}' (Known={req.is_known})",))
+        conn.commit()
+
+    return {"success": True, "mac_address": mac, "custom_name": name, "message": f"Device {mac} mapped to '{name}'."}
+
+
+@app.delete("/api/devices/known/{mac_address}")
+def delete_known_device(mac_address: str):
+    """Remove a device custom name mapping."""
+    mac = normalize_mac(mac_address)
+    with sqlite3.connect(DISCORD_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM known_devices WHERE mac_address = ?", (mac,))
+        cur.execute("""
+            INSERT INTO router_audit_logs (event_type, details)
+            VALUES ('known_device_deleted', ?)
+        """, (f"Removed custom label for device {mac}",))
+        conn.commit()
+
+    return {"success": True, "message": f"Mapping for {mac} removed."}
+
+
+# ─── Alerts & Audit Log Endpoints ─────────────────────────────────────────────
+
+@app.get("/api/routers/alerts")
+def get_router_alerts(limit: int = 50, status: Optional[str] = None):
+    """Retrieve router alerts with unread counter."""
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) FROM router_alerts WHERE status = 'unread'")
+        unread_count = cur.fetchone()[0]
+
+        if status:
+            cur.execute("SELECT * FROM router_alerts WHERE status = ? ORDER BY id DESC LIMIT ?", (status, limit))
+        else:
+            cur.execute("SELECT * FROM router_alerts ORDER BY id DESC LIMIT ?", (limit,))
+        alerts = [dict(a) for a in cur.fetchall()]
+
+    return {
+        "unread_count": unread_count,
+        "total_alerts": len(alerts),
+        "alerts": alerts
+    }
+
+
+@app.post("/api/routers/alerts/{alert_id}/read")
+def mark_alert_read(alert_id: int):
+    """Mark a specific alert as read."""
+    with sqlite3.connect(DISCORD_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE router_alerts SET status = 'read' WHERE id = ?", (alert_id,))
+        conn.commit()
+    return {"success": True}
+
+
+@app.post("/api/routers/alerts/{alert_id}/dismiss")
+def dismiss_alert(alert_id: int):
+    """Dismiss a specific alert."""
+    with sqlite3.connect(DISCORD_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE router_alerts SET status = 'dismissed' WHERE id = ?", (alert_id,))
+        conn.commit()
+    return {"success": True}
+
+
+@app.post("/api/routers/alerts/clear-all")
+def clear_all_alerts():
+    """Mark all unread alerts as dismissed."""
+    with sqlite3.connect(DISCORD_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE router_alerts SET status = 'dismissed' WHERE status = 'unread'")
+        conn.commit()
+    return {"success": True, "message": "All alerts cleared."}
+
+
+@app.get("/api/routers/audit-logs")
+def get_router_audit_logs(limit: int = 50):
+    """Retrieve chronological router audit logs."""
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT l.*, r.name as router_name
+            FROM router_audit_logs l
+            LEFT JOIN routers r ON l.router_id = r.id
+            ORDER BY l.id DESC LIMIT ?
+        """, (limit,))
+        logs = [dict(row) for row in cur.fetchall()]
+
+    return {"logs": logs}
+
+
+@app.post("/api/routers/seed-sample")
+async def seed_sample_router_data():
+    """
+    Seeds realistic sample Tenda & Netis NC21 routers and devices for demonstration & testing.
+    Guarantees full functionality even when running in cloud environments (e.g. Railway).
+    """
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        # 1. Create Tenda Router if none exists
+        cur.execute("SELECT id FROM routers WHERE brand = 'Tenda' LIMIT 1")
+        tenda_row = cur.fetchone()
+        if not tenda_row:
+            cur.execute("""
+                INSERT INTO routers (name, brand, model, ip_address, port, use_https, username, password_encrypted, monitoring_enabled, auto_scan_interval, last_status)
+                VALUES ('Tenda TX2 Pro (Home Wi-Fi)', 'Tenda', 'TX2 Pro Wi-Fi 6', '192.168.0.1', 80, 0, 'admin', ?, 1, 60, 'online')
+            """, (encrypt_password("admin123"),))
+            tenda_id = cur.lastrowid
+        else:
+            tenda_id = tenda_row[0]
+            cur.execute("UPDATE routers SET last_status = 'online' WHERE id = ?", (tenda_id,))
+
+        # 2. Create Netis NC21 Router if none exists
+        cur.execute("SELECT id FROM routers WHERE brand = 'Netis' LIMIT 1")
+        netis_row = cur.fetchone()
+        if not netis_row:
+            cur.execute("""
+                INSERT INTO routers (name, brand, model, ip_address, port, use_https, username, password_encrypted, monitoring_enabled, auto_scan_interval, last_status)
+                VALUES ('Netis NC21 (Office Gateway)', 'Netis', 'NC21 AC1200', '192.168.1.1', 80, 0, 'admin', ?, 1, 60, 'online')
+            """, (encrypt_password("netis2026"),))
+            netis_id = cur.lastrowid
+        else:
+            netis_id = netis_row[0]
+            cur.execute("UPDATE routers SET last_status = 'online' WHERE id = ?", (netis_id,))
+
+        # 3. Insert Known Devices
+        sample_known = [
+            ("AA:BB:CC:11:22:33", "Rahim's Phone", "Rahim", "phone", "Primary mobile device", 1),
+            ("48:2A:E3:44:88:99", "Office MacBook Pro", "Admin", "laptop", "Authorized work laptop", 1),
+            ("B4:CD:27:FA:11:22", "Smart TV 4K", "Living Room", "iot", "Living room media hub", 1),
+        ]
+        for mac, cname, owner, dtype, notes, is_k in sample_known:
+            cur.execute("""
+                INSERT INTO known_devices (mac_address, custom_name, owner_name, device_type, notes, is_known)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(mac_address) DO UPDATE SET
+                    custom_name = excluded.custom_name,
+                    owner_name = excluded.owner_name,
+                    is_known = excluded.is_known
+            """, (mac, cname, owner, dtype, notes, is_k))
+
+        # 4. Insert Connected Devices History
+        cur.execute("""
+            INSERT INTO router_device_history (router_id, mac_address, ip_address, hostname, connection_type, signal_strength, status)
+            VALUES 
+                (?, 'AA:BB:CC:11:22:33', '192.168.0.105', 'Galaxy-S23-Ultra', '5G', '-48 dBm', 'online'),
+                (?, '48:2A:E3:44:88:99', '192.168.0.120', 'MacBook-Pro-M3', '5G', '-52 dBm', 'online'),
+                (?, '02:88:B1:FF:42:19', '192.168.0.142', 'ROGUE-DEVICE-GMX', '5G', '-76 dBm', 'online'),
+                (?, 'B4:CD:27:FA:11:22', '192.168.1.50', 'Sony-Bravia-TV', 'LAN', '-40 dBm', 'online'),
+                (?, 'D8:3C:69:AA:05:7E', '192.168.1.88', 'Unknown-Android-14', '2.4G', '-65 dBm', 'online')
+            ON CONFLICT(router_id, mac_address) DO UPDATE SET status='online', last_seen=CURRENT_TIMESTAMP
+        """, (tenda_id, tenda_id, tenda_id, netis_id, netis_id))
+
+        # 5. Insert alert for unknown device
+        alert_msg = "Unknown MAC address 02:88:B1:FF:42:19 connected (192.168.0.142 - ROGUE-DEVICE-GMX) on Tenda TX2 Pro."
+        cur.execute("""
+            INSERT INTO router_alerts (router_id, router_name, mac_address, ip_address, hostname, alert_type, message, status)
+            VALUES (?, 'Tenda TX2 Pro (Home Wi-Fi)', '02:88:B1:FF:42:19', '192.168.0.142', 'ROGUE-DEVICE-GMX', 'unknown_mac', ?, 'unread')
+        """, (tenda_id, alert_msg))
+        alert_id = cur.lastrowid
+
+        cur.execute("""
+            INSERT INTO router_audit_logs (event_type, details, router_id)
+            VALUES ('sample_seed', 'Seeded sample Tenda & Netis routers with connected and unknown devices.', ?)
+        """, (tenda_id,))
+
+        conn.commit()
+
+    # Broadcast WebSocket alert
+    await ws_manager.broadcast({
+        "type": "UNKNOWN_DEVICE_DETECTED",
+        "data": {
+            "id": alert_id,
+            "router_id": tenda_id,
+            "router_name": "Tenda TX2 Pro (Home Wi-Fi)",
+            "mac_address": "02:88:B1:FF:42:19",
+            "ip_address": "192.168.0.142",
+            "hostname": "ROGUE-DEVICE-GMX",
+            "alert_type": "unknown_mac",
+            "message": alert_msg,
+            "status": "unread"
+        }
+    })
+
+    return {
+        "success": True,
+        "message": "Sample Tenda & Netis NC21 routers and test devices successfully seeded."
     }
 
 

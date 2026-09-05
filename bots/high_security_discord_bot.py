@@ -24,6 +24,24 @@ from pathlib import Path
 from typing import Optional, Set, List, Dict, Any, Union, Tuple
 
 BASE_DIR = Path(__file__).resolve().parent
+DISCORD_DB = BASE_DIR / "data" / "discord.db"
+
+import sqlite3
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+try:
+    from routers import (
+        get_router_adapter,
+        normalize_mac,
+        decrypt_password,
+    )
+except ImportError:
+    from bots.routers import (
+        get_router_adapter,
+        normalize_mac,
+        decrypt_password,
+    )
 
 # Configure UTF-8 encoding on Windows consoles
 if sys.platform == "win32":
@@ -1458,12 +1476,185 @@ async def userinfo(ctx, member: discord.Member = None):
     await ctx.send(embed=embed)
 
 
+# ─── ROUTER MAC MONITORING & DEVICE ALERT COMMAND ────────────────────────────
+
+@bot.command(name="check", aliases=["router", "wifiscan", "devices"], help="Scans authorized routers for connected known and unknown Wi-Fi devices")
+async def check_router_cmd(ctx, *args):
+    """
+    Scans authorized routers for connected Wi-Fi devices, identifies known MAC addresses,
+    and flags unknown / unauthorized devices with high-visibility alerts.
+    Restricted to Server Owners and Whitelisted Administrators.
+    """
+    if not is_whitelisted_user(ctx.author.id, ctx.guild):
+        embed = discord.Embed(
+            title="🚫 Access Restricted",
+            description=f"Sorry {ctx.author.mention}, only **Whitelisted Administrators** can execute router security scans.",
+            color=discord.Color.from_rgb(255, 42, 109)
+        )
+        return await ctx.send(embed=embed)
+
+    if not DISCORD_DB.exists():
+        return await ctx.send("⚠️ Router database is not initialized. Please configure routers in the web dashboard.")
+
+    status_msg = await ctx.send("⚡ Scanning authorized routers & querying connected Wi-Fi devices...")
+
+    try:
+        with sqlite3.connect(DISCORD_DB) as conn:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM routers WHERE monitoring_enabled = 1")
+            routers = [dict(r) for r in cur.fetchall()]
+
+            if not routers:
+                cur.execute("SELECT * FROM routers")
+                routers = [dict(r) for r in cur.fetchall()]
+
+            if not routers:
+                embed = discord.Embed(
+                    title="📡 WiFi & Router Hub • No Routers Configured",
+                    description=(
+                        "No routers have been added to the system yet.\n\n"
+                        "Please open your Web Admin Panel (**WiFi & Router Hub**) to configure your **Tenda** or **Netis NC21** router credentials."
+                    ),
+                    color=discord.Color.gold()
+                )
+                return await status_msg.edit(content=None, embed=embed)
+
+            # Query known devices table
+            cur.execute("SELECT mac_address, custom_name, owner_name, is_known FROM known_devices")
+            known_map = {r["mac_address"]: dict(r) for r in cur.fetchall()}
+
+        embeds = []
+
+        for router in routers:
+            router_id = router["id"]
+            router_name = router["name"]
+            brand = router["brand"]
+            model = router.get("model", "Standard")
+            ip_addr = router["ip_address"]
+
+            # Decrypt password for adapter
+            router["password"] = decrypt_password(router.get("password_encrypted", ""))
+
+            adapter = get_router_adapter(router, timeout=4)
+            live_devices = []
+            scan_success = False
+            error_note = ""
+
+            if adapter:
+                try:
+                    conn_res = await asyncio.to_thread(adapter.test_connection)
+                    if conn_res.get("success") or conn_res.get("authenticated"):
+                        live_devices = await asyncio.to_thread(adapter.get_connected_devices)
+                        scan_success = True
+                    else:
+                        error_note = conn_res.get("message", "Offline")
+                except Exception as ex:
+                    error_note = str(ex)
+
+            # If live scan returned no devices or router unreachable, fall back to cached telemetry in DB
+            if not scan_success or not live_devices:
+                with sqlite3.connect(DISCORD_DB) as conn:
+                    conn.row_factory = sqlite3.Row
+                    cur = conn.cursor()
+                    cur.execute("""
+                        SELECT mac_address, ip_address, hostname, connection_type, signal_strength, status, last_seen
+                        FROM router_device_history
+                        WHERE router_id = ? AND status = 'online'
+                    """, (router_id,))
+                    cached_devices = [dict(d) for d in cur.fetchall()]
+                    if cached_devices:
+                        live_devices = cached_devices
+                        if not scan_success:
+                            error_note = "Latest cached scan telemetry (hardware offline)"
+
+            # Categorize devices
+            known_list = []
+            unknown_list = []
+
+            for dev in live_devices:
+                mac = normalize_mac(dev.get("mac") or dev.get("mac_address") or "")
+                if not mac:
+                    continue
+
+                ip = dev.get("ip") or dev.get("ip_address") or "N/A"
+                band = dev.get("connection_type") or dev.get("band") or "Wi-Fi"
+                signal = dev.get("signal") or dev.get("signal_strength") or ""
+                hostname = dev.get("hostname") or "Unknown"
+
+                if mac in known_map and known_map[mac].get("is_known"):
+                    c_name = known_map[mac]["custom_name"]
+                    owner = known_map[mac].get("owner_name")
+                    owner_text = f" ({owner})" if owner else ""
+                    known_list.append(f"🟢 **{c_name}**{owner_text}\n`{ip}` • `{mac}` • `{band}` {signal}")
+                else:
+                    unknown_list.append(f"🔴 **{hostname}**\n`{ip}` • `{mac}` • `{band}` {signal}")
+
+            total_connected = len(known_list) + len(unknown_list)
+            has_unknown = len(unknown_list) > 0
+
+            if has_unknown:
+                embed_color = discord.Color.from_rgb(255, 42, 109)  # Cyber Red Alert
+                status_header = "🚨 ALERT: ROGUE / UNKNOWN DEVICE DETECTED"
+            elif total_connected > 0:
+                embed_color = discord.Color.from_rgb(0, 255, 157)  # Cyber Emerald
+                status_header = "✅ ALL CONNECTED DEVICES AUTHORIZED"
+            else:
+                embed_color = discord.Color.gold()
+                status_header = "ℹ️ NO ACTIVE CLIENTS DETECTED"
+
+            embed = discord.Embed(
+                title=f"📡 Router Telemetry: {router_name}",
+                description=f"### {status_header}\n"
+                            f"**Brand:** `{brand}` ({model}) • **IP:** `{ip_addr}`\n"
+                            f"**Status:** {'🟢 Online' if scan_success else '🟡 Cached / Standby'}"
+                            + (f" • *{error_note}*" if error_note else ""),
+                color=embed_color,
+                timestamp=datetime.now()
+            )
+
+            embed.add_field(name="📊 Total Connected", value=f"**{total_connected} Devices**", inline=True)
+            embed.add_field(name="🛡️ Known / Approved", value=f"**{len(known_list)} Devices**", inline=True)
+            embed.add_field(name="⚠️ Unknown / Rogue", value=f"**{len(unknown_list)} Devices**", inline=True)
+
+            if unknown_list:
+                unknown_text = "\n\n".join(unknown_list[:8])
+                if len(unknown_list) > 8:
+                    unknown_text += f"\n*...and {len(unknown_list) - 8} more unknown devices*"
+                embed.add_field(name="🚨 Unknown / Suspicious Devices", value=unknown_text, inline=False)
+
+            if known_list:
+                known_text = "\n\n".join(known_list[:8])
+                if len(known_list) > 8:
+                    known_text += f"\n*...and {len(known_list) - 8} more approved devices*"
+                embed.add_field(name="✅ Authorized Known Devices", value=known_text, inline=False)
+
+            embed.set_footer(text="GMX Router Defense • Manage custom names in Web Dashboard")
+            embeds.append(embed)
+
+        if embeds:
+            await status_msg.edit(content=None, embed=embeds[0])
+            for extra_embed in embeds[1:]:
+                await ctx.send(embed=extra_embed)
+        else:
+            await status_msg.edit(content="⚠️ No router data available.")
+
+    except Exception as exc:
+        print(f"[CHECK COMMAND ERROR] {exc}", flush=True)
+        await status_msg.edit(content=f"❌ Error during router scan: `{exc}`")
+
+
 @bot.command(name="help", help="Displays all available commands")
 async def help_command(ctx):
     embed = discord.Embed(
         title="⚡ GMX High-Security & Music Bot Commands",
         description="List of all active commands and cyber defense features:",
         color=discord.Color.from_rgb(0, 255, 157)
+    )
+    embed.add_field(
+        name="📡 WiFi & Router Radar",
+        value="`!check` - Scan connected Wi-Fi devices & detect rogue MAC addresses\n`!router` - Alias for `!check`\n`!devices` - View all connected Wi-Fi clients",
+        inline=False
     )
     embed.add_field(
         name="🎵 Music & Voice",
