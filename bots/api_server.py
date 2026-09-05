@@ -2039,8 +2039,8 @@ async def seed_sample_router_data():
         if not netis_row:
             cur.execute("""
                 INSERT INTO routers (name, brand, model, ip_address, port, use_https, username, password_encrypted, monitoring_enabled, auto_scan_interval, last_status)
-                VALUES ('Netis NC21 (Office Gateway)', 'Netis', 'NC21 AC1200', '192.168.1.1', 80, 0, 'admin', ?, 1, 60, 'online')
-            """, (encrypt_password("netis2026"),))
+                VALUES ('Netis NC21 Router', 'Netis', 'NC21', '192.168.1.1', 80, 0, 'admin', ?, 1, 30, 'online')
+            """, (encrypt_password("559936099"),))
             netis_id = cur.lastrowid
         else:
             netis_id = netis_row[0]
