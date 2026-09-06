@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { createChart, ColorType, CrosshairMode } from 'lightweight-charts';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { createChart, ColorType, CrosshairMode, LineStyle } from 'lightweight-charts';
 import {
   Play,
   Pause,
   SkipForward,
+  SkipBack,
   RotateCcw,
   Scissors,
   Maximize2,
@@ -30,18 +31,29 @@ import {
   EyeOff,
   RefreshCw,
   Award,
+  MousePointer,
+  Crosshair,
+  Minus,
+  Square,
+  Type,
+  Trash2,
+  Undo2,
+  Compass,
+  Ruler,
+  HelpCircle,
+  X,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 // ─── Supported Assets & Starting Data Configuration ──────────────────────────
 const ASSETS = [
-  { id: 'EURUSD', name: 'EUR / USD', type: 'Forex', basePrice: 1.0865, pipSize: 0.0001, spread: 0.0001 },
-  { id: 'GBPUSD', name: 'GBP / USD', type: 'Forex', basePrice: 1.2740, pipSize: 0.0001, spread: 0.0001 },
-  { id: 'USDJPY', name: 'USD / JPY', type: 'Forex', basePrice: 154.20, pipSize: 0.01, spread: 0.01 },
-  { id: 'XAUUSD', name: 'XAU / USD (Gold)', type: 'Metals', basePrice: 2365.50, pipSize: 0.1, spread: 0.2 },
-  { id: 'BTCUSD', name: 'BTC / USD (Bitcoin)', type: 'Crypto', basePrice: 64800.0, pipSize: 1.0, spread: 5.0 },
-  { id: 'ETHUSD', name: 'ETH / USD (Ethereum)', type: 'Crypto', basePrice: 3450.0, pipSize: 0.1, spread: 0.5 },
-  { id: 'US30', name: 'US30 (Dow Jones)', type: 'Indices', basePrice: 39850.0, pipSize: 1.0, spread: 2.0 },
+  { id: 'EURUSD', name: 'EUR / USD', type: 'Forex', basePrice: 1.0865, pipSize: 0.0001, spread: 0.0001, decimals: 5 },
+  { id: 'GBPUSD', name: 'GBP / USD', type: 'Forex', basePrice: 1.2740, pipSize: 0.0001, spread: 0.0001, decimals: 5 },
+  { id: 'USDJPY', name: 'USD / JPY', type: 'Forex', basePrice: 154.20, pipSize: 0.01, spread: 0.01, decimals: 3 },
+  { id: 'XAUUSD', name: 'XAU / USD (Gold)', type: 'Metals', basePrice: 2365.50, pipSize: 0.1, spread: 0.2, decimals: 2 },
+  { id: 'BTCUSD', name: 'BTC / USD (Bitcoin)', type: 'Crypto', basePrice: 64800.0, pipSize: 1.0, spread: 5.0, decimals: 1 },
+  { id: 'ETHUSD', name: 'ETH / USD (Ethereum)', type: 'Crypto', basePrice: 3450.0, pipSize: 0.1, spread: 0.5, decimals: 2 },
+  { id: 'US30', name: 'US30 (Dow Jones)', type: 'Indices', basePrice: 39850.0, pipSize: 1.0, spread: 2.0, decimals: 1 },
 ];
 
 const TIMEFRAMES = [
@@ -54,31 +66,53 @@ const TIMEFRAMES = [
 ];
 
 const SPEED_OPTIONS = [
+  { label: '0.1s', value: 100 },
   { label: '0.2s', value: 200 },
   { label: '0.5s', value: 500 },
   { label: '1s', value: 1000 },
   { label: '2s', value: 2000 },
 ];
 
+const DRAW_COLORS = [
+  { id: 'emerald', hex: '#10b981', label: 'Demand / Bullish OB' },
+  { id: 'rose', hex: '#ef4444', label: 'Supply / Bearish OB' },
+  { id: 'cyan', hex: '#06b6d4', label: 'Fair Value Gap (FVG)' },
+  { id: 'purple', hex: '#a855f7', label: 'Liquidity Pool' },
+  { id: 'amber', hex: '#f59e0b', label: 'Breaker Block' },
+  { id: 'white', hex: '#e2e8f0', label: 'Neutral Zone' },
+];
+
 // ─── Realistic Candle Generator ──────────────────────────────────────────────
-function generateCandles(basePrice, pipSize, count = 280) {
+function generateCandles(basePrice, pipSize, count = 400) {
   const candles = [];
   let current = basePrice;
   const now = Math.floor(Date.now() / 1000);
   const interval = 300; // 5m intervals
-  let startTime = now - count * interval;
+  const startTime = now - count * interval;
+  const isHighValue = basePrice > 100;
+  const decimals = isHighValue ? 2 : 5;
+
+  let trend = 1;
+  let trendDuration = 0;
 
   for (let i = 0; i < count; i++) {
     const time = startTime + i * interval;
-    const volatility = pipSize * (10 + Math.sin(i / 15) * 8 + Math.random() * 12);
-    const direction = Math.random() > 0.48 ? 1 : -1;
-    const change = (Math.random() * volatility) * direction;
+
+    if (trendDuration <= 0) {
+      trend = Math.random() > 0.48 ? 1 : -1;
+      trendDuration = Math.floor(10 + Math.random() * 25);
+    }
+    trendDuration--;
+
+    const baseVol = pipSize * (8 + Math.sin(i / 12) * 6 + Math.random() * 10);
+    const bias = trend * (Math.random() * 0.6 * baseVol);
+    const noise = (Math.random() - 0.48) * baseVol * 1.4;
+    const change = bias + noise;
 
     const open = current;
-    const close = +(open + change).toFixed(basePrice > 100 ? 2 : 5);
-    const high = +(Math.max(open, close) + Math.random() * volatility * 0.7).toFixed(basePrice > 100 ? 2 : 5);
-    const low = +(Math.min(open, close) - Math.random() * volatility * 0.7).toFixed(basePrice > 100 ? 2 : 5);
-    const volume = Math.floor(100 + Math.random() * 800 + Math.abs(change / pipSize) * 20);
+    const close = +(open + change).toFixed(decimals);
+    const high = +(Math.max(open, close) + Math.random() * baseVol * 0.8).toFixed(decimals);
+    const low = +(Math.min(open, close) - Math.random() * baseVol * 0.8).toFixed(decimals);
 
     candles.push({
       time,
@@ -86,7 +120,6 @@ function generateCandles(basePrice, pipSize, count = 280) {
       high,
       low,
       close,
-      volume,
     });
 
     current = close;
@@ -94,11 +127,13 @@ function generateCandles(basePrice, pipSize, count = 280) {
   return candles;
 }
 
-// ─── Indicator Calculation Helpers ───────────────────────────────────────────
+// ─── Technical Indicator Calculations ────────────────────────────────────────
 function calculateEMA(data, period) {
+  if (!data || data.length === 0) return [];
   const k = 2 / (period + 1);
   const ema = [];
   let prevEma = data[0]?.close || 0;
+  const isHigh = (data[0]?.close || 0) > 100;
 
   for (let i = 0; i < data.length; i++) {
     const close = data[i].close;
@@ -109,14 +144,92 @@ function calculateEMA(data, period) {
     }
     ema.push({
       time: data[i].time,
-      value: +prevEma.toFixed(data[0].close > 100 ? 2 : 5),
+      value: +prevEma.toFixed(isHigh ? 2 : 5),
     });
   }
   return ema;
 }
 
+function calculateBollingerBands(data, period = 20, stdDevMult = 2) {
+  if (!data || data.length < period) return { upper: [], middle: [], lower: [] };
+  const upper = [];
+  const middle = [];
+  const lower = [];
+  const isHigh = (data[0]?.close || 0) > 100;
+  const dec = isHigh ? 2 : 5;
+
+  for (let i = period - 1; i < data.length; i++) {
+    const slice = data.slice(i - period + 1, i + 1);
+    const sum = slice.reduce((acc, c) => acc + c.close, 0);
+    const sma = sum / period;
+    const variance = slice.reduce((acc, c) => acc + Math.pow(c.close - sma, 2), 0) / period;
+    const stdDev = Math.sqrt(variance);
+    const time = data[i].time;
+
+    upper.push({ time, value: +(sma + stdDevMult * stdDev).toFixed(dec) });
+    middle.push({ time, value: +sma.toFixed(dec) });
+    lower.push({ time, value: +(sma - stdDevMult * stdDev).toFixed(dec) });
+  }
+  return { upper, middle, lower };
+}
+
+function calculateSupertrend(data, period = 10, multiplier = 3) {
+  if (!data || data.length < period + 1) return [];
+  const tr = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i === 0) {
+      tr.push(data[i].high - data[i].low);
+    } else {
+      const hl = data[i].high - data[i].low;
+      const hc = Math.abs(data[i].high - data[i - 1].close);
+      const lc = Math.abs(data[i].low - data[i - 1].close);
+      tr.push(Math.max(hl, hc, lc));
+    }
+  }
+
+  const atr = [];
+  let atrSum = tr.slice(0, period).reduce((a, b) => a + b, 0);
+  atr[period - 1] = atrSum / period;
+  for (let i = period; i < data.length; i++) {
+    atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period;
+  }
+
+  const result = [];
+  let trend = 1;
+  let prevUpper = 0;
+  let prevLower = 0;
+  const isHigh = (data[0]?.close || 0) > 100;
+  const dec = isHigh ? 2 : 5;
+
+  for (let i = period - 1; i < data.length; i++) {
+    const hl2 = (data[i].high + data[i].low) / 2;
+    const curAtr = atr[i] || 0.001;
+    let upper = hl2 + multiplier * curAtr;
+    let lower = hl2 - multiplier * curAtr;
+
+    if (i > period - 1) {
+      if (lower < prevLower && data[i - 1].close > prevLower) lower = prevLower;
+      if (upper > prevUpper && data[i - 1].close < prevUpper) upper = prevUpper;
+    }
+
+    if (trend === 1 && data[i].close < lower) trend = -1;
+    else if (trend === -1 && data[i].close > upper) trend = 1;
+
+    const value = trend === 1 ? lower : upper;
+    result.push({
+      time: data[i].time,
+      value: +value.toFixed(dec),
+      color: trend === 1 ? '#10b981' : '#ef4444',
+    });
+
+    prevUpper = upper;
+    prevLower = lower;
+  }
+  return result;
+}
+
 function calculateRSI(data, period = 14) {
-  if (data.length < period + 1) return [];
+  if (!data || data.length < period + 1) return [];
   const rsi = [];
   let gains = 0;
   let losses = 0;
@@ -151,25 +264,33 @@ function calculateRSI(data, period = 14) {
   return rsi;
 }
 
-// ─── Main FX Replay Backtest Component ────────────────────────────────────────
+// ─── Main FX Replay Backtesting Component ─────────────────────────────────────
 export function FXReplayBacktest() {
+  const containerRef = useRef(null);
+  const chartWrapperRef = useRef(null);
   const chartContainerRef = useRef(null);
   const rsiContainerRef = useRef(null);
+  const svgRef = useRef(null);
+
+  // Chart and Series Instances
   const chartInstanceRef = useRef(null);
   const rsiInstanceRef = useRef(null);
   const candleSeriesRef = useRef(null);
-  const volumeSeriesRef = useRef(null);
   const ema20SeriesRef = useRef(null);
   const ema50SeriesRef = useRef(null);
+  const ema200SeriesRef = useRef(null);
+  const bbUpperSeriesRef = useRef(null);
+  const bbMiddleSeriesRef = useRef(null);
+  const bbLowerSeriesRef = useRef(null);
+  const supertrendSeriesRef = useRef(null);
   const rsiSeriesRef = useRef(null);
 
-  // Price Lines for active trade (Entry, SL, TP)
+  // Trade price lines
   const entryLineRef = useRef(null);
   const slLineRef = useRef(null);
   const tpLineRef = useRef(null);
 
-  // Fullscreen Container
-  const backtestRootRef = useRef(null);
+  // Fullscreen state
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Asset & Timeframe
@@ -178,21 +299,37 @@ export function FXReplayBacktest() {
 
   // Replay State
   const [allCandles, setAllCandles] = useState([]);
-  const [replayIndex, setReplayIndex] = useState(120); // Current index in historical candle stream
+  const [replayIndex, setReplayIndex] = useState(160);
   const [isPlaying, setIsPlaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState(500); // 500ms
   const [isCutMode, setIsCutMode] = useState(false);
 
-  // Indicators toggle
+  // ─── Indicators Toggle State ────────────────────────────────────────────────
+  const [showIndicatorsModal, setShowIndicatorsModal] = useState(false);
   const [showEMA20, setShowEMA20] = useState(true);
   const [showEMA50, setShowEMA50] = useState(true);
-  const [showRSI, setShowRSI] = useState(true);
-  const [showVolume, setShowVolume] = useState(true);
+  const [showEMA200, setShowEMA200] = useState(false);
+  const [showBB, setShowBB] = useState(false);
+  const [showSupertrend, setShowSupertrend] = useState(false);
+  const [showRSI, setShowRSI] = useState(false);
 
-  // ─── Virtual Trading Simulator State (FX Replay Style) ──────────────────────
+  // ─── Drawing Tools State (TradingView Style) ─────────────────────────────────
+  // Tools: 'cursor', 'rectangle', 'trendline', 'horizontal', 'long_pos', 'short_pos', 'text', 'ruler'
+  const [activeTool, setActiveTool] = useState('cursor');
+  const [selectedDrawColor, setSelectedDrawColor] = useState('#10b981');
+  const [selectedZoneLabel, setSelectedZoneLabel] = useState('Order Block');
+  const [drawings, setDrawings] = useState([]);
+  const [currentDrawing, setCurrentDrawing] = useState(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hoveredDrawingId, setHoveredDrawingId] = useState(null);
+
+  // ─── Virtual Trading State ──────────────────────────────────────────────────
   const [balance, setBalance] = useState(10000.0);
   const [riskAmount, setRiskAmount] = useState(150.0);
+  const [slPips, setSlPips] = useState(15);
+  const [tpPips, setTpPips] = useState(30);
   const [activeTrade, setActiveTrade] = useState(null);
+  const [showJournalDrawer, setShowJournalDrawer] = useState(false);
   const [tradeHistory, setTradeHistory] = useState([
     {
       id: 1,
@@ -232,32 +369,53 @@ export function FXReplayBacktest() {
     },
   ]);
 
-  // Trade Inputs
-  const [slPips, setSlPips] = useState(15);
-  const [tpPips, setTpPips] = useState(30);
+  // Win Rate & Performance Stats
+  const stats = useMemo(() => {
+    const totalTrades = tradeHistory.length;
+    const wins = tradeHistory.filter((t) => t.result === 'WIN').length;
+    const losses = tradeHistory.filter((t) => t.result === 'LOSS').length;
+    const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : '0.0';
+    const totalPnl = tradeHistory.reduce((acc, t) => acc + t.pnl, 0);
+    const equity = balance + (activeTrade ? activeTrade.unrealizedPnl || 0 : 0);
+    const pnlPercent = ((totalPnl / 10000) * 100).toFixed(2);
+    return { totalTrades, wins, losses, winRate, totalPnl, equity, pnlPercent };
+  }, [tradeHistory, balance, activeTrade]);
 
-  // ─── Initialize Candles when Asset Changes ─────────────────────────────────
+  // ─── Generate Fresh Data when Asset Changes ─────────────────────────────────
   useEffect(() => {
-    const raw = generateCandles(selectedAsset.basePrice, selectedAsset.pipSize, 300);
+    const raw = generateCandles(selectedAsset.basePrice, selectedAsset.pipSize, 500);
     setAllCandles(raw);
-    setReplayIndex(120);
+    setReplayIndex(160);
     setIsPlaying(false);
     setActiveTrade(null);
   }, [selectedAsset]);
 
-  // ─── Setup Chart Instances ──────────────────────────────────────────────────
+  // ─── Initialize Main Chart & RSI Sub-Chart ──────────────────────────────────
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    // Main Candlestick Chart
+    // Destroy existing instances if any
+    if (chartInstanceRef.current) {
+      chartInstanceRef.current.remove();
+      chartInstanceRef.current = null;
+    }
+    if (rsiInstanceRef.current) {
+      rsiInstanceRef.current.remove();
+      rsiInstanceRef.current = null;
+    }
+
+    const containerWidth = chartContainerRef.current.clientWidth || 1000;
+    const chartHeight = showRSI ? 560 : 660;
+
+    // Main TradingView Candlestick Chart
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: '#090d16' },
+        background: { type: ColorType.Solid, color: '#0d1117' },
         textColor: '#94a3b8',
       },
       grid: {
-        vertLines: { color: 'rgba(30, 41, 59, 0.4)' },
-        horzLines: { color: 'rgba(30, 41, 59, 0.4)' },
+        vertLines: { color: 'rgba(30, 41, 59, 0.35)' },
+        horzLines: { color: 'rgba(30, 41, 59, 0.35)' },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
@@ -265,8 +423,8 @@ export function FXReplayBacktest() {
       rightPriceScale: {
         borderColor: 'rgba(51, 65, 85, 0.5)',
         scaleMargins: {
-          top: 0.1,
-          bottom: 0.2,
+          top: 0.08,
+          bottom: 0.12,
         },
       },
       timeScale: {
@@ -274,31 +432,20 @@ export function FXReplayBacktest() {
         timeVisible: true,
         secondsVisible: false,
       },
-      width: chartContainerRef.current.clientWidth,
-      height: 440,
+      width: containerWidth,
+      height: chartHeight,
     });
 
-    // Candlestick Series
+    // TradingView Crisp Candlestick Series
     const candleSeries = chart.addCandlestickSeries({
-      upColor: '#00ff9d',
-      downColor: '#f43f5e',
+      upColor: '#089981',
+      downColor: '#f23645',
       borderVisible: false,
-      wickUpColor: '#00ff9d',
-      wickDownColor: '#f43f5e',
+      wickUpColor: '#089981',
+      wickDownColor: '#f23645',
     });
 
-    // Volume Series
-    const volumeSeries = chart.addHistogramSeries({
-      color: '#00f0ff',
-      priceFormat: { type: 'volume' },
-      priceScaleId: '',
-      scaleMargins: {
-        top: 0.82,
-        bottom: 0,
-      },
-    });
-
-    // EMA Series
+    // Indicators Series on Main Chart
     const ema20Series = chart.addLineSeries({
       color: '#00f0ff',
       lineWidth: 1.5,
@@ -311,17 +458,54 @@ export function FXReplayBacktest() {
       title: 'EMA 50',
     });
 
+    const ema200Series = chart.addLineSeries({
+      color: '#f59e0b',
+      lineWidth: 2,
+      title: 'EMA 200',
+    });
+
+    const bbUpperSeries = chart.addLineSeries({
+      color: 'rgba(56, 189, 248, 0.8)',
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      title: 'BB Upper',
+    });
+
+    const bbMiddleSeries = chart.addLineSeries({
+      color: 'rgba(148, 163, 184, 0.6)',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dotted,
+      title: 'BB Basis',
+    });
+
+    const bbLowerSeries = chart.addLineSeries({
+      color: 'rgba(56, 189, 248, 0.8)',
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      title: 'BB Lower',
+    });
+
+    const supertrendSeries = chart.addLineSeries({
+      color: '#10b981',
+      lineWidth: 2,
+      title: 'Supertrend',
+    });
+
     chartInstanceRef.current = chart;
     candleSeriesRef.current = candleSeries;
-    volumeSeriesRef.current = volumeSeries;
     ema20SeriesRef.current = ema20Series;
     ema50SeriesRef.current = ema50Series;
+    ema200SeriesRef.current = ema200Series;
+    bbUpperSeriesRef.current = bbUpperSeries;
+    bbMiddleSeriesRef.current = bbMiddleSeries;
+    bbLowerSeriesRef.current = bbLowerSeries;
+    supertrendSeriesRef.current = supertrendSeries;
 
-    // RSI Sub-chart
-    if (rsiContainerRef.current) {
+    // RSI Sub-chart if enabled
+    if (showRSI && rsiContainerRef.current) {
       const rsiChart = createChart(rsiContainerRef.current, {
         layout: {
-          background: { type: ColorType.Solid, color: '#060911' },
+          background: { type: ColorType.Solid, color: '#090d16' },
           textColor: '#64748b',
         },
         grid: {
@@ -329,13 +513,13 @@ export function FXReplayBacktest() {
           horzLines: { color: 'rgba(30, 41, 59, 0.2)' },
         },
         rightPriceScale: {
-          borderColor: 'rgba(51, 65, 85, 0.5)',
+          borderColor: 'rgba(51, 65, 85, 0.4)',
         },
         timeScale: {
           visible: false,
         },
-        width: rsiContainerRef.current.clientWidth,
-        height: 100,
+        width: containerWidth,
+        height: 110,
       });
 
       const rsiSeries = rsiChart.addLineSeries({
@@ -344,55 +528,47 @@ export function FXReplayBacktest() {
         title: 'RSI 14',
       });
 
-      // 70 / 30 reference lines
-      rsiSeries.createPriceLine({ price: 70, color: 'rgba(244, 63, 94, 0.5)', lineWidth: 1, lineStyle: 2, title: 'OB 70' });
-      rsiSeries.createPriceLine({ price: 30, color: 'rgba(0, 255, 157, 0.5)', lineWidth: 1, lineStyle: 2, title: 'OS 30' });
+      rsiSeries.createPriceLine({ price: 70, color: 'rgba(244, 63, 94, 0.6)', lineWidth: 1, lineStyle: 2, title: 'OB 70' });
+      rsiSeries.createPriceLine({ price: 30, color: 'rgba(0, 255, 157, 0.6)', lineWidth: 1, lineStyle: 2, title: 'OS 30' });
 
       rsiInstanceRef.current = rsiChart;
       rsiSeriesRef.current = rsiSeries;
     }
 
-    // Resize Handler
+    // Dynamic Window Resize Handler
     const handleResize = () => {
       if (chartContainerRef.current && chartInstanceRef.current) {
-        chartInstanceRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+        chartInstanceRef.current.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+          height: showRSI ? 560 : (isFullscreen ? window.innerHeight - 170 : 660),
+        });
       }
       if (rsiContainerRef.current && rsiInstanceRef.current) {
         rsiInstanceRef.current.applyOptions({ width: rsiContainerRef.current.clientWidth });
       }
     };
+
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      chart.remove();
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.remove();
+        chartInstanceRef.current = null;
+      }
       if (rsiInstanceRef.current) {
         rsiInstanceRef.current.remove();
+        rsiInstanceRef.current = null;
       }
     };
-  }, []);
+  }, [showRSI, isFullscreen]);
 
-  // ─── Update Visible Slices Based on replayIndex ─────────────────────────────
+  // ─── Update Chart Data whenever replayIndex Changes ─────────────────────────
   useEffect(() => {
     if (!allCandles.length || !candleSeriesRef.current) return;
 
     const visibleCandles = allCandles.slice(0, replayIndex + 1);
     candleSeriesRef.current.setData(visibleCandles);
-
-    // Volume
-    if (volumeSeriesRef.current) {
-      if (showVolume) {
-        volumeSeriesRef.current.setData(
-          visibleCandles.map((c) => ({
-            time: c.time,
-            value: c.volume,
-            color: c.close >= c.open ? 'rgba(0, 255, 157, 0.25)' : 'rgba(244, 63, 94, 0.25)',
-          }))
-        );
-      } else {
-        volumeSeriesRef.current.setData([]);
-      }
-    }
 
     // EMA 20
     if (ema20SeriesRef.current) {
@@ -412,36 +588,59 @@ export function FXReplayBacktest() {
       }
     }
 
-    // RSI
-    if (rsiSeriesRef.current && showRSI && visibleCandles.length > 15) {
-      rsiSeriesRef.current.setData(calculateRSI(visibleCandles, 14));
-    }
-
-    // ─── Check Active Trade Hits (TP / SL evaluation) ─────────────────────────
-    if (activeTrade && visibleCandles.length > 0) {
-      const currentCandle = visibleCandles[visibleCandles.length - 1];
-
-      if (activeTrade.type === 'BUY') {
-        if (currentCandle.high >= activeTrade.tp) {
-          handleTradeExit('WIN', activeTrade.tp, activeTrade.reward);
-        } else if (currentCandle.low <= activeTrade.sl) {
-          handleTradeExit('LOSS', activeTrade.sl, -activeTrade.risk);
-        }
-      } else if (activeTrade.type === 'SELL') {
-        if (currentCandle.low <= activeTrade.tp) {
-          handleTradeExit('WIN', activeTrade.tp, activeTrade.reward);
-        } else if (currentCandle.high >= activeTrade.sl) {
-          handleTradeExit('LOSS', activeTrade.sl, -activeTrade.risk);
-        }
+    // EMA 200
+    if (ema200SeriesRef.current) {
+      if (showEMA200 && visibleCandles.length > 25) {
+        ema200SeriesRef.current.setData(calculateEMA(visibleCandles, 200));
+      } else {
+        ema200SeriesRef.current.setData([]);
       }
     }
-  }, [replayIndex, allCandles, showEMA20, showEMA50, showRSI, showVolume, activeTrade]);
 
-  // ─── Auto Playback Loop ────────────────────────────────────────────────────
+    // Bollinger Bands
+    if (bbUpperSeriesRef.current && bbMiddleSeriesRef.current && bbLowerSeriesRef.current) {
+      if (showBB && visibleCandles.length > 20) {
+        const { upper, middle, lower } = calculateBollingerBands(visibleCandles, 20, 2);
+        bbUpperSeriesRef.current.setData(upper);
+        bbMiddleSeriesRef.current.setData(middle);
+        bbLowerSeriesRef.current.setData(lower);
+      } else {
+        bbUpperSeriesRef.current.setData([]);
+        bbMiddleSeriesRef.current.setData([]);
+        bbLowerSeriesRef.current.setData([]);
+      }
+    }
+
+    // Supertrend
+    if (supertrendSeriesRef.current) {
+      if (showSupertrend && visibleCandles.length > 12) {
+        supertrendSeriesRef.current.setData(calculateSupertrend(visibleCandles, 10, 3));
+      } else {
+        supertrendSeriesRef.current.setData([]);
+      }
+    }
+
+    // RSI Sub-chart
+    if (rsiSeriesRef.current && showRSI) {
+      if (visibleCandles.length > 15) {
+        rsiSeriesRef.current.setData(calculateRSI(visibleCandles, 14));
+      } else {
+        rsiSeriesRef.current.setData([]);
+      }
+    }
+
+    // Live Check for Active Trade Hits
+    if (activeTrade) {
+      const currentCandle = visibleCandles[visibleCandles.length - 1];
+      checkTradeStatus(currentCandle);
+    }
+  }, [replayIndex, allCandles, showEMA20, showEMA50, showEMA200, showBB, showSupertrend, showRSI]);
+
+  // ─── Play / Replay Automation Timer ─────────────────────────────────────────
   useEffect(() => {
-    let timer = null;
+    let intervalId = null;
     if (isPlaying) {
-      timer = setInterval(() => {
+      intervalId = setInterval(() => {
         setReplayIndex((prev) => {
           if (prev >= allCandles.length - 1) {
             setIsPlaying(false);
@@ -451,44 +650,101 @@ export function FXReplayBacktest() {
         });
       }, replaySpeed);
     }
-    return () => clearInterval(timer);
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [isPlaying, replaySpeed, allCandles.length]);
 
-  // ─── Visual Price Lines for Trade ──────────────────────────────────────────
-  const drawTradeLines = (trade) => {
-    if (!candleSeriesRef.current) return;
-    clearTradeLines();
-
-    if (!trade) return;
-
-    entryLineRef.current = candleSeriesRef.current.createPriceLine({
-      price: trade.entryPrice,
-      color: '#00f0ff',
-      lineWidth: 1.5,
-      lineStyle: 1,
-      axisLabelVisible: true,
-      title: `ENTRY ${trade.type} @ ${trade.entryPrice}`,
-    });
-
-    tpLineRef.current = candleSeriesRef.current.createPriceLine({
-      price: trade.tp,
-      color: '#00ff9d',
-      lineWidth: 1.5,
-      lineStyle: 0,
-      axisLabelVisible: true,
-      title: `TAKE PROFIT @ ${trade.tp} (+$${trade.reward.toFixed(1)})`,
-    });
-
-    slLineRef.current = candleSeriesRef.current.createPriceLine({
-      price: trade.sl,
-      color: '#f43f5e',
-      lineWidth: 1.5,
-      lineStyle: 0,
-      axisLabelVisible: true,
-      title: `STOP LOSS @ ${trade.sl} (-$${trade.risk.toFixed(1)})`,
-    });
+  // ─── Step Controls ──────────────────────────────────────────────────────────
+  const handleStepForward = () => {
+    if (replayIndex < allCandles.length - 1) {
+      setReplayIndex((prev) => prev + 1);
+    }
   };
 
+  const handleStepBack = () => {
+    if (replayIndex > 10) {
+      setReplayIndex((prev) => prev - 1);
+    }
+  };
+
+  const handleResetReplay = () => {
+    setIsPlaying(false);
+    setReplayIndex(120);
+  };
+
+  // ─── Trade Verification (Check TP/SL on candle update) ───────────────────────
+  const checkTradeStatus = (candle) => {
+    if (!activeTrade || !candle) return;
+
+    let isWin = false;
+    let isLoss = false;
+    let exitPrice = 0;
+
+    if (activeTrade.type === 'BUY') {
+      if (candle.high >= activeTrade.tp) {
+        isWin = true;
+        exitPrice = activeTrade.tp;
+      } else if (candle.low <= activeTrade.sl) {
+        isLoss = true;
+        exitPrice = activeTrade.sl;
+      }
+    } else {
+      // SELL
+      if (candle.low <= activeTrade.tp) {
+        isWin = true;
+        exitPrice = activeTrade.tp;
+      } else if (candle.high >= activeTrade.sl) {
+        isLoss = true;
+        exitPrice = activeTrade.sl;
+      }
+    }
+
+    if (isWin || isLoss) {
+      const finalPnl = isWin
+        ? +(riskAmount * (tpPips / slPips)).toFixed(2)
+        : -riskAmount;
+      const pnlPercent = +((finalPnl / balance) * 100).toFixed(2);
+
+      const closedTrade = {
+        id: Date.now(),
+        asset: selectedAsset.id,
+        type: activeTrade.type,
+        entryPrice: activeTrade.entry,
+        exitPrice,
+        result: isWin ? 'WIN' : 'LOSS',
+        pnl: finalPnl,
+        pnlPercent,
+        rr: `1:${(tpPips / slPips).toFixed(1)}`,
+        time: new Date().toLocaleTimeString(),
+      };
+
+      setBalance((b) => +(b + finalPnl).toFixed(2));
+      setTradeHistory((hist) => [closedTrade, ...hist]);
+      setActiveTrade(null);
+      clearTradeLines();
+
+      if (isWin) {
+        confetti({
+          particleCount: 70,
+          spread: 60,
+          origin: { y: 0.6 },
+          colors: ['#00ff9d', '#38bdf8', '#a855f7'],
+        });
+      }
+    } else {
+      // Update unrealized PnL
+      const diff = candle.close - activeTrade.entry;
+      const pips = diff / selectedAsset.pipSize;
+      const unrealized =
+        activeTrade.type === 'BUY'
+          ? (pips / slPips) * riskAmount
+          : -(pips / slPips) * riskAmount;
+      setActiveTrade((prev) => (prev ? { ...prev, unrealizedPnl: +unrealized.toFixed(2) } : null));
+    }
+  };
+
+  // ─── Trade Lines Cleanup ───────────────────────────────────────────────────
   const clearTradeLines = () => {
     if (!candleSeriesRef.current) return;
     if (entryLineRef.current) {
@@ -505,172 +761,426 @@ export function FXReplayBacktest() {
     }
   };
 
-  // ─── Trade Execution Logic ─────────────────────────────────────────────────
-  const currentCandle = allCandles[replayIndex] || {};
-  const currentPrice = currentCandle.close || selectedAsset.basePrice;
+  // ─── Execute Buy / Sell Trade ───────────────────────────────────────────────
+  const handleExecuteTrade = (type) => {
+    if (!allCandles.length || !candleSeriesRef.current) return;
 
-  const handleOpenTrade = (type) => {
-    if (activeTrade) return;
+    clearTradeLines();
+    const currentCandle = allCandles[replayIndex];
+    const entry = currentCandle.close;
+    const pip = selectedAsset.pipSize;
 
-    const entryPrice = currentPrice;
-    let sl = 0;
-    let tp = 0;
-    const pipVal = selectedAsset.pipSize;
+    const sl = type === 'BUY' ? +(entry - slPips * pip).toFixed(selectedAsset.decimals) : +(entry + slPips * pip).toFixed(selectedAsset.decimals);
+    const tp = type === 'BUY' ? +(entry + tpPips * pip).toFixed(selectedAsset.decimals) : +(entry - tpPips * pip).toFixed(selectedAsset.decimals);
 
-    if (type === 'BUY') {
-      sl = +(entryPrice - slPips * pipVal).toFixed(selectedAsset.basePrice > 100 ? 2 : 5);
-      tp = +(entryPrice + tpPips * pipVal).toFixed(selectedAsset.basePrice > 100 ? 2 : 5);
-    } else {
-      sl = +(entryPrice + slPips * pipVal).toFixed(selectedAsset.basePrice > 100 ? 2 : 5);
-      tp = +(entryPrice - tpPips * pipVal).toFixed(selectedAsset.basePrice > 100 ? 2 : 5);
-    }
+    // Render Price Lines
+    entryLineRef.current = candleSeriesRef.current.createPriceLine({
+      price: entry,
+      color: '#38bdf8',
+      lineWidth: 2,
+      lineStyle: 0,
+      title: `ENTRY (${type})`,
+    });
 
-    const rrRatio = +(tpPips / slPips).toFixed(2);
-    const rewardAmount = +(riskAmount * rrRatio).toFixed(2);
+    slLineRef.current = candleSeriesRef.current.createPriceLine({
+      price: sl,
+      color: '#f43f5e',
+      lineWidth: 2,
+      lineStyle: 2,
+      title: `STOP LOSS (${slPips} pips)`,
+    });
 
-    const newTrade = {
-      id: Date.now(),
-      asset: selectedAsset.id,
+    tpLineRef.current = candleSeriesRef.current.createPriceLine({
+      price: tp,
+      color: '#00ff9d',
+      lineWidth: 2,
+      lineStyle: 2,
+      title: `TAKE PROFIT (${tpPips} pips)`,
+    });
+
+    setActiveTrade({
       type,
-      entryPrice,
+      entry,
       sl,
       tp,
-      risk: riskAmount,
-      reward: rewardAmount,
-      rr: `1:${rrRatio}`,
-    };
-
-    setActiveTrade(newTrade);
-    drawTradeLines(newTrade);
+      unrealizedPnl: 0,
+      time: currentCandle.time,
+    });
   };
 
-  const handleTradeExit = (result, exitPrice, pnlAmount) => {
-    if (!activeTrade) return;
-
-    if (result === 'WIN') {
-      confetti({
-        particleCount: 50,
-        spread: 60,
-        origin: { y: 0.6 },
-        colors: ['#00ff9d', '#00f0ff', '#a855f7'],
-      });
-    }
-
-    const newBalance = +(balance + pnlAmount).toFixed(2);
-    setBalance(newBalance);
+  const handleCloseTradeManual = () => {
+    if (!activeTrade || !allCandles.length) return;
+    const currentCandle = allCandles[replayIndex];
+    const pnl = activeTrade.unrealizedPnl || 0;
+    const pnlPercent = +((pnl / balance) * 100).toFixed(2);
 
     const closed = {
-      id: activeTrade.id,
-      asset: activeTrade.asset,
+      id: Date.now(),
+      asset: selectedAsset.id,
       type: activeTrade.type,
-      entryPrice: activeTrade.entryPrice,
-      exitPrice,
-      result,
-      pnl: pnlAmount,
-      pnlPercent: +((pnlAmount / balance) * 100).toFixed(2),
-      rr: activeTrade.rr,
+      entryPrice: activeTrade.entry,
+      exitPrice: currentCandle.close,
+      result: pnl >= 0 ? 'WIN' : 'LOSS',
+      pnl,
+      pnlPercent,
+      rr: 'Manual',
       time: new Date().toLocaleTimeString(),
     };
 
+    setBalance((b) => +(b + pnl).toFixed(2));
     setTradeHistory((prev) => [closed, ...prev]);
     setActiveTrade(null);
     clearTradeLines();
   };
 
-  const handleBreakEven = () => {
-    if (!activeTrade) return;
-    const updated = {
-      ...activeTrade,
-      sl: activeTrade.entryPrice,
+  // ─── SVG Interactive Drawing Mouse Handlers ─────────────────────────────────
+  const getSvgCoordinates = (e) => {
+    if (!svgRef.current) return { x: 0, y: 0 };
+    const rect = svgRef.current.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
     };
-    setActiveTrade(updated);
-    drawTradeLines(updated);
   };
 
-  const handleManualClose = () => {
-    if (!activeTrade) return;
-    const exitPrice = currentPrice;
-    let pnl = 0;
-    if (activeTrade.type === 'BUY') {
-      const diff = exitPrice - activeTrade.entryPrice;
-      pnl = +(diff / (selectedAsset.pipSize * slPips) * activeTrade.risk).toFixed(2);
-    } else {
-      const diff = activeTrade.entryPrice - exitPrice;
-      pnl = +(diff / (selectedAsset.pipSize * slPips) * activeTrade.risk).toFixed(2);
+  const handleMouseDown = (e) => {
+    if (activeTool === 'cursor') return;
+    const { x, y } = getSvgCoordinates(e);
+
+    setIsDrawing(true);
+    const newId = 'draw_' + Date.now();
+
+    if (activeTool === 'rectangle') {
+      setCurrentDrawing({
+        id: newId,
+        type: 'rectangle',
+        startX: x,
+        startY: y,
+        currentX: x,
+        currentY: y,
+        color: selectedDrawColor,
+        label: selectedZoneLabel,
+      });
+    } else if (activeTool === 'trendline') {
+      setCurrentDrawing({
+        id: newId,
+        type: 'trendline',
+        startX: x,
+        startY: y,
+        currentX: x,
+        currentY: y,
+        color: selectedDrawColor,
+      });
+    } else if (activeTool === 'horizontal') {
+      // Instant horizontal line
+      const hLine = {
+        id: newId,
+        type: 'horizontal',
+        y,
+        color: selectedDrawColor,
+        label: 'Key Level',
+      };
+      setDrawings((prev) => [...prev, hLine]);
+      setIsDrawing(false);
+      setActiveTool('cursor');
+    } else if (activeTool === 'long_pos') {
+      setCurrentDrawing({
+        id: newId,
+        type: 'long_pos',
+        startX: x,
+        startY: y,
+        currentX: x + 160,
+        currentY: y,
+        color: '#10b981',
+      });
+    } else if (activeTool === 'short_pos') {
+      setCurrentDrawing({
+        id: newId,
+        type: 'short_pos',
+        startX: x,
+        startY: y,
+        currentX: x + 160,
+        currentY: y,
+        color: '#ef4444',
+      });
+    } else if (activeTool === 'text') {
+      const textVal = prompt('Enter Chart Annotation / Note:', 'Key Liquidity Zone');
+      if (textVal) {
+        setDrawings((prev) => [
+          ...prev,
+          {
+            id: newId,
+            type: 'text',
+            x,
+            y,
+            text: textVal,
+            color: selectedDrawColor,
+          },
+        ]);
+      }
+      setIsDrawing(false);
+      setActiveTool('cursor');
     }
-    const result = pnl >= 0 ? 'WIN' : 'LOSS';
-    handleTradeExit(result, exitPrice, pnl);
   };
 
-  // ─── Step Forward / Step Back Handlers ─────────────────────────────────────
-  const handleStepForward = () => {
-    setIsPlaying(false);
-    setReplayIndex((prev) => Math.min(allCandles.length - 1, prev + 1));
+  const handleMouseMove = (e) => {
+    if (!isDrawing || !currentDrawing) return;
+    const { x, y } = getSvgCoordinates(e);
+    setCurrentDrawing((prev) => (prev ? { ...prev, currentX: x, currentY: y } : null));
   };
 
-  const handleStepBack = () => {
-    setIsPlaying(false);
-    setReplayIndex((prev) => Math.max(10, prev - 1));
-  };
+  const handleMouseUp = () => {
+    if (!isDrawing || !currentDrawing) return;
 
-  const handleResetReplay = () => {
-    setIsPlaying(false);
-    setReplayIndex(80);
-    setActiveTrade(null);
-    clearTradeLines();
-  };
-
-  const handleCutToPoint = (fraction) => {
-    const targetIdx = Math.floor(allCandles.length * fraction);
-    setReplayIndex(Math.max(20, targetIdx));
-    setIsCutMode(false);
-  };
-
-  // ─── Fullscreen Toggle ─────────────────────────────────────────────────────
-  const toggleFullscreen = () => {
-    if (!backtestRootRef.current) return;
-
-    if (!document.fullscreenElement) {
-      backtestRootRef.current.requestFullscreen?.().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen?.().catch(() => {});
-      setIsFullscreen(false);
+    if (currentDrawing.type === 'rectangle') {
+      const w = Math.abs(currentDrawing.currentX - currentDrawing.startX);
+      const h = Math.abs(currentDrawing.currentY - currentDrawing.startY);
+      if (w > 8 && h > 8) {
+        setDrawings((prev) => [...prev, currentDrawing]);
+      }
+    } else if (currentDrawing.type === 'trendline') {
+      const dist = Math.hypot(
+        currentDrawing.currentX - currentDrawing.startX,
+        currentDrawing.currentY - currentDrawing.startY
+      );
+      if (dist > 10) {
+        setDrawings((prev) => [...prev, currentDrawing]);
+      }
+    } else if (currentDrawing.type === 'long_pos' || currentDrawing.type === 'short_pos') {
+      setDrawings((prev) => [...prev, currentDrawing]);
     }
+
+    setIsDrawing(false);
+    setCurrentDrawing(null);
+    setActiveTool('cursor');
   };
 
-  // ─── Performance HUD Calculations ──────────────────────────────────────────
-  const stats = useMemo(() => {
-    const total = tradeHistory.length;
-    const wins = tradeHistory.filter((t) => t.result === 'WIN').length;
-    const losses = tradeHistory.filter((t) => t.result === 'LOSS').length;
-    const winRate = total > 0 ? +((wins / total) * 100).toFixed(1) : 0;
-    const netPnL = +tradeHistory.reduce((acc, t) => acc + t.pnl, 0).toFixed(2);
-    const netPercent = +((netPnL / 10000.0) * 100).toFixed(1);
+  const handleUndoDrawing = () => {
+    setDrawings((prev) => prev.slice(0, -1));
+  };
 
-    return { total, wins, losses, winRate, netPnL, netPercent };
-  }, [tradeHistory]);
+  const handleClearDrawings = () => {
+    setDrawings([]);
+    setCurrentDrawing(null);
+  };
+
+  const handleDeleteDrawing = (id, e) => {
+    e.stopPropagation();
+    setDrawings((prev) => prev.filter((d) => d.id !== id));
+  };
+
+  // ─── Render SVG Drawings ────────────────────────────────────────────────────
+  const renderDrawing = (d, isPreview = false) => {
+    if (d.type === 'rectangle') {
+      const x = Math.min(d.startX, d.currentX);
+      const y = Math.min(d.startY, d.currentY);
+      const width = Math.abs(d.currentX - d.startX);
+      const height = Math.abs(d.currentY - d.startY);
+
+      return (
+        <g
+          key={d.id}
+          className="group cursor-pointer"
+          onMouseEnter={() => setHoveredDrawingId(d.id)}
+          onMouseLeave={() => setHoveredDrawingId(null)}
+        >
+          {/* Fill box */}
+          <rect
+            x={x}
+            y={y}
+            width={width}
+            height={height}
+            fill={d.color}
+            fillOpacity={isPreview ? 0.35 : 0.22}
+            stroke={d.color}
+            strokeWidth={1.5}
+            strokeDasharray={isPreview ? '4 2' : 'none'}
+            rx={4}
+          />
+          {/* Label tag */}
+          <rect
+            x={x + 4}
+            y={y + 4}
+            width={Math.min(width - 8, d.label.length * 7 + 16)}
+            height={18}
+            fill="rgba(15, 23, 42, 0.85)"
+            rx={3}
+          />
+          <text
+            x={x + 10}
+            y={y + 16}
+            fill={d.color}
+            fontSize="10"
+            fontFamily="monospace"
+            fontWeight="bold"
+          >
+            {d.label}
+          </text>
+          {/* Delete Icon on Hover */}
+          {!isPreview && hoveredDrawingId === d.id && (
+            <g
+              transform={`translate(${x + width - 18}, ${y + 4})`}
+              onClick={(e) => handleDeleteDrawing(d.id, e)}
+              className="cursor-pointer"
+            >
+              <rect width={14} height={14} rx={3} fill="#f43f5e" />
+              <text x={4} y={11} fill="#fff" fontSize="10" fontWeight="bold">×</text>
+            </g>
+          )}
+        </g>
+      );
+    }
+
+    if (d.type === 'trendline') {
+      return (
+        <g
+          key={d.id}
+          className="group"
+          onMouseEnter={() => setHoveredDrawingId(d.id)}
+          onMouseLeave={() => setHoveredDrawingId(null)}
+        >
+          <line
+            x1={d.startX}
+            y1={d.startY}
+            x2={d.currentX}
+            y2={d.currentY}
+            stroke={d.color}
+            strokeWidth={2}
+            strokeDasharray={isPreview ? '4 2' : 'none'}
+          />
+          <circle cx={d.startX} cy={d.startY} r={4} fill={d.color} />
+          <circle cx={d.currentX} cy={d.currentY} r={4} fill={d.color} />
+          {!isPreview && hoveredDrawingId === d.id && (
+            <g
+              transform={`translate(${d.currentX + 8}, ${d.currentY - 8})`}
+              onClick={(e) => handleDeleteDrawing(d.id, e)}
+              className="cursor-pointer"
+            >
+              <rect width={14} height={14} rx={3} fill="#f43f5e" />
+              <text x={4} y={11} fill="#fff" fontSize="10" fontWeight="bold">×</text>
+            </g>
+          )}
+        </g>
+      );
+    }
+
+    if (d.type === 'horizontal') {
+      return (
+        <g
+          key={d.id}
+          className="group"
+          onMouseEnter={() => setHoveredDrawingId(d.id)}
+          onMouseLeave={() => setHoveredDrawingId(null)}
+        >
+          <line
+            x1={0}
+            y1={d.y}
+            x2="100%"
+            y2={d.y}
+            stroke={d.color}
+            strokeWidth={1.5}
+            strokeDasharray="5 3"
+          />
+          <rect x={10} y={d.y - 10} width={75} height={18} fill="rgba(15, 23, 42, 0.9)" rx={3} />
+          <text x={16} y={d.y + 3} fill={d.color} fontSize="10" fontFamily="monospace" fontWeight="bold">
+            {d.label}
+          </text>
+          {!isPreview && hoveredDrawingId === d.id && (
+            <g
+              transform={`translate(92, ${d.y - 8})`}
+              onClick={(e) => handleDeleteDrawing(d.id, e)}
+              className="cursor-pointer"
+            >
+              <rect width={14} height={14} rx={3} fill="#f43f5e" />
+              <text x={4} y={11} fill="#fff" fontSize="10" fontWeight="bold">×</text>
+            </g>
+          )}
+        </g>
+      );
+    }
+
+    if (d.type === 'long_pos') {
+      const boxW = 160;
+      const targetH = 50;
+      const stopH = 30;
+      return (
+        <g key={d.id} transform={`translate(${d.startX}, ${d.startY})`}>
+          {/* Target Zone */}
+          <rect y={-targetH} width={boxW} height={targetH} fill="rgba(16, 185, 129, 0.25)" stroke="#10b981" strokeWidth={1} />
+          <text x={8} y={-targetH + 16} fill="#10b981" fontSize="11" fontWeight="bold" fontFamily="monospace">
+            Target +30 pips (R:R 2.0)
+          </text>
+          {/* Entry Line */}
+          <line x1={0} y1={0} x2={boxW} y2={0} stroke="#38bdf8" strokeWidth={2} />
+          {/* Stop Zone */}
+          <rect y={0} width={boxW} height={stopH} fill="rgba(239, 68, 68, 0.25)" stroke="#ef4444" strokeWidth={1} />
+          <text x={8} y={20} fill="#ef4444" fontSize="11" fontWeight="bold" fontFamily="monospace">
+            Stop -15 pips
+          </text>
+        </g>
+      );
+    }
+
+    if (d.type === 'short_pos') {
+      const boxW = 160;
+      const targetH = 50;
+      const stopH = 30;
+      return (
+        <g key={d.id} transform={`translate(${d.startX}, ${d.startY})`}>
+          {/* Stop Zone */}
+          <rect y={-stopH} width={boxW} height={stopH} fill="rgba(239, 68, 68, 0.25)" stroke="#ef4444" strokeWidth={1} />
+          <text x={8} y={-stopH + 16} fill="#ef4444" fontSize="11" fontWeight="bold" fontFamily="monospace">
+            Stop -15 pips
+          </text>
+          {/* Entry Line */}
+          <line x1={0} y1={0} x2={boxW} y2={0} stroke="#38bdf8" strokeWidth={2} />
+          {/* Target Zone */}
+          <rect y={0} width={boxW} height={targetH} fill="rgba(16, 185, 129, 0.25)" stroke="#10b981" strokeWidth={1} />
+          <text x={8} y={20} fill="#10b981" fontSize="11" fontWeight="bold" fontFamily="monospace">
+            Target +30 pips (R:R 2.0)
+          </text>
+        </g>
+      );
+    }
+
+    if (d.type === 'text') {
+      return (
+        <g key={d.id} transform={`translate(${d.x}, ${d.y})`}>
+          <rect x={-4} y={-14} width={d.text.length * 8 + 14} height={20} fill="rgba(15, 23, 42, 0.85)" rx={4} stroke={d.color} strokeWidth={1} />
+          <text x={4} y={0} fill={d.color} fontSize="11" fontWeight="bold" fontFamily="sans-serif">
+            {d.text}
+          </text>
+        </g>
+      );
+    }
+
+    return null;
+  };
+
+  // Current live candle price
+  const currentCandle = allCandles[replayIndex] || { close: selectedAsset.basePrice, open: selectedAsset.basePrice };
+  const priceChange = (currentCandle.close - currentCandle.open);
+  const isUp = priceChange >= 0;
 
   return (
     <div
-      ref={backtestRootRef}
-      className={`w-full rounded-3xl bg-[#090d16]/95 border border-cyan-500/40 backdrop-blur-2xl shadow-2xl overflow-hidden transition-all duration-300 font-mono my-6 ${
-        isFullscreen ? 'fixed inset-0 z-50 rounded-none p-4 bg-[#050811] overflow-y-auto' : 'p-4 sm:p-6'
+      ref={containerRef}
+      className={`transition-all duration-300 flex flex-col bg-[#080d1a] border border-cyan-500/30 rounded-2xl overflow-hidden shadow-2xl ${
+        isFullscreen ? 'fixed inset-0 z-[100] w-screen h-screen rounded-none' : 'w-full my-4 min-h-[820px]'
       }`}
     >
-      {/* ─── 1. TOP BAR: FX REPLAY SIGNATURE TOOLBAR ────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800/80">
-        {/* Left: Asset Picker & Timeframe Selector */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Asset Dropdown */}
+      {/* ─── Top TradingView & FX Replay Action Bar ─────────────────────────────── */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 py-2.5 bg-[#0e1424] border-b border-slate-800/90 select-none">
+        {/* Left: Asset Picker & Live Price */}
+        <div className="flex items-center gap-2 sm:gap-3">
           <div className="relative">
             <select
               value={selectedAsset.id}
               onChange={(e) => {
-                const a = ASSETS.find((x) => x.id === e.target.value);
-                if (a) setSelectedAsset(a);
+                const found = ASSETS.find((a) => a.id === e.target.value);
+                if (found) setSelectedAsset(found);
               }}
-              className="px-3.5 py-2 rounded-xl bg-slate-900/90 border border-cyan-500/40 text-cyan-300 font-heading font-black text-xs sm:text-sm focus:outline-none focus:border-cyan-400 cursor-pointer shadow-[0_0_15px_rgba(0,240,255,0.15)]"
+              className="px-3 py-1.5 rounded-lg bg-slate-900 border border-cyan-500/40 text-cyan-300 font-mono text-xs sm:text-sm font-bold appearance-none pr-8 cursor-pointer hover:border-cyan-400 focus:outline-none"
             >
               {ASSETS.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -678,494 +1188,565 @@ export function FXReplayBacktest() {
                 </option>
               ))}
             </select>
+            <ChevronDown className="w-4 h-4 text-cyan-400 absolute right-2 top-2.5 pointer-events-none" />
+          </div>
+
+          {/* Live Price Tag */}
+          <div className="flex items-center gap-1.5 font-mono text-xs sm:text-sm font-black px-2.5 py-1 rounded-md bg-slate-900/90 border border-slate-800">
+            <span className={isUp ? 'text-emerald-400' : 'text-rose-400'}>
+              {currentCandle.close.toFixed(selectedAsset.decimals)}
+            </span>
+            {isUp ? (
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+            ) : (
+              <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
+            )}
           </div>
 
           {/* Timeframe Buttons */}
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+          <div className="hidden md:flex items-center gap-1 bg-slate-950/80 p-1 rounded-lg border border-slate-800">
             {TIMEFRAMES.map((tf) => (
               <button
                 key={tf.id}
                 onClick={() => setSelectedTimeframe(tf)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold transition-all ${
                   selectedTimeframe.id === tf.id
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 shadow-[0_0_10px_rgba(0,240,255,0.2)]'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.4)]'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
                 }`}
               >
                 {tf.label}
               </button>
             ))}
           </div>
-
-          {/* Indicator Toggles */}
-          <div className="hidden lg:flex items-center gap-1.5 ml-2">
-            <button
-              onClick={() => setShowEMA20(!showEMA20)}
-              className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${
-                showEMA20
-                  ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300'
-                  : 'bg-slate-900 border-slate-800 text-slate-500'
-              }`}
-            >
-              EMA 20
-            </button>
-            <button
-              onClick={() => setShowEMA50(!showEMA50)}
-              className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${
-                showEMA50
-                  ? 'bg-purple-500/20 border-purple-500/50 text-purple-300'
-                  : 'bg-slate-900 border-slate-800 text-slate-500'
-              }`}
-            >
-              EMA 50
-            </button>
-            <button
-              onClick={() => setShowRSI(!showRSI)}
-              className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${
-                showRSI
-                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
-                  : 'bg-slate-900 border-slate-800 text-slate-500'
-              }`}
-            >
-              RSI 14
-            </button>
-          </div>
         </div>
 
-        {/* Center: REPLAY BAR (PAUSE, PLAY, STEP FORWARD, CUT) */}
-        <div className="flex items-center gap-1.5 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 p-1.5 rounded-2xl border border-emerald-500/40 shadow-[0_0_20px_rgba(0,255,157,0.15)]">
-          {/* Scissors Cut Button */}
+        {/* Center: Prominent Replay Toolbar (Play, Pause, Step Forward, Cut) */}
+        <div className="flex items-center gap-1 sm:gap-2 bg-slate-950/90 px-2 sm:px-3 py-1.5 rounded-xl border border-emerald-500/30 shadow-[0_0_15px_rgba(0,255,157,0.1)]">
+          {/* Jump / Cut Tool */}
           <button
-            onClick={() => setIsCutMode(!isCutMode)}
-            title="Cut History (Jump to Bar)"
-            className={`p-2 rounded-xl transition-all ${
+            onClick={() => {
+              setIsCutMode(!isCutMode);
+              if (!isCutMode) {
+                // Cut back 50 bars
+                setReplayIndex((prev) => Math.max(20, prev - 50));
+              }
+            }}
+            title="Cut to Historical Bar (Jump Back 50 candles)"
+            className={`p-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1 ${
               isCutMode
-                ? 'bg-rose-500 text-white animate-pulse shadow-[0_0_15px_rgba(244,63,94,0.5)]'
+                ? 'bg-rose-500 text-white shadow-[0_0_12px_rgba(244,63,94,0.4)]'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
             <Scissors className="w-4 h-4" />
+            <span className="hidden sm:inline text-[11px] font-bold">Cut</span>
           </button>
 
-          {/* Step Back */}
+          {/* Step Backward */}
           <button
             onClick={handleStepBack}
-            title="Step Back 1 Bar"
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+            title="Step Back 1 Candle"
+            className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
           >
-            <RotateCcw className="w-4 h-4" />
+            <SkipBack className="w-4 h-4" />
           </button>
 
-          {/* PLAY / PAUSE (THE EXACT FEATURE USER REQUESTED) */}
+          {/* Play / Pause Replay Button */}
           <button
             onClick={() => setIsPlaying(!isPlaying)}
-            title={isPlaying ? 'Pause Market (আটকে দিন)' : 'Play Market (চালু করুন)'}
-            className={`px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg ${
+            title={isPlaying ? 'Pause Market (Market Stops Completely)' : 'Play Candle Stream'}
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-black flex items-center gap-1.5 transition-all shadow-lg ${
               isPlaying
-                ? 'bg-amber-500 text-black hover:bg-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]'
-                : 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_15px_rgba(0,255,157,0.4)]'
+                ? 'bg-amber-500 text-black hover:bg-amber-400 shadow-amber-500/30 animate-pulse'
+                : 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-emerald-500/30'
             }`}
           >
-            {isPlaying ? (
-              <>
-                <Pause className="w-4 h-4 fill-black" />
-                <span>PAUSE</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 fill-black" />
-                <span>PLAY</span>
-              </>
-            )}
+            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            <span>{isPlaying ? 'PAUSE' : 'PLAY'}</span>
           </button>
 
-          {/* Step Forward (1 Bar) */}
+          {/* Step Forward (1 Candle) */}
           <button
             onClick={handleStepForward}
-            title="Step Forward (১ ক্যান্ডেল সামনে)"
-            className="p-2 rounded-xl text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all"
+            title="Step Forward 1 Candle"
+            className="p-1.5 rounded-lg text-slate-300 hover:text-emerald-400 hover:bg-slate-800 transition-all"
           >
             <SkipForward className="w-4 h-4" />
           </button>
 
-          {/* Replay Speed */}
-          <div className="flex items-center pl-1">
+          {/* Speed Selector */}
+          <div className="relative flex items-center ml-1 border-l border-slate-800 pl-2">
             <select
               value={replaySpeed}
               onChange={(e) => setReplaySpeed(Number(e.target.value))}
-              className="bg-slate-950 text-slate-300 text-[11px] font-mono px-2 py-1 rounded-lg border border-slate-800 focus:outline-none focus:border-cyan-500"
+              className="bg-transparent text-[11px] font-mono font-bold text-cyan-300 focus:outline-none cursor-pointer"
             >
               {SPEED_OPTIONS.map((s) => (
-                <option key={s.value} value={s.value}>
+                <option key={s.value} value={s.value} className="bg-slate-900 text-white">
                   {s.label}
                 </option>
               ))}
             </select>
           </div>
+
+          {/* Reset Replay */}
+          <button
+            onClick={handleResetReplay}
+            title="Reset Replay Stream"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all ml-1"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
         </div>
 
-        {/* Right: Fullscreen & Live Status Badge */}
+        {/* Right: Indicators Modal Toggle & Fullscreen */}
         <div className="flex items-center gap-2">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span className="text-slate-300 font-bold">REPLAY LIVE</span>
-            <span className="text-slate-500">|</span>
-            <span className="text-cyan-400 font-bold">{currentPrice}</span>
-          </div>
-
-          {/* FULLSCREEN BUTTON */}
+          {/* Indicators Button */}
           <button
-            onClick={toggleFullscreen}
-            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen (পুরো স্ক্রিন করুন)'}
-            className="px-3 py-2 rounded-xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/30 text-xs font-bold flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(0,240,255,0.2)]"
+            onClick={() => setShowIndicatorsModal(!showIndicatorsModal)}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold border transition-all flex items-center gap-1.5 ${
+              showIndicatorsModal
+                ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.3)]'
+                : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-purple-400'
+            }`}
           >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            <span className="hidden sm:inline">{isFullscreen ? 'EXIT FULL' : 'FULLSCREEN'}</span>
+            <Sliders className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden sm:inline">Indicators (fx)</span>
+          </button>
+
+          {/* Fullscreen Button */}
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen 1-Click'}
+            className="p-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-cyan-400 transition-all"
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4 text-cyan-400" /> : <Maximize2 className="w-4 h-4 text-cyan-400" />}
           </button>
         </div>
       </div>
 
-      {/* ─── 2. CUT MODE NOTICE BAR ────────────────────────────────────────── */}
-      {isCutMode && (
-        <div className="my-2 p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/40 flex items-center justify-between text-xs text-rose-300">
-          <div className="flex items-center gap-2">
-            <Scissors className="w-4 h-4 animate-bounce" />
-            <span>
-              <strong>Cut Mode Active:</strong> চার্টের যেখান থেকে ব্যাকটেস্ট শুরু করতে চান, নিচের প্রিসেট টাইমপয়েন্টে ক্লিক করুন:
-            </span>
+      {/* ─── Indicators Configuration Dropdown / Modal ───────────────────────── */}
+      {showIndicatorsModal && (
+        <div className="p-3 bg-slate-950/95 border-b border-purple-500/30 flex flex-wrap items-center justify-between gap-3 text-xs font-mono z-30">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-slate-400 uppercase tracking-wider text-[10px] font-bold">Active Indicators:</span>
+            <label className="flex items-center gap-1.5 text-cyan-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showEMA20}
+                onChange={(e) => setShowEMA20(e.target.checked)}
+                className="rounded accent-cyan-400"
+              />
+              EMA 20
+            </label>
+            <label className="flex items-center gap-1.5 text-purple-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showEMA50}
+                onChange={(e) => setShowEMA50(e.target.checked)}
+                className="rounded accent-purple-400"
+              />
+              EMA 50
+            </label>
+            <label className="flex items-center gap-1.5 text-amber-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showEMA200}
+                onChange={(e) => setShowEMA200(e.target.checked)}
+                className="rounded accent-amber-400"
+              />
+              EMA 200 (Institutional)
+            </label>
+            <label className="flex items-center gap-1.5 text-sky-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showBB}
+                onChange={(e) => setShowBB(e.target.checked)}
+                className="rounded accent-sky-400"
+              />
+              Bollinger Bands (20, 2)
+            </label>
+            <label className="flex items-center gap-1.5 text-emerald-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showSupertrend}
+                onChange={(e) => setShowSupertrend(e.target.checked)}
+                className="rounded accent-emerald-400"
+              />
+              Supertrend (10, 3)
+            </label>
+            <label className="flex items-center gap-1.5 text-rose-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showRSI}
+                onChange={(e) => setShowRSI(e.target.checked)}
+                className="rounded accent-rose-400"
+              />
+              RSI (14) Sub-chart
+            </label>
           </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => handleCutToPoint(0.25)}
-              className="px-2 py-0.5 rounded bg-rose-500/30 hover:bg-rose-500 text-white font-bold text-[10px]"
-            >
-              25% Past
-            </button>
-            <button
-              onClick={() => handleCutToPoint(0.5)}
-              className="px-2 py-0.5 rounded bg-rose-500/30 hover:bg-rose-500 text-white font-bold text-[10px]"
-            >
-              50% Mid
-            </button>
-            <button
-              onClick={() => handleCutToPoint(0.75)}
-              className="px-2 py-0.5 rounded bg-rose-500/30 hover:bg-rose-500 text-white font-bold text-[10px]"
-            >
-              75% Recent
-            </button>
-            <button
-              onClick={() => setIsCutMode(false)}
-              className="p-1 text-slate-400 hover:text-white"
-            >
-              ✕
-            </button>
-          </div>
+          <button
+            onClick={() => setShowIndicatorsModal(false)}
+            className="text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-900 border border-slate-800"
+          >
+            Close
+          </button>
         </div>
       )}
 
-      {/* ─── 3. LIVE PERFORMANCE HUD & WIN RATE STRIP ───────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 my-3">
-        {/* Metric 1: Win Rate % */}
-        <div className="p-3 rounded-2xl bg-slate-900/80 border border-emerald-500/30 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-[0_0_10px_rgba(0,255,157,0.3)]">
-            <Award className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Win Rate</div>
-            <div className="text-base sm:text-lg font-black text-emerald-400 leading-tight">
-              {stats.winRate}%
-            </div>
-          </div>
+      {/* ─── Main TradingView Studio Body (Left Tools + Massive Chart Area) ────── */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* ─── Left Drawing Toolbar (TradingView Style) ────────────────────────── */}
+        <div className="w-12 sm:w-14 bg-[#0a0f1d] border-r border-slate-800/80 flex flex-col items-center py-2.5 gap-2 select-none z-30">
+          {/* Cursor / Select */}
+          <button
+            onClick={() => setActiveTool('cursor')}
+            title="Cursor / Pan Chart"
+            className={`p-2 rounded-xl transition-all ${
+              activeTool === 'cursor'
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.3)]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+            }`}
+          >
+            <MousePointer className="w-4 h-4" />
+          </button>
+
+          {/* Rectangle / Order Block / Zone Tool */}
+          <button
+            onClick={() => setActiveTool('rectangle')}
+            title="Rectangle (Draw Order Block / Demand / Supply Zone)"
+            className={`p-2 rounded-xl transition-all ${
+              activeTool === 'rectangle'
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800/80'
+            }`}
+          >
+            <Square className="w-4 h-4" />
+          </button>
+
+          {/* Trendline Tool */}
+          <button
+            onClick={() => setActiveTool('trendline')}
+            title="Trendline (Click & Drag)"
+            className={`p-2 rounded-xl transition-all ${
+              activeTool === 'trendline'
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                : 'text-slate-400 hover:text-cyan-400 hover:bg-slate-800/80'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+          </button>
+
+          {/* Horizontal Line Tool */}
+          <button
+            onClick={() => setActiveTool('horizontal')}
+            title="Horizontal Line (Support / Resistance)"
+            className={`p-2 rounded-xl transition-all ${
+              activeTool === 'horizontal'
+                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.3)]'
+                : 'text-slate-400 hover:text-purple-400 hover:bg-slate-800/80'
+            }`}
+          >
+            <Minus className="w-4 h-4" />
+          </button>
+
+          {/* Long Position Tool */}
+          <button
+            onClick={() => setActiveTool('long_pos')}
+            title="Long Position Tool (Risk:Reward Box)"
+            className={`p-2 rounded-xl transition-all ${
+              activeTool === 'long_pos'
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
+                : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800/80'
+            }`}
+          >
+            <ArrowUpRight className="w-4 h-4" />
+          </button>
+
+          {/* Short Position Tool */}
+          <button
+            onClick={() => setActiveTool('short_pos')}
+            title="Short Position Tool (Risk:Reward Box)"
+            className={`p-2 rounded-xl transition-all ${
+              activeTool === 'short_pos'
+                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/50'
+                : 'text-slate-400 hover:text-rose-400 hover:bg-slate-800/80'
+            }`}
+          >
+            <ArrowDownRight className="w-4 h-4" />
+          </button>
+
+          {/* Text Tool */}
+          <button
+            onClick={() => setActiveTool('text')}
+            title="Text Note / Annotation"
+            className={`p-2 rounded-xl transition-all ${
+              activeTool === 'text'
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
+                : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800/80'
+            }`}
+          >
+            <Type className="w-4 h-4" />
+          </button>
+
+          <div className="w-6 h-[1px] bg-slate-800 my-1" />
+
+          {/* Undo */}
+          <button
+            onClick={handleUndoDrawing}
+            disabled={drawings.length === 0}
+            title="Undo Last Drawing"
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+
+          {/* Clear All */}
+          <button
+            onClick={handleClearDrawings}
+            disabled={drawings.length === 0}
+            title="Clear All Drawings"
+            className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Metric 2: Wins vs Losses */}
-        <div className="p-3 rounded-2xl bg-slate-900/80 border border-cyan-500/30 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-[0_0_10px_rgba(0,240,255,0.3)]">
-            <Target className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Score</div>
-            <div className="text-base sm:text-lg font-black text-white leading-tight">
-              <span className="text-emerald-400">{stats.wins}W</span> / <span className="text-rose-400">{stats.losses}L</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Metric 3: Total Trades */}
-        <div className="p-3 rounded-2xl bg-slate-900/80 border border-purple-500/30 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-purple-500/15 border border-purple-500/40 flex items-center justify-center text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.3)]">
-            <BarChart2 className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Total Trades</div>
-            <div className="text-base sm:text-lg font-black text-purple-300 leading-tight">
-              {stats.total} Executed
-            </div>
-          </div>
-        </div>
-
-        {/* Metric 4: Net P&L ($) */}
-        <div className="p-3 rounded-2xl bg-slate-900/80 border border-amber-500/30 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]">
-            <DollarSign className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Net P&L</div>
-            <div
-              className={`text-base sm:text-lg font-black leading-tight ${
-                stats.netPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'
-              }`}
-            >
-              {stats.netPnL >= 0 ? `+$${stats.netPnL}` : `-$${Math.abs(stats.netPnL)}`}
-            </div>
-          </div>
-        </div>
-
-        {/* Metric 5: Account Balance */}
-        <div className="p-3 rounded-2xl bg-slate-900/80 border border-blue-500/30 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-500/40 flex items-center justify-center text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.3)]">
-            <ShieldAlert className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Account Balance</div>
-            <div className="text-base sm:text-lg font-black text-white leading-tight">
-              ${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-            </div>
-          </div>
-        </div>
-
-        {/* Metric 6: Replay Bar Progress */}
-        <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-700/60 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300">
-            <Clock className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Candle Index</div>
-            <div className="text-base sm:text-lg font-black text-cyan-300 leading-tight">
-              {replayIndex + 1} / {allCandles.length}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ─── 4. MAIN CHART & EXECUTION DOCK ──────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mt-2">
-        {/* Left 3 Columns: Interactive Candlestick Chart */}
-        <div className="lg:col-span-3 rounded-2xl bg-slate-950 border border-slate-800/80 p-2 overflow-hidden shadow-inner relative">
-          <div ref={chartContainerRef} className="w-full" />
-
-          {/* RSI Sub-pane */}
-          {showRSI && (
-            <div className="border-t border-slate-800/80 mt-1 pt-1">
-              <div className="text-[10px] text-amber-400/80 font-bold px-2 py-0.5 flex items-center justify-between">
-                <span>RSI (14) OSCILLATOR</span>
-                <span className="text-slate-500">Overbought: 70 | Oversold: 30</span>
-              </div>
-              <div ref={rsiContainerRef} className="w-full" />
-            </div>
-          )}
-
-          {/* Active Trade Floating Banner on Chart */}
-          {activeTrade && (
-            <div className="absolute top-4 left-4 z-20 px-4 py-2 rounded-xl bg-slate-950/90 border border-cyan-500/50 backdrop-blur-md shadow-2xl flex items-center gap-4 text-xs">
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`px-2 py-0.5 rounded font-black text-[10px] ${
-                    activeTrade.type === 'BUY' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
-                  }`}
-                >
-                  ACTIVE {activeTrade.type}
-                </span>
-                <span className="text-slate-300 font-bold">Entry: {activeTrade.entryPrice}</span>
-              </div>
-              <div className="text-slate-400">
-                TP: <span className="text-emerald-400 font-bold">{activeTrade.tp}</span> | SL:{' '}
-                <span className="text-rose-400 font-bold">{activeTrade.sl}</span> ({activeTrade.rr})
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={handleBreakEven}
-                  className="px-2.5 py-1 rounded-lg bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30 text-[10px] font-bold"
-                >
-                  Move BE
-                </button>
-                <button
-                  onClick={handleManualClose}
-                  className="px-2.5 py-1 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 hover:bg-rose-500/30 text-[10px] font-bold"
-                >
-                  Close Now
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right 1 Column: FX Replay Order Execution & Strategy Console */}
-        <div className="rounded-2xl bg-slate-950/90 border border-cyan-500/30 p-4 space-y-4 shadow-xl flex flex-col justify-between">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+        {/* ─── Massive Center Chart Area (with SVG Drawing Layer) ──────────────── */}
+        <div ref={chartWrapperRef} className="flex-1 flex flex-col relative bg-[#0d1117] overflow-hidden">
+          {/* Active Drawing Tool Helper Bar */}
+          {activeTool !== 'cursor' && (
+            <div className="absolute top-2 left-3 right-3 z-30 flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-900/90 border border-cyan-500/40 backdrop-blur-md font-mono text-xs shadow-xl animate-in fade-in duration-200">
               <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-cyan-400" />
-                <span className="font-heading font-black text-sm text-white">ORDER DESK</span>
-              </div>
-              <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/30">
-                1-CLICK EXECUTION
-              </span>
-            </div>
-
-            {/* Quick BUY / SELL Action Buttons */}
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                disabled={Boolean(activeTrade)}
-                onClick={() => handleOpenTrade('BUY')}
-                className={`py-3 px-3 rounded-2xl font-black text-xs font-heading flex flex-col items-center justify-center gap-1 transition-all ${
-                  activeTrade
-                    ? 'bg-slate-900 text-slate-600 cursor-not-allowed'
-                    : 'bg-gradient-to-b from-emerald-400 to-emerald-600 text-slate-950 hover:brightness-110 shadow-[0_0_20px_rgba(0,255,157,0.35)] active:scale-95'
-                }`}
-              >
-                <div className="flex items-center gap-1 text-sm font-black">
-                  <ArrowUpRight className="w-4 h-4 stroke-[3]" />
-                  <span>BUY / LONG</span>
-                </div>
-                <span className="text-[10px] opacity-80 font-mono">Ask: {currentPrice}</span>
-              </button>
-
-              <button
-                disabled={Boolean(activeTrade)}
-                onClick={() => handleOpenTrade('SELL')}
-                className={`py-3 px-3 rounded-2xl font-black text-xs font-heading flex flex-col items-center justify-center gap-1 transition-all ${
-                  activeTrade
-                    ? 'bg-slate-900 text-slate-600 cursor-not-allowed'
-                    : 'bg-gradient-to-b from-rose-400 to-rose-600 text-white hover:brightness-110 shadow-[0_0_20px_rgba(244,63,94,0.35)] active:scale-95'
-                }`}
-              >
-                <div className="flex items-center gap-1 text-sm font-black">
-                  <ArrowDownRight className="w-4 h-4 stroke-[3]" />
-                  <span>SELL / SHORT</span>
-                </div>
-                <span className="text-[10px] opacity-80 font-mono">Bid: {currentPrice}</span>
-              </button>
-            </div>
-
-            {/* SL and TP Settings */}
-            <div className="space-y-3 pt-2 text-xs">
-              <div>
-                <label className="text-slate-400 block mb-1 flex items-center justify-between">
-                  <span>Risk Per Trade ($)</span>
-                  <span className="text-cyan-400 font-bold">${riskAmount}</span>
-                </label>
-                <input
-                  type="range"
-                  min="50"
-                  max="1000"
-                  step="50"
-                  value={riskAmount}
-                  onChange={(e) => setRiskAmount(Number(e.target.value))}
-                  className="w-full accent-cyan-400 cursor-pointer"
-                />
+                <span className="text-cyan-300 font-bold uppercase tracking-wider">
+                  Drawing: {activeTool}
+                </span>
+                <span className="text-slate-400 hidden sm:inline text-[11px]">
+                  {activeTool === 'rectangle' && 'Click & drag on the chart to create an Order Block / Supply-Demand zone.'}
+                  {activeTool === 'trendline' && 'Click & drag to draw a trendline.'}
+                  {activeTool === 'horizontal' && 'Click anywhere to place a Support / Resistance ray.'}
+                </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-slate-400 block mb-1">Stop Loss (Pips)</label>
-                  <input
-                    type="number"
-                    min="5"
-                    max="200"
-                    value={slPips}
-                    onChange={(e) => setSlPips(Number(e.target.value))}
-                    className="w-full p-2 rounded-xl bg-slate-900 border border-slate-800 text-rose-400 font-bold focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-slate-400 block mb-1">Take Profit (Pips)</label>
-                  <input
-                    type="number"
-                    min="10"
-                    max="500"
-                    value={tpPips}
-                    onChange={(e) => setTpPips(Number(e.target.value))}
-                    className="w-full p-2 rounded-xl bg-slate-900 border border-slate-800 text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
+              {/* Color & Label Selector for Rectangles */}
+              <div className="flex items-center gap-2">
+                {activeTool === 'rectangle' && (
+                  <>
+                    <select
+                      value={selectedZoneLabel}
+                      onChange={(e) => setSelectedZoneLabel(e.target.value)}
+                      className="px-2 py-0.5 rounded bg-slate-800 text-white text-[11px] border border-slate-700"
+                    >
+                      <option value="Order Block">Order Block</option>
+                      <option value="Demand Zone">Demand Zone</option>
+                      <option value="Supply Zone">Supply Zone</option>
+                      <option value="Fair Value Gap">Fair Value Gap</option>
+                      <option value="Breaker Block">Breaker Block</option>
+                    </select>
 
-              <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs font-bold">
-                <span className="text-slate-400">Risk:Reward Ratio</span>
-                <span className="text-cyan-300 font-mono">1 : {(tpPips / slPips).toFixed(2)} RR</span>
+                    <div className="flex items-center gap-1">
+                      {DRAW_COLORS.map((c) => (
+                        <button
+                          key={c.id}
+                          onClick={() => setSelectedDrawColor(c.hex)}
+                          className={`w-4 h-4 rounded-full border ${
+                            selectedDrawColor === c.hex ? 'ring-2 ring-white scale-110' : 'opacity-70'
+                          }`}
+                          style={{ backgroundColor: c.hex, borderColor: c.hex }}
+                          title={c.label}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <button
+                  onClick={() => setActiveTool('cursor')}
+                  className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[11px] hover:bg-rose-500/30"
+                >
+                  Done
+                </button>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Quick Strategy Reset / Clear Button */}
-          <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
-            <button
-              onClick={handleResetReplay}
-              className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-xs flex items-center gap-1 transition-all"
+          {/* Chart Container (Large Original Size) */}
+          <div className="relative flex-1 w-full h-full min-h-[580px]">
+            <div ref={chartContainerRef} className="w-full h-full" />
+
+            {/* SVG Drawing Layer on Top of Chart */}
+            <svg
+              ref={svgRef}
+              className={`absolute inset-0 w-full h-full z-20 ${
+                activeTool === 'cursor' ? 'pointer-events-none' : 'cursor-crosshair pointer-events-auto'
+              }`}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Reset Replay</span>
-            </button>
-
-            <span className="text-[10px] text-slate-500 font-mono">FX REPLAY // V3.2</span>
+              {drawings.map((d) => renderDrawing(d))}
+              {currentDrawing && renderDrawing(currentDrawing, true)}
+            </svg>
           </div>
+
+          {/* Optional RSI Sub-Chart Container */}
+          {showRSI && (
+            <div className="w-full h-[110px] bg-[#090d16] border-t border-slate-800/80 relative">
+              <div ref={rsiContainerRef} className="w-full h-full" />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ─── 5. CLOSED TRADES JOURNAL & AUDIT TABLE ─────────────────────────── */}
-      <div className="mt-4 pt-4 border-t border-slate-800/80">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <Activity className="w-4 h-4 text-emerald-400" />
-            <span className="text-xs font-heading font-black text-white uppercase tracking-wider">
-              Backtesting Trade Journal ({tradeHistory.length} Trades)
+      {/* ─── Bottom Floating Trading Simulator HUD & Action Bar ───────────────── */}
+      <div className="bg-[#0b1020] border-t border-slate-800/90 px-3 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-3 font-mono text-xs select-none">
+        {/* Left: Quick Execution Buttons (Buy / Sell) */}
+        <div className="flex items-center gap-2">
+          {activeTrade ? (
+            <div className="flex items-center gap-2">
+              <div className="px-3 py-1.5 rounded-xl bg-slate-900 border border-cyan-500/40 flex items-center gap-2">
+                <span className={`font-black ${activeTrade.type === 'BUY' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {activeTrade.type} @ {activeTrade.entry}
+                </span>
+                <span className={`font-bold ${activeTrade.unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {activeTrade.unrealizedPnl >= 0 ? '+' : ''}${activeTrade.unrealizedPnl || 0}
+                </span>
+              </div>
+              <button
+                onClick={handleCloseTradeManual}
+                className="px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/50 hover:bg-rose-500 hover:text-white font-bold transition-all"
+              >
+                Close Trade
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleExecuteTrade('BUY')}
+                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all"
+              >
+                <ArrowUpRight className="w-4 h-4" />
+                <span>BUY (LONG)</span>
+              </button>
+
+              <button
+                onClick={() => handleExecuteTrade('SELL')}
+                className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-black flex items-center gap-1.5 shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all"
+              >
+                <ArrowDownRight className="w-4 h-4" />
+                <span>SELL (SHORT)</span>
+              </button>
+
+              {/* SL / TP Inputs */}
+              <div className="hidden lg:flex items-center gap-2 ml-2 text-[11px] text-slate-400">
+                <span>SL:</span>
+                <input
+                  type="number"
+                  value={slPips}
+                  onChange={(e) => setSlPips(Math.max(5, Number(e.target.value)))}
+                  className="w-12 px-1.5 py-1 rounded bg-slate-900 border border-slate-700 text-white font-bold text-center"
+                />
+                <span>pips</span>
+
+                <span className="ml-1">TP:</span>
+                <input
+                  type="number"
+                  value={tpPips}
+                  onChange={(e) => setTpPips(Math.max(5, Number(e.target.value)))}
+                  className="w-12 px-1.5 py-1 rounded bg-slate-900 border border-slate-700 text-white font-bold text-center"
+                />
+                <span>pips</span>
+
+                <span className="text-cyan-400 font-bold ml-1">
+                  (R:R 1:{(tpPips / slPips).toFixed(1)})
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Center: Live Performance HUD */}
+        <div className="flex items-center gap-4 sm:gap-6 bg-slate-950/80 px-4 py-1.5 rounded-xl border border-slate-800">
+          <div>
+            <span className="text-[10px] uppercase text-slate-500 block">Balance</span>
+            <span className="text-sm font-black text-white font-mono">${stats.equity.toFixed(2)}</span>
+          </div>
+
+          <div>
+            <span className="text-[10px] uppercase text-slate-500 block">Win Rate</span>
+            <span className="text-sm font-black text-emerald-400 font-mono">{stats.winRate}%</span>
+          </div>
+
+          <div>
+            <span className="text-[10px] uppercase text-slate-500 block">Wins / Losses</span>
+            <span className="text-xs font-bold text-slate-300 font-mono">
+              <span className="text-emerald-400">{stats.wins}W</span> - <span className="text-rose-400">{stats.losses}L</span>
             </span>
           </div>
-          <span className="text-[11px] text-slate-400">
-            Current Session Net: <strong className={stats.netPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{stats.netPnL >= 0 ? `+$${stats.netPnL}` : `-$${Math.abs(stats.netPnL)}`}</strong>
-          </span>
+
+          <div>
+            <span className="text-[10px] uppercase text-slate-500 block">Net P&L</span>
+            <span className={`text-sm font-black font-mono ${stats.totalPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {stats.totalPnl >= 0 ? '+' : ''}${stats.totalPnl.toFixed(2)} ({stats.pnlPercent}%)
+            </span>
+          </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Right: Trade Journal Toggle */}
+        <div>
+          <button
+            onClick={() => setShowJournalDrawer(!showJournalDrawer)}
+            className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 font-bold flex items-center gap-1.5 transition-all"
+          >
+            <Clock className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Journal ({tradeHistory.length})</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ─── Trade Journal Slide-Over Drawer ─────────────────────────────────── */}
+      {showJournalDrawer && (
+        <div className="bg-[#090d18] border-t border-slate-800 p-4 max-h-60 overflow-y-auto animate-in slide-in-from-bottom duration-200">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+            <h4 className="text-xs font-mono font-black text-cyan-300 uppercase tracking-wider flex items-center gap-2">
+              <Award className="w-4 h-4 text-amber-400" />
+              Backtesting Trade Journal & Performance History
+            </h4>
+            <button
+              onClick={() => setShowJournalDrawer(false)}
+              className="text-slate-400 hover:text-white text-xs font-mono"
+            >
+              Close
+            </button>
+          </div>
+
           <table className="w-full text-left text-xs font-mono">
             <thead>
-              <tr className="border-b border-slate-800 text-slate-400 text-[11px]">
-                <th className="py-2 px-3">#</th>
-                <th className="py-2 px-3">Asset</th>
-                <th className="py-2 px-3">Type</th>
-                <th className="py-2 px-3">Entry</th>
-                <th className="py-2 px-3">Exit</th>
-                <th className="py-2 px-3">R:R</th>
-                <th className="py-2 px-3">PnL ($)</th>
-                <th className="py-2 px-3">Status</th>
+              <tr className="text-slate-500 border-b border-slate-800/80">
+                <th className="py-1.5">Asset</th>
+                <th>Type</th>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>R:R</th>
+                <th>P&L ($)</th>
+                <th>Result</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-900/60">
-              {tradeHistory.map((t, idx) => (
-                <tr key={t.id || idx} className="hover:bg-slate-900/40 transition-colors">
-                  <td className="py-2 px-3 text-slate-500">#{tradeHistory.length - idx}</td>
-                  <td className="py-2 px-3 font-bold text-slate-200">{t.asset}</td>
-                  <td className="py-2 px-3">
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                        t.type === 'BUY'
-                          ? 'bg-emerald-500/20 text-emerald-300'
-                          : 'bg-rose-500/20 text-rose-300'
-                      }`}
-                    >
-                      {t.type}
-                    </span>
+            <tbody className="divide-y divide-slate-800/40">
+              {tradeHistory.map((t) => (
+                <tr key={t.id} className="hover:bg-slate-900/40">
+                  <td className="py-1.5 font-bold text-white">{t.asset}</td>
+                  <td className={t.type === 'BUY' ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                    {t.type}
                   </td>
-                  <td className="py-2 px-3 text-slate-300">{t.entryPrice}</td>
-                  <td className="py-2 px-3 text-slate-300">{t.exitPrice}</td>
-                  <td className="py-2 px-3 text-cyan-300">{t.rr}</td>
-                  <td className="py-2 px-3 font-bold">
-                    <span className={t.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                      {t.pnl >= 0 ? `+$${t.pnl.toFixed(2)}` : `-$${Math.abs(t.pnl).toFixed(2)}`}
-                    </span>
+                  <td className="text-slate-300">{t.entryPrice}</td>
+                  <td className="text-slate-300">{t.exitPrice}</td>
+                  <td className="text-cyan-400">{t.rr}</td>
+                  <td className={t.pnl >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                    {t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)}
                   </td>
-                  <td className="py-2 px-3">
+                  <td>
                     <span
                       className={`px-2 py-0.5 rounded-full text-[10px] font-black inline-flex items-center gap-1 ${
                         t.result === 'WIN'
@@ -1182,8 +1763,9 @@ export function FXReplayBacktest() {
             </tbody>
           </table>
         </div>
-      </div>
+      )}
     </div>
   );
 }
+
 export default FXReplayBacktest;
