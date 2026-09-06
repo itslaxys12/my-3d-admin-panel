@@ -1112,7 +1112,11 @@ async def play_song(ctx, *, query: str = None):
     try:
         title = video_data.get("title", "Unknown Title")
         stream_url = video_data.get("url")
-        duration_sec = video_data.get("duration", 0)
+        try:
+            duration_val = video_data.get("duration", 0)
+            duration_sec = int(float(duration_val or 0))
+        except (ValueError, TypeError):
+            duration_sec = 0
         minutes, seconds = divmod(duration_sec, 60)
         duration_str = f"{minutes:02d}:{seconds:02d}" if duration_sec else "Live Stream"
         thumbnail = video_data.get("thumbnail")
