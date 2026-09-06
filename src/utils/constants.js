@@ -11,6 +11,7 @@ export const NAV_ITEMS = [
   { id: 'bot_invite', label: 'Bot Invite Studio', icon: 'Bot', badge: 'GMX' },
   { id: 'crypto_radar', label: 'Crypto Moonshot Radar', icon: 'Coins', badge: 'VIP Owner', ownerOnly: true },
   { id: 'router_manager', label: 'WiFi & Router Hub', icon: 'Wifi', badge: 'VIP Owner', ownerOnly: true },
+  { id: 'fx_replay', label: 'FX Replay Simulator', icon: 'TrendingUp', badge: 'PRO' },
   { id: 'settings', label: 'Settings', icon: 'Settings', badge: null },
 ];
 

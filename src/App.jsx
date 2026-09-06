@@ -11,6 +11,7 @@ import Settings from './views/Settings';
 import Login from './views/Login';
 import CryptoRadarView from './components/crypto/CryptoRadarView';
 import RouterManager from './views/RouterManager';
+import { FXReplayBacktest } from './components/trading/FXReplayBacktest';
 import InteractiveModel from './components/3d/InteractiveModel';
 import GlassCard from './components/UI/GlassCard';
 import SecurityLockdown from './components/security/SecurityLockdown';
@@ -216,6 +217,9 @@ export function App() {
           );
         }
         return <RouterManager userRole={userRole} />;
+
+      case 'fx_replay':
+        return <FXReplayBacktest />;
 
       case 'settings':
         if (userRole === 'user') {

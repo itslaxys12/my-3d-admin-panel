@@ -15,6 +15,7 @@ import {
   Coins,
   X,
   Wifi,
+  TrendingUp,
 } from 'lucide-react';
 import { NAV_ITEMS, APP_CONFIG } from '../../utils/constants';
 
@@ -26,6 +27,7 @@ const ICON_MAP = {
   Globe,
   Coins,
   Wifi,
+  TrendingUp,
   Settings,
   Box,
 };
