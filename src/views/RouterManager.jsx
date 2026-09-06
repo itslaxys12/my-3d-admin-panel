@@ -38,6 +38,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { getApiBase, getWsBase, safeFetchJson } from '../utils/apiConfig';
+import { FXReplayBacktest } from '../components/trading/FXReplayBacktest';
 
 export function RouterManager({ userRole = 'owner' }) {
   // ─── State Management ──────────────────────────────────────────────────────
@@ -754,6 +755,9 @@ export function RouterManager({ userRole = 'owner' }) {
           </div>
         </div>
       </div>
+
+      {/* ─── FX REPLAY ADVANCED BACKTESTING SUITE & TRADINGVIEW ENGINE ─── */}
+      <FXReplayBacktest />
 
       {/* ─── Navigation Tabs ────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
