@@ -275,8 +275,10 @@ export function App() {
 
       {/* Main Content Area (Responsive margins for phones, tablets & desktops) */}
       <main
-        className={`flex-1 transition-all duration-300 pt-16 md:pt-20 pb-20 md:pb-14 px-3 sm:px-8 relative z-10 ml-0 ${
-          isCollapsed ? 'md:ml-20' : 'md:ml-64'
+        className={`flex-1 transition-all duration-300 relative z-10 ml-0 ${
+          currentTab === 'fx_replay'
+            ? 'pt-14 md:pt-16 pb-0 px-0 sm:px-1 ' + (isCollapsed ? 'md:ml-20' : 'md:ml-64')
+            : 'pt-16 md:pt-20 pb-20 md:pb-14 px-3 sm:px-8 ' + (isCollapsed ? 'md:ml-20' : 'md:ml-64')
         }`}
       >
         <AnimatePresence mode="wait">
