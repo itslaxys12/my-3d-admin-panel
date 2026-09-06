@@ -931,9 +931,38 @@ def bot_stop():
     return {"status": "stopped"}
 
 
+_claimed_messages = {}
+_claim_lock = threading.Lock()
+
+
+class ClaimMessageReq(BaseModel):
+    message_id: str
+
+
+@app.post("/api/bot/claim_message")
+def claim_message_endpoint(req: ClaimMessageReq):
+    """Atomic distributed deduplication to guarantee only ONE bot process handles any message."""
+    with _claim_lock:
+        now = time.time()
+        cutoff = now - 60.0
+        expired = [m for m, t in _claimed_messages.items() if t < cutoff]
+        for m in expired:
+            del _claimed_messages[m]
+
+        msg_key = str(req.message_id).strip()
+        if msg_key in _claimed_messages:
+            return {"granted": False, "claimed_by": "another_instance"}
+        _claimed_messages[msg_key] = now
+        return {"granted": True}
+
+
 @app.on_event("startup")
 async def on_startup():
     """Automatically launches the Discord bot immediately when API server starts."""
+    service_name = (os.getenv("RAILWAY_SERVICE_NAME") or "").lower()
+    if service_name == "worker" or os.getenv("DISABLE_BOT_AUTOSTART", "").lower() in ("1", "true"):
+        print(f"[API SERVER] Running on service '{service_name}' - Standby mode (Bot is already handled 24/7 by primary web service).", flush=True)
+        return
     print("[API SERVER] Auto-starting Discord bot engine 24/7...", flush=True)
     try:
         res = bot_start()

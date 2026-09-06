@@ -611,8 +611,17 @@ async def play(ctx, *, query: str):
             "noplaylist": True,
             "default_search": "ytsearch1",
             "skip_download": True,
-            "cachedir": True,
-            "socket_timeout": 10,
+            "cachedir": False,
+            "socket_timeout": 15,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android", "ios", "tvhtml5", "mweb"],
+                    "player_skip": ["webpage", "configs"],
+                }
+            },
+            "http_headers": {
+                "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+            }
         }
         try:
             with yt_dlp.YoutubeDL(options) as ydl:

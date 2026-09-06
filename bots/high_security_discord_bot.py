@@ -13,11 +13,15 @@ Features:
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import shutil
 import sys
 import time
+import urllib.request
+import urllib.parse
+import aiohttp
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -117,15 +121,127 @@ YTDL_OPTIONS = {
     'no_warnings': True,
     'default_search': 'ytsearch1',
     'skip_download': True,
-    'cachedir': True,
+    'cachedir': False,
     'source_address': '0.0.0.0',
-    'socket_timeout': 10,
+    'socket_timeout': 15,
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['android', 'ios', 'tvhtml5', 'mweb'],
+            'player_skip': ['webpage', 'configs'],
+        }
+    },
+    'http_headers': {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+    }
 }
 
 FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -probesize 32k -analyzeduration 0',
     'options': '-vn -b:a 192k -ar 48000',
 }
+
+_PROCESSED_MESSAGES: Dict[str, float] = {}
+
+
+async def can_process_message_dedup(message_id: int) -> bool:
+    """Ensures that only ONE bot instance processes any command to eliminate duplicate responses."""
+    global _PROCESSED_MESSAGES
+    now = time.time()
+    msg_str = str(message_id)
+    _PROCESSED_MESSAGES = {k: v for k, v in _PROCESSED_MESSAGES.items() if now - v < 60.0}
+    if msg_str in _PROCESSED_MESSAGES:
+        return False
+    _PROCESSED_MESSAGES[msg_str] = now
+
+    port = os.getenv("PORT", "8765")
+    endpoints = [
+        f"http://127.0.0.1:{port}/api/bot/claim_message",
+        "https://web-production-038e0.up.railway.app/api/bot/claim_message"
+    ]
+    for ep in endpoints:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(ep, json={"message_id": msg_str}, timeout=aiohttp.ClientTimeout(total=0.8)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if not data.get("granted", True):
+                            return False
+                        return True
+        except Exception:
+            continue
+    return True
+
+
+def get_yt_oembed_title(video_id_or_url: str) -> Optional[str]:
+    """Fetches video title via oEmbed to bypass YouTube bot detection completely."""
+    try:
+        url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id_or_url}&format=json"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return data.get("title")
+    except Exception:
+        return None
+
+
+async def extract_song_stream(query: str, ydl_module) -> Tuple[Optional[dict], Optional[str]]:
+    """
+    Multi-tier resilient music extraction:
+    Tier 1: YouTube with mobile Android/iOS extractor clients (bypasses bot verification)
+    Tier 2: SoundCloud search fallback if YouTube challenges datacenter IP
+    """
+    target = query.strip()
+    if not target.startswith(("http://", "https://")):
+        search_target = f"ytsearch1:{target}"
+    else:
+        # Strip playlist/radio parameters that cause bot verification triggers
+        search_target = re.sub(r'(&|\?)list=[^&]+', '', target)
+        search_target = re.sub(r'(&|\?)start_radio=[^&]+', '', search_target)
+
+    # Tier 1: YouTube with mobile player client
+    try:
+        with ydl_module.YoutubeDL(YTDL_OPTIONS) as ydl:
+            info = await asyncio.to_thread(ydl.extract_info, search_target, download=False)
+            if info:
+                entry = info["entries"][0] if "entries" in info and info["entries"] else info
+                if entry and entry.get("url"):
+                    return entry, "YouTube"
+    except Exception as e:
+        print(f"[MUSIC WARNING] Primary YouTube extraction failed ({e}), initiating fallback...", flush=True)
+
+    # Tier 2: Resilient fallback to SoundCloud
+    sc_query = None
+    if "youtu" in target:
+        vid_match = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', target)
+        if vid_match:
+            vid_id = vid_match.group(1)
+            oembed_title = await asyncio.to_thread(get_yt_oembed_title, vid_id)
+            if oembed_title:
+                sc_query = f"scsearch1:{oembed_title}"
+    if not sc_query:
+        clean_text = re.sub(r'https?://\S+', '', target).strip() or target
+        sc_query = f"scsearch1:{clean_text}"
+
+    try:
+        sc_opts = {
+            'format': 'bestaudio/best',
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            'skip_download': True,
+            'socket_timeout': 12,
+        }
+        with ydl_module.YoutubeDL(sc_opts) as ydl:
+            info = await asyncio.to_thread(ydl.extract_info, sc_query, download=False)
+            if info:
+                entry = info["entries"][0] if "entries" in info and info["entries"] else info
+                if entry and entry.get("url"):
+                    return entry, "SoundCloud"
+    except Exception as e:
+        print(f"[MUSIC ERROR] Fallback extraction failed: {e}", flush=True)
+
+    return None, None
 
 
 def reload_env():
@@ -632,6 +748,10 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
 
+    # De-duplication: Ensure only ONE bot process handles incoming commands/messages
+    if not await can_process_message_dedup(message.id):
+        return
+
     # Auto-role check for active users who have no assigned roles yet
     if message.guild and isinstance(message.author, discord.Member):
         if len(message.author.roles) <= 1:  # Only @everyone role
@@ -972,39 +1092,22 @@ async def play_song(ctx, *, query: str = None):
                 return await search_msg.edit(content="❌ `yt-dlp` library not found. Please run `pip install yt-dlp`.")
 
             target = query.strip()
-            if not target.startswith(("http://", "https://")):
-                target = f"ytsearch1:{target}"
+            video_data, provider = await extract_song_stream(target, yt_dlp)
 
-            try:
-                with yt_dlp.YoutubeDL(YTDL_OPTIONS) as ydl:
-                    info = await asyncio.to_thread(ydl.extract_info, target, download=False)
+            if not video_data or not video_data.get("url"):
+                return await search_msg.edit(content="❌ Could not stream this audio. Please check the song name or YouTube link and try again!")
 
-                if not info:
-                    return await search_msg.edit(content="❌ No song found! Please try another name.")
-
-                if "entries" in info and info["entries"]:
-                    video_data = info["entries"][0]
-                else:
-                    video_data = info
-
-                if not video_data or not video_data.get("url"):
-                    return await search_msg.edit(content="❌ Could not extract playable stream URL.")
-
-                # Store in fast cache for subsequent instant play
-                song_cache[cache_key] = {
-                    "title": video_data.get("title", "Unknown Title"),
-                    "url": video_data.get("url"),
-                    "webpage_url": video_data.get("webpage_url", "https://youtube.com"),
-                    "duration": video_data.get("duration", 0),
-                    "thumbnail": video_data.get("thumbnail"),
-                    "uploader": video_data.get("uploader", "YouTube"),
-                    "timestamp": now_ts,
-                    "is_local": False
-                }
-
-            except Exception as err:
-                print(f"[MUSIC ERROR] {err}")
-                return await search_msg.edit(content=f"❌ Error searching song: `{err}`")
+            # Store in fast cache for subsequent instant play
+            song_cache[cache_key] = {
+                "title": video_data.get("title", "Unknown Title"),
+                "url": video_data.get("url"),
+                "webpage_url": video_data.get("webpage_url", "https://youtube.com"),
+                "duration": video_data.get("duration", 0),
+                "thumbnail": video_data.get("thumbnail"),
+                "uploader": video_data.get("uploader", provider or "Audio"),
+                "timestamp": now_ts,
+                "is_local": False
+            }
 
     try:
         title = video_data.get("title", "Unknown Title")
@@ -2139,6 +2242,16 @@ def resolve_bot_token() -> str:
     return f"{t1}.{t2}.{t3}"
 
 if __name__ == "__main__":
+    service_name = (os.getenv("RAILWAY_SERVICE_NAME") or "").lower()
+    if service_name == "worker" and not os.getenv("FORCE_WORKER_BOT"):
+        print("[BOT ENGINE] Standby mode: Bot is already active 24/7 inside primary 'web' service. Worker standing by to prevent duplicate replies.", flush=True)
+        try:
+            while True:
+                time.sleep(60)
+        except KeyboardInterrupt:
+            pass
+        sys.exit(0)
+
     token = resolve_bot_token()
     if not token or token == "YOUR_BOT_TOKEN_HERE":
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", flush=True)
