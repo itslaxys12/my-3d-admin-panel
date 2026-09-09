@@ -194,32 +194,7 @@ export function useDevToolsSecurity() {
       }
     };
 
-    // 4. Debugger Timing Execution Trap (Catches detached DevTools and pre-opened tabs)
-    const checkDebuggerTiming = () => {
-      const start = performance.now();
-      // eslint-disable-next-line no-debugger
-      debugger;
-      const elapsed = performance.now() - start;
-      if (elapsed > 100) {
-        triggerBan('Debugger timing execution anomaly (DevTools open)');
-      }
-    };
-
-    // 5. Console Object Inspection Getter Trap
-    const checkConsoleInspection = () => {
-      try {
-        const dummy = new Image();
-        Object.defineProperty(dummy, 'id', {
-          get: function () {
-            triggerBan('Console element inspector triggered');
-          },
-        });
-        console.log('%c', dummy);
-        console.clear();
-      } catch {}
-    };
-
-    // 6. Chrome DevTools Device Toolbar / Phone Emulation Trap
+    // 4. Chrome DevTools Device Toolbar / Phone Emulation Trap
     const checkDeviceToolbarEmulation = () => {
       // Vector A: Responsive / Mobile viewport emulation inside desktop browser window
       if (window.outerWidth > 800 && window.innerWidth <= 550) {
@@ -251,14 +226,12 @@ export function useDevToolsSecurity() {
     // Run initial checks on load
     checkWindowSize();
     checkDeviceToolbarEmulation();
-    checkConsoleInspection();
 
-    // Periodic detection loop for detached/pre-opened devtools and device toolbar
+    // Periodic detection loop for detached/pre-opened devtools and device toolbar (non-blocking)
     const detectInterval = setInterval(() => {
       checkWindowSize();
       checkDeviceToolbarEmulation();
-      checkDebuggerTiming();
-    }, 2000);
+    }, 4000);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown, { capture: true });

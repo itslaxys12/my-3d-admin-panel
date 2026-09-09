@@ -84,7 +84,43 @@ export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Canvas particle rain & mist overlay
+  const wrapperRef = useRef(null);
+
+  // High-performance direct DOM parallax without React state re-renders
+  useEffect(() => {
+    if (isMobile) return;
+    let animId;
+    let targetX = 0;
+    let targetY = 0;
+    let currentX = 0;
+    let currentY = 0;
+
+    const handleMouseMove = (e) => {
+      const normX = (e.clientX / window.innerWidth) * 2 - 1;
+      const normY = -(e.clientY / window.innerHeight) * 2 + 1;
+      targetX = normX * 10;
+      targetY = normY * 6;
+    };
+
+    const updateParallax = () => {
+      currentX += (targetX - currentX) * 0.05;
+      currentY += (targetY - currentY) * 0.05;
+      if (wrapperRef.current) {
+        wrapperRef.current.style.transform = `translate3d(${-currentX.toFixed(2)}px, ${currentY.toFixed(2)}px, 0) scale(1.03)`;
+      }
+      animId = requestAnimationFrame(updateParallax);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    animId = requestAnimationFrame(updateParallax);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      cancelAnimationFrame(animId);
+    };
+  }, [isMobile]);
+
+  // Optimized Canvas particle rain & mist overlay (Firefox & Brave acceleration)
   useEffect(() => {
     if (isMobile) return;
 
@@ -104,35 +140,35 @@ export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
     };
     window.addEventListener('resize', handleResize, { passive: true });
 
-    // 35 gentle atmospheric particles
-    const particles = Array.from({ length: 35 }, () => ({
+    // 16 gentle atmospheric particles (ultra-lightweight for Firefox & Brave)
+    const particles = Array.from({ length: 16 }, () => ({
       x: Math.random() * width,
       y: Math.random() * height,
-      len: 10 + Math.random() * 15,
-      speed: 2 + Math.random() * 3,
-      opacity: 0.12 + Math.random() * 0.2,
+      len: 8 + Math.random() * 12,
+      speed: 1.5 + Math.random() * 2,
+      opacity: 0.15 + Math.random() * 0.15,
     }));
 
     let lastTime = performance.now();
 
     const render = (now) => {
-      const delta = Math.min((now - lastTime) / 1000, 0.1);
+      const delta = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
 
       ctx.clearRect(0, 0, width, height);
-
       ctx.strokeStyle = '#67e8f9';
       ctx.lineWidth = 1;
+
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
         ctx.globalAlpha = p.opacity;
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
-        ctx.lineTo(p.x - 1.5, p.y + p.len);
+        ctx.lineTo(p.x - 1, p.y + p.len);
         ctx.stroke();
 
         p.y += p.speed * (delta * 60);
-        p.x -= 0.3 * (delta * 60);
+        p.x -= 0.2 * (delta * 60);
 
         if (p.y > height) {
           p.y = -p.len;
@@ -151,16 +187,14 @@ export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
     };
   }, [isMobile]);
 
-  const offsetX = isMobile ? 0 : (mousePos.x || 0) * 10;
-  const offsetY = isMobile ? 0 : (mousePos.y || 0) * 6;
-
   return (
     <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none bg-[#02040a]">
       {/* Container with Ken Burns & Parallax */}
       <div
-        className="absolute inset-[-4%] w-[108%] h-[108%] transition-transform duration-700 ease-out will-change-transform"
+        ref={wrapperRef}
+        className="absolute inset-[-4%] w-[108%] h-[108%] transition-transform duration-500 ease-out will-change-transform"
         style={{
-          transform: isMobile ? 'scale(1.02)' : `translate3d(${-offsetX}px, ${offsetY}px, 0) scale(1.03)`,
+          transform: isMobile ? 'scale(1.02)' : 'translate3d(0, 0, 0) scale(1.03)',
         }}
       >
         {/* Animated 60 FPS Video Loop */}

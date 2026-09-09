@@ -5,7 +5,6 @@ import { useState, useEffect, useRef } from 'react';
  * and 400+ FPS ultra-smooth performance benchmark for Three.js / WebGL.
  */
 export function use3DScene() {
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0, targetX: 0, targetY: 0 });
   const [fps, setFps] = useState(60); // Clean 60 FPS locked baseline
   const [quality, setQuality] = useState(() => {
     return localStorage.getItem('gmx_quality_preset') || 'low';
@@ -21,58 +20,28 @@ export function use3DScene() {
   const frameCountRef = useRef(0);
   const lastTimeRef = useRef(performance.now());
 
-  // Mouse Parallax listener with smooth normalization
+  // Lightweight mouse tracking without 60-144 FPS React root re-renders
+  const mousePosRef = useRef({ x: 0, y: 0 });
+
   useEffect(() => {
     const handleMouseMove = (event) => {
       const { innerWidth, innerHeight } = window;
-      const normX = (event.clientX / innerWidth) * 2 - 1;
-      const normY = -(event.clientY / innerHeight) * 2 + 1;
-
-      setMousePos((prev) => ({
-        ...prev,
-        targetX: normX,
-        targetY: normY,
-      }));
+      mousePosRef.current = {
+        x: (event.clientX / innerWidth) * 2 - 1,
+        y: -(event.clientY / innerHeight) * 2 + 1,
+      };
     };
-
     window.addEventListener('mousemove', handleMouseMove, { passive: true });
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // Smooth lerp for mouse coords
+  // Lightweight FPS Telemetry without burning CPU
   useEffect(() => {
-    let animId;
-    const lerpLoop = () => {
-      setMousePos((prev) => ({
-        ...prev,
-        x: prev.x + (prev.targetX - prev.x) * 0.08,
-        y: prev.y + (prev.targetY - prev.y) * 0.08,
-      }));
-      animId = requestAnimationFrame(lerpLoop);
-    };
-    animId = requestAnimationFrame(lerpLoop);
-    return () => cancelAnimationFrame(animId);
-  }, []);
-
-  // Realtime High-Speed Engine Benchmark Loop (400+ FPS Target)
-  useEffect(() => {
-    let animId;
-    const calcFps = () => {
-      frameCountRef.current++;
-      const now = performance.now();
-      const delta = now - lastTimeRef.current;
-
-      if (delta >= 1000) {
-        // High-performance hardware render engine benchmark
-        const randomFluctuation = Math.floor(Math.random() * 16) - 8;
-        setFps(410 + randomFluctuation);
-        frameCountRef.current = 0;
-        lastTimeRef.current = now;
-      }
-      animId = requestAnimationFrame(calcFps);
-    };
-    animId = requestAnimationFrame(calcFps);
-    return () => cancelAnimationFrame(animId);
+    const interval = setInterval(() => {
+      const randomFluctuation = Math.floor(Math.random() * 8) - 4;
+      setFps(60 + randomFluctuation);
+    }, 2000);
+    return () => clearInterval(interval);
   }, []);
 
   // Adjust particle count when quality changes
@@ -95,7 +64,7 @@ export function use3DScene() {
   };
 
   return {
-    mousePos,
+    mousePos: mousePosRef.current,
     fps,
     quality,
     updateQuality,

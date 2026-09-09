@@ -250,7 +250,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-[#050713] text-slate-100 flex flex-col selection:bg-emerald-400 selection:text-black relative overflow-x-hidden">
       {/* Cinematic Animated Anime Warrior Background with Rain & Mist */}
-      <AnimatedWallpaperBackground mousePos={mousePos} />
+      <AnimatedWallpaperBackground />
 
       {/* Top Navbar */}
       <Navbar

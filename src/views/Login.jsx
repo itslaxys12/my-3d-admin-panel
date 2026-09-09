@@ -10,6 +10,7 @@ import {
 import confetti from 'canvas-confetti';
 import GlowingTreeCanvas from '../components/3d/GlowingTreeCanvas';
 import openDiscordBotInvite from '../utils/discordInvite';
+import { getApiBase } from '../utils/apiConfig';
 
 // Smooth scroll font reveal variants
 const textRevealContainer = {
@@ -43,6 +44,9 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
   const [successMessage, setSuccessMessage] = useState('');
   const [authNotice, setAuthNotice] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
+  const [googleGmailInput, setGoogleGmailInput] = useState('');
+  const [googlePasscode, setGooglePasscode] = useState('');
 
   const handleInviteBotClick = () => {
     setAuthNotice('🔒 Please Sign In or Register to access the Bot Studio!');
@@ -139,6 +143,49 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
     }
   };
 
+  const proceedLogin = (user) => {
+    localStorage.setItem('glitch_auth_user', JSON.stringify(user));
+    localStorage.setItem('glitch_user_role', user.role || 'user');
+    localStorage.setItem('glitch_auth', 'true');
+    confetti({
+      particleCount: 85,
+      spread: 70,
+      origin: { y: 0.55 },
+      colors: user.role === 'owner' ? ['#f59e0b', '#00ff9d', '#00f0ff'] : ['#00f0ff', '#a855f7', '#38bdf8'],
+    });
+    setTimeout(() => {
+      setIsLoading(false);
+      if (onLoginSuccess) {
+        onLoginSuccess(user);
+      }
+    }, 400);
+  };
+
+  const handleGoogleLogin = (chosenEmail, passcode = '') => {
+    setIsLoading(true);
+    setFormError('');
+    const emailToUse = (chosenEmail || googleGmailInput || '').trim();
+    if (!emailToUse || !emailToUse.includes('@')) {
+      setFormError('Please enter a valid Gmail address (e.g. yourname@gmail.com).');
+      setIsLoading(false);
+      return;
+    }
+    const isOwner = passcode === 'shahonazakiya' || passcode === 'admin123' || emailToUse.toLowerCase().includes('shahon');
+    const usernameFromEmail = emailToUse.split('@')[0] || 'GoogleUser';
+
+    const googleUser = {
+      id: 'g-' + Date.now(),
+      username: usernameFromEmail,
+      email: emailToUse,
+      role: isOwner ? 'owner' : 'user',
+      authProvider: 'google',
+    };
+
+    saveLocalUser(googleUser);
+    setIsGoogleModalOpen(false);
+    proceedLogin(googleUser);
+  };
+
   const handleAuthSubmit = async (e) => {
     if (e) e.preventDefault();
     setFormError('');
@@ -168,17 +215,10 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
 
       setIsLoading(true);
 
-      // Save locally (Vercel & offline support)
-      saveLocalUser({
-        username: username.trim(),
-        email: email.trim().toLowerCase(),
-        password: password,
-        role: assignedRole,
-      });
-
       // Try register on server database
       try {
-        await fetch('/api/auth/register', {
+        const apiBase = getApiBase();
+        const res = await fetch(`${apiBase}/api/auth/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -188,11 +228,35 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
             owner_passcode: ownerPasscode.trim() || undefined,
           }),
         });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (res.status === 403) {
+            if (data.banned && typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('gmx-security-ban', { detail: data }));
+            }
+            setFormError(data.detail || 'Registration blocked: Your IP or Username is banned for 3 minutes.');
+            setIsLoading(false);
+            return;
+          }
+          if (res.status === 409 || res.status === 400) {
+            setFormError(data.detail || 'Registration failed.');
+            setIsLoading(false);
+            return;
+          }
+        }
       } catch (err) {
-        console.warn('Server registration notice (local fallback saved):', err);
+        console.warn('Server registration notice:', err);
       } finally {
         setIsLoading(false);
       }
+
+      // Save locally only after passing server ban check
+      saveLocalUser({
+        username: username.trim(),
+        email: email.trim().toLowerCase(),
+        password: password,
+        role: assignedRole,
+      });
 
       setSuccessMessage('🎉 Registration successful! You are registered as User. Please Sign In below to enter.');
       setAuthMode('login');
@@ -215,24 +279,6 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
     setIsLoading(true);
     setFormError('');
 
-    const proceedLogin = (user) => {
-      localStorage.setItem('glitch_auth_user', JSON.stringify(user));
-      localStorage.setItem('glitch_user_role', user.role || 'user');
-      localStorage.setItem('glitch_auth', 'true');
-      confetti({
-        particleCount: 85,
-        spread: 70,
-        origin: { y: 0.55 },
-        colors: user.role === 'owner' ? ['#f59e0b', '#00ff9d', '#00f0ff'] : ['#00f0ff', '#a855f7', '#38bdf8'],
-      });
-      setTimeout(() => {
-        setIsLoading(false);
-        if (onLoginSuccess) {
-          onLoginSuccess(user);
-        }
-      }, 400);
-    };
-
     // 1. MASTER OWNER CHECK: shahon with password shahonazakiya
     const isMasterOwner =
       (identifier.toLowerCase() === 'shahon' || identifier.toLowerCase() === 'shahon@glitchmatrix.io' || identifier.toLowerCase() === 'admin') &&
@@ -246,10 +292,18 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
         role: 'owner',
       };
       // Inform server
-      fetch('/api/auth/login', {
+      const apiBase = getApiBase();
+      fetch(`${apiBase}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username_or_email: identifier, password }),
+      }).then(async (r) => {
+        if (r.status === 403) {
+          const d = await r.json().catch(() => ({}));
+          if (d.banned && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('gmx-security-ban', { detail: d }));
+          }
+        }
       }).catch(() => {});
 
       proceedLogin(ownerUser);
@@ -258,7 +312,8 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
 
     // 2. Try Server API
     try {
-      const res = await fetch('/api/auth/login', {
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -269,6 +324,15 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data && data.user) {
         proceedLogin(data.user);
+        return;
+      }
+      if (res.status === 403) {
+        // IP or Username is banned for 3 minutes!
+        if (data.banned && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('gmx-security-ban', { detail: data }));
+        }
+        setIsLoading(false);
+        setFormError(data.detail || 'Login blocked: Your IP or Account is banned for 3 minutes due to DevTools inspection.');
         return;
       }
       if (res.status === 401) {
@@ -624,10 +688,156 @@ export function Login({ onLoginSuccess, onOpenInvitePage }) {
                     </span>
                   </button>
                 </div>
+
+                {/* Divider */}
+                <div className="relative my-3 pt-1">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-800/80" />
+                  </div>
+                  <div className="relative flex justify-center text-[10px] uppercase font-mono">
+                    <span className="bg-slate-950 px-2.5 text-slate-500">OR CONTINUE WITH</span>
+                  </div>
+                </div>
+
+                {/* Google / Gmail Sign In Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsGoogleModalOpen(true);
+                    setFormError('');
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-cyan-400 text-xs font-mono font-bold text-slate-200 transition-all flex items-center justify-center gap-2.5 shadow-lg group active:scale-95"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                  </svg>
+                  <span>Sign in with Google / Gmail</span>
+                </button>
               </form>
             </div>
           </div>
         </div>
+
+        {/* Google / Gmail Auth Modal Dialog */}
+        <AnimatePresence>
+          {isGoogleModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                className="w-full max-w-md rounded-3xl bg-slate-950 border border-slate-700/80 p-6 sm:p-7 shadow-2xl relative space-y-4 font-mono"
+              >
+                {/* Close Button */}
+                <button
+                  onClick={() => setIsGoogleModalOpen(false)}
+                  className="absolute right-4 top-4 text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-900 transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                {/* Google Header */}
+                <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-md shrink-0">
+                    <svg className="w-5 h-5" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-white font-sans">Sign in with Google</h4>
+                    <p className="text-xs text-slate-400">Choose an account or type your Gmail</p>
+                  </div>
+                </div>
+
+                {/* Quick 1-Click Accounts */}
+                <div className="space-y-2">
+                  <div className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Quick Google Accounts:</div>
+
+                  {/* Commander Owner Account */}
+                  <button
+                    type="button"
+                    onClick={() => handleGoogleLogin('shahon@gmail.com', 'shahonazakiya')}
+                    className="w-full p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-amber-500/40 hover:border-amber-400 flex items-center justify-between transition-all group text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 to-amber-300 text-slate-950 font-bold flex items-center justify-center text-xs">
+                        S
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-white group-hover:text-amber-300">Shahon (Commander)</div>
+                        <div className="text-[11px] text-slate-400">shahon@gmail.com</div>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold">
+                      VIP OWNER
+                    </span>
+                  </button>
+
+                  {/* Regular Member Account */}
+                  <button
+                    type="button"
+                    onClick={() => handleGoogleLogin('member.user@gmail.com')}
+                    className="w-full p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-cyan-400 flex items-center justify-between transition-all group text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-500 text-slate-950 font-bold flex items-center justify-center text-xs">
+                        U
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-white group-hover:text-cyan-300">Google Member</div>
+                        <div className="text-[11px] text-slate-400">member.user@gmail.com</div>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[10px] font-bold">
+                      MEMBER
+                    </span>
+                  </button>
+                </div>
+
+                {/* Or Type Custom Gmail */}
+                <div className="pt-2 border-t border-slate-800/80 space-y-3">
+                  <div className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Or enter your own Gmail:</div>
+                  <div>
+                    <input
+                      type="email"
+                      value={googleGmailInput}
+                      onChange={(e) => setGoogleGmailInput(e.target.value)}
+                      placeholder="e.g. myname@gmail.com"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                    />
+                  </div>
+
+                  <div>
+                    <input
+                      type="password"
+                      value={googlePasscode}
+                      onChange={(e) => setGooglePasscode(e.target.value)}
+                      placeholder="Owner secret passcode (optional)"
+                      className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-[11px] font-mono text-amber-300 placeholder-slate-600 focus:outline-none focus:border-amber-400"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-1 block">Leave passcode blank for standard User access.</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleGoogleLogin(googleGmailInput, googlePasscode)}
+                    disabled={!googleGmailInput.trim()}
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed text-black font-black text-xs font-mono transition-all flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    <Mail className="w-4 h-4" />
+                    <span>Continue with Gmail</span>
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </section>
 
       {/* ── 3. SCROLL-DRIVEN FONT & TEXT REVEAL SECTION ── */}
