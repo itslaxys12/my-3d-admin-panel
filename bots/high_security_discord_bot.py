@@ -491,22 +491,124 @@ async def send_ban_log(guild: discord.Guild, user: discord.User | discord.Member
         print(f"[BAN LOG] Failed to post log to #{channel.name}: {e}")
 
 
+CONFIGS_JSON = BASE_DIR / "data" / "guild_configs.json"
+
+
 def get_guild_welcome_record(guild_id: str) -> Optional[dict]:
-    """Retrieve welcome card configuration from discord.db for this specific guild."""
-    if not DISCORD_DB.exists():
-        return None
+    """Retrieve welcome card configuration from discord.db or guild_configs.json for this specific guild."""
+    gid = str(guild_id)
+    # 1. First check SQLite database
+    if DISCORD_DB.exists():
+        try:
+            conn = sqlite3.connect(DISCORD_DB)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM guild_welcome_configs WHERE guild_id = ?", (gid,))
+            row = cur.fetchone()
+            conn.close()
+            if row:
+                return dict(row)
+        except Exception as e:
+            print(f"[WELCOME DB ERROR] {e}")
+
+    # 2. Fallback to persistent JSON store
+    if CONFIGS_JSON.exists():
+        try:
+            with open(CONFIGS_JSON, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if gid in data:
+                    rec = data[gid]
+                    # Also write back into SQLite if possible
+                    try:
+                        if DISCORD_DB.exists():
+                            conn = sqlite3.connect(DISCORD_DB)
+                            cur = conn.cursor()
+                            cols = [k for k in rec.keys() if k != "id"]
+                            placeholders = ", ".join(["?"] * len(cols))
+                            updates = ", ".join([f"{col} = excluded.{col}" for col in cols if col != "guild_id"])
+                            sql = f"INSERT INTO guild_welcome_configs ({', '.join(cols)}) VALUES ({placeholders}) ON CONFLICT(guild_id) DO UPDATE SET {updates}"
+                            cur.execute(sql, [rec[c] for c in cols])
+                            conn.commit()
+                            conn.close()
+                    except Exception:
+                        pass
+                    return rec
+        except Exception as e:
+            print(f"[CONFIGS JSON READ ERROR] {e}")
+    return None
+
+
+def save_guild_welcome_record(guild_id: str, **kwargs):
+    """Saves/updates a guild's configuration in both SQLite and the persistent JSON file."""
+    gid = str(guild_id)
+    record = get_guild_welcome_record(gid) or {
+        "guild_id": gid,
+        "is_premium": 0,
+        "welcome_channel_id": "",
+        "welcome_log_channel_id": "",
+        "ban_log_channel_id": "",
+        "leave_log_channel_id": "",
+        "rules_channel_id": "",
+        "chat_channel_id": "",
+        "announce_channel_id": "",
+        "server_title": "",
+        "author_name": "",
+        "welcome_headline": "✨ Welcome to our server!!",
+        "custom_message": "Stay With Us !! ❤️",
+        "banner_gif_url": "",
+        "thumbnail_url": "",
+        "footer_text": "Thanks for joining! 🧿",
+        "auto_role_name": "Member",
+        "rules_emoji": "📜",
+        "chat_emoji": "💬",
+        "announce_emoji": "📢",
+        "headline_emoji": "✨",
+        "slogan_emoji": "❤️",
+        "media_type": "gif",
+        "anti_toxic_enabled": 1,
+        "anti_nuke_enabled": 1,
+        "media_shield_enabled": 1,
+        "voice_music_enabled": 1,
+        "auto_ban_enabled": 1
+    }
+    record.update(kwargs)
+    record["guild_id"] = gid
+
+    # 1. Update SQLite
     try:
         conn = sqlite3.connect(DISCORD_DB)
-        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        cur.execute("SELECT * FROM guild_welcome_configs WHERE guild_id = ?", (str(guild_id),))
-        row = cur.fetchone()
+        cols = [k for k in record.keys() if k != "id"]
+        placeholders = ", ".join(["?"] * len(cols))
+        updates = ", ".join([f"{col} = excluded.{col}" for col in cols if col != "guild_id"])
+        sql = f"""
+            INSERT INTO guild_welcome_configs ({', '.join(cols)})
+            VALUES ({placeholders})
+            ON CONFLICT(guild_id) DO UPDATE SET {updates}
+        """
+        cur.execute(sql, [record[c] for c in cols])
+        conn.commit()
         conn.close()
-        if row:
-            return dict(row)
     except Exception as e:
-        print(f"[WELCOME DB ERROR] {e}")
-    return None
+        print(f"[DB SAVE ERROR] {e}")
+
+    # 2. Update persistent JSON file
+    try:
+        CONFIGS_JSON.parent.mkdir(parents=True, exist_ok=True)
+        all_configs = {}
+        if CONFIGS_JSON.exists():
+            try:
+                with open(CONFIGS_JSON, "r", encoding="utf-8") as f:
+                    all_configs = json.load(f)
+            except Exception:
+                all_configs = {}
+        all_configs[gid] = record
+        with open(CONFIGS_JSON, "w", encoding="utf-8") as f:
+            json.dump(all_configs, f, indent=2, ensure_ascii=False)
+        print(f"[CONFIG PERSIST] Saved config for guild {gid} to JSON & SQLite")
+    except Exception as e:
+        print(f"[JSON SAVE ERROR] {e}")
+
 
 
 async def send_welcome_embed(member: discord.Member, role: Optional[discord.Role] = None, target_channel: Optional[discord.TextChannel] = None):
@@ -564,7 +666,8 @@ async def send_welcome_embed(member: discord.Member, role: Optional[discord.Role
         f"{rules_em} **Rules** {rules_str}\n"
         f"{chat_em} **Chat in** {chat_str}\n"
         f"{ann_em} **Announce** {announce_str}\n\n"
-        f"**{custom_msg}** {slog_em}"
+        f"**{custom_msg}** {slog_em}\n"
+        f"──────────────────────────────────────────────"
     )
 
     embed = discord.Embed(
@@ -584,10 +687,13 @@ async def send_welcome_embed(member: discord.Member, role: Optional[discord.Role
     if thumb_url:
         embed.set_thumbnail(url=thumb_url)
 
-    # VIP Animated GIF Banner (matching DANGER HEX screenshot)
+    # VIP Animated GIF Banner (Auto-upgraded to Full-Width High-Res 498px+ format)
     banner_url = cfg.get("banner_gif_url") if cfg else None
     if banner_url and banner_url.strip():
-        embed.set_image(url=banner_url.strip())
+        clean_banner = banner_url.strip()
+        if "tenor.com" in clean_banner and "AAAAM" in clean_banner:
+            clean_banner = clean_banner.replace("AAAAM", "AAAAC")
+        embed.set_image(url=clean_banner)
 
     # Footer matching screenshot
     footer_icon = guild.icon.url if guild.icon else None
@@ -1403,13 +1509,14 @@ async def autorole_cmd(ctx, role: discord.Role = None):
         return await ctx.send(embed=embed)
 
     update_env_auto_role(role.name)
+    save_guild_welcome_record(str(ctx.guild.id), auto_role_name=role.name)
     embed = discord.Embed(
         title="✅ Auto-Role Updated Successfully!",
         description=f"All new incoming members will now automatically receive the **{role.name}** role.",
         color=discord.Color.from_rgb(0, 255, 157)
     )
     await ctx.send(embed=embed)
-    print(f"[AUTO-ROLE] Set to '{role.name}' by @{ctx.author.name}")
+    print(f"[AUTO-ROLE] Set to '{role.name}' for guild {ctx.guild.name} ({ctx.guild.id}) by @{ctx.author.name}")
 
 
 # ─── ROLE MANAGEMENT COMMAND ──────────────────────────────────────────────────
@@ -1639,13 +1746,14 @@ async def set_welcome_cmd(ctx, channel: discord.TextChannel = None):
     """Sets the channel where rich welcome cards are posted."""
     target = channel or ctx.channel
     update_env_channel("welcome", target.id)
+    save_guild_welcome_record(str(ctx.guild.id), welcome_channel_id=str(target.id))
     embed = discord.Embed(
         title="✅ Welcome Channel Configured",
         description=f"New member welcome cards will now automatically be posted to {target.mention}!",
         color=discord.Color.from_rgb(0, 255, 157)
     )
     await ctx.send(embed=embed)
-    print(f"[CONFIG] Welcome channel set to #{target.name} ({target.id}) by @{ctx.author.name}")
+    print(f"[CONFIG] Welcome channel set to #{target.name} ({target.id}) for guild {ctx.guild.name} ({ctx.guild.id}) by @{ctx.author.name}")
 
 
 @bot.command(name="setlog", aliases=["logchannel"], help="Set the server security & ban log channel")
@@ -1654,13 +1762,14 @@ async def set_log_cmd(ctx, channel: discord.TextChannel = None):
     """Sets the channel where all bans, anti-nuke alerts, and moderation audit logs are posted."""
     target = channel or ctx.channel
     update_env_channel("log", target.id)
+    save_guild_welcome_record(str(ctx.guild.id), welcome_log_channel_id=str(target.id), ban_log_channel_id=str(target.id))
     embed = discord.Embed(
         title="✅ Security Log Channel Configured",
         description=f"All bans, anti-nuke defense alerts, and moderation logs will now be posted to {target.mention}!",
         color=discord.Color.from_rgb(0, 255, 157)
     )
     await ctx.send(embed=embed)
-    print(f"[CONFIG] Log channel set to #{target.name} ({target.id}) by @{ctx.author.name}")
+    print(f"[CONFIG] Log channel set to #{target.name} ({target.id}) for guild {ctx.guild.name} ({ctx.guild.id}) by @{ctx.author.name}")
 
 
 # ─── MODERATION COMMANDS ──────────────────────────────────────────────────────
@@ -1899,7 +2008,7 @@ async def welcome_cmd(ctx):
         color=discord.Color.from_rgb(0, 255, 157)
     )
     status_embed.add_field(name="🚪 Welcome Channel", value=target_ch.mention if target_ch else "`#general` (Auto-fallback)", inline=True)
-    status_embed.add_field(name="👑 VIP Status", value="⭐ **LIFETIME VIP ACTIVE**" if is_vip else "🔒 Freemium Tier (150 ৳ Upgrade Available)", inline=True)
+    status_embed.add_field(name="👑 VIP Status", value="⭐ **LIFETIME VIP ACTIVE**" if is_vip else "🔒 Freemium Tier (150 BDT Upgrade Available)", inline=True)
     status_embed.add_field(name="🎭 Auto-Assigned Role", value=f"`@{role_name}`", inline=True)
     if welcome_log_ch:
         status_embed.add_field(name="📋 Staff Welcome Log", value=welcome_log_ch.mention, inline=True)
@@ -1926,33 +2035,33 @@ async def features_cmd(ctx):
     )
 
     embed.add_field(
-        name="🚪 1. Welcome & Verification System (সক্রিয়)",
-        value="• `!welcome` বা `!testwelcome` — **ওয়েলকাম লাইভ চেক** (কার্ড ও ব্যানার কাজ করছে কিনা তা যাচাই)\n"
-              "• `!setwelcome #channel` — ওয়েলকাম চ্যানেল পরিবর্তন\n"
-              "• `!setlog #channel` — অডিট ও সিকিউরিটি লগ চ্যানেল সেট\n"
-              "• `!autorole <RoleName>` — নতুন মেম্বারদের জন্য অটো-রোল সেট",
+        name="🚪 1. Welcome & Verification System (ACTIVE)",
+        value="• `!welcome` or `!testwelcome` — **Live Welcome Check** (Verify card & banner delivery)\n"
+              "• `!setwelcome #channel` — Set target welcome channel\n"
+              "• `!setlog #channel` — Set staff audit & security log channel\n"
+              "• `!autorole <RoleName>` — Auto-assign role to new joining members",
         inline=False
     )
 
     embed.add_field(
-        name="🛡️ 2. Security & Auto-Ban System (সক্রিয়)",
-        value="• `!ban @User [reason]` — মেম্বারকে ব্যান ও অডিট লগ পাঠানো\n"
-              "• `!unban <user_id>` — ব্যান তুলে নেওয়া (আনব্যান)\n"
-              "• `!kick @User [reason]` — মেম্বারকে কিক করা\n"
-              "• `!testban` — ব্যান লগ চ্যানেল টেস্ট করা\n"
-              "• `!whitelist @User` — সিকিউরিটি বাইপাস লিস্টে এড করা\n"
-              "• `!clear <1-100>` — ক্ষতিকর মেসেজ মুছতে",
+        name="🛡️ 2. Security & Auto-Ban System (ACTIVE)",
+        value="• `!ban @User [reason]` — Ban member & log audit alert\n"
+              "• `!unban <user_id>` — Revoke ban for a member by ID\n"
+              "• `!kick @User [reason]` — Kick member from server\n"
+              "• `!testban` — Test ban log channel delivery\n"
+              "• `!whitelist @User` — Add user to security bypass whitelist\n"
+              "• `!clear <1-100>` — Bulk purge harmful messages",
         inline=False
     )
 
     embed.add_field(
-        name="🎵 3. Voice & 192kbps Music Player (সক্রিয়)",
-        value="• `!join` বা `!vjoin` — বটকে আপনার ভয়েস চ্যানেলে জয়েন করানো\n"
-              "• `!song <নাম/URL>` বা `!play` — হাই-কোয়ালিটি গান প্লে করা\n"
-              "• `!stop` — গান থামানো\n"
-              "• `!volume <1-200>` — ভলিউম বাড়ানো/কমানো\n"
-              "• `!leave` বা `!dc` — ভয়েস চ্যানেল থেকে ডিসকানেক্ট\n"
-              "• `!drag @User` — ট্রোল ড্র্যাগ মুভ",
+        name="🎵 3. Voice & 192kbps Music Player (ACTIVE)",
+        value="• `!join` or `!vjoin` — Summon bot into your voice channel\n"
+              "• `!song <name/URL>` or `!play` — High-fidelity audio playback\n"
+              "• `!stop` — Stop playback & clear music queue\n"
+              "• `!volume <1-200>` — Adjust playback volume\n"
+              "• `!leave` or `!dc` — Disconnect bot from voice\n"
+              "• `!drag @User` — Relocate member into your voice channel",
         inline=False
     )
 

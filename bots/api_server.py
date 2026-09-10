@@ -301,8 +301,47 @@ def init_guild_welcome_db():
                 pass
         conn.commit()
     print("[WELCOME DB] Initialized guild_welcome_configs, guild_premium_subscriptions & vip_license_keys tables.")
+    sync_configs_with_json()
 
-init_web_auth_db()
+CONFIGS_JSON = DATA_DIR / "guild_configs.json"
+
+def sync_configs_with_json():
+    """Bidirectional sync between SQLite guild_welcome_configs and guild_configs.json."""
+    if not CONFIGS_JSON.exists():
+        try:
+            with sqlite3.connect(DISCORD_DB) as conn:
+                conn.row_factory = sqlite3.Row
+                cur = conn.cursor()
+                cur.execute("SELECT * FROM guild_welcome_configs")
+                rows = [dict(r) for r in cur.fetchall()]
+                if rows:
+                    data = {r["guild_id"]: r for r in rows}
+                    with open(CONFIGS_JSON, "w", encoding="utf-8") as f:
+                        json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[JSON EXPORT ERROR] {e}")
+        return
+
+    try:
+        with open(CONFIGS_JSON, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        with sqlite3.connect(DISCORD_DB) as conn:
+            cur = conn.cursor()
+            for gid, row in data.items():
+                cols = [k for k in row.keys() if k != "id"]
+                placeholders = ", ".join(["?"] * len(cols))
+                updates = ", ".join([f"{col} = excluded.{col}" for col in cols if col != "guild_id"])
+                sql = f"""
+                    INSERT INTO guild_welcome_configs ({', '.join(cols)})
+                    VALUES ({placeholders})
+                    ON CONFLICT(guild_id) DO UPDATE SET {updates}
+                """
+                cur.execute(sql, [row[c] for c in cols])
+            conn.commit()
+        print(f"[CONFIG PERSIST] Synchronized {len(data)} guild configs between SQLite & JSON!")
+    except Exception as e:
+        print(f"[JSON SYNC ERROR] {e}")
+
 init_router_db()
 init_security_bans_db()
 init_guild_welcome_db()
@@ -1311,8 +1350,8 @@ def get_welcome_templates():
             "category": "Tenor Discord Welcome",
             "badge": "DISCORD ICON",
             "media_type": "gif",
-            "gif_url": "https://media.tenor.com/l-ltKxPNF-gAAAAM/wumpus-discord.gif",
-            "preview_image": "https://media.tenor.com/l-ltKxPNF-gAAAAM/wumpus-discord.gif",
+            "gif_url": "https://media.tenor.com/l-ltKxPNF-gAAAAC/wumpus-discord.gif",
+            "preview_image": "https://media.tenor.com/l-ltKxPNF-gAAAAC/wumpus-discord.gif",
             "recommended_headline": "👋 Wumpus Welcomes You to the Guild!",
             "recommended_slogan": "Say hi to everyone in #chat! ✨",
         },
@@ -1322,8 +1361,8 @@ def get_welcome_templates():
             "category": "Tenor Discord Welcome",
             "badge": "PURPLE GLOW",
             "media_type": "gif",
-            "gif_url": "https://media.tenor.com/SwfzM4B-iDgAAAAM/sunrise-sunset.gif",
-            "preview_image": "https://media.tenor.com/SwfzM4B-iDgAAAAM/sunrise-sunset.gif",
+            "gif_url": "https://media.tenor.com/SwfzM4B-iDgAAAAC/sunrise-sunset.gif",
+            "preview_image": "https://media.tenor.com/SwfzM4B-iDgAAAAC/sunrise-sunset.gif",
             "recommended_headline": "🌅 Sunset Horizon Welcome Card",
             "recommended_slogan": "Vibe with us in voice channels 🎵",
         },
@@ -1333,8 +1372,8 @@ def get_welcome_templates():
             "category": "Tenor Discord Welcome",
             "badge": "PEACEFUL",
             "media_type": "gif",
-            "gif_url": "https://media.tenor.com/EP_XfzfTxoUAAAAM/welcome-discord-image-welcome.gif",
-            "preview_image": "https://media.tenor.com/EP_XfzfTxoUAAAAM/welcome-discord-image-welcome.gif",
+            "gif_url": "https://media.tenor.com/EP_XfzfTxoUAAAAC/welcome-discord-image-welcome.gif",
+            "preview_image": "https://media.tenor.com/EP_XfzfTxoUAAAAC/welcome-discord-image-welcome.gif",
             "recommended_headline": "🎐 Serene Sanctuary Welcome",
             "recommended_slogan": "Peaceful vibes, chill chat & gaming 🌸",
         },
@@ -1344,8 +1383,8 @@ def get_welcome_templates():
             "category": "Tenor Discord Welcome",
             "badge": "CITY VIBES",
             "media_type": "gif",
-            "gif_url": "https://media.tenor.com/9kUtnnOCJz4AAAAM/discord.gif",
-            "preview_image": "https://media.tenor.com/9kUtnnOCJz4AAAAM/discord.gif",
+            "gif_url": "https://media.tenor.com/9kUtnnOCJz4AAAAC/discord.gif",
+            "preview_image": "https://media.tenor.com/9kUtnnOCJz4AAAAC/discord.gif",
             "recommended_headline": "🌆 Neon City Hub // Welcome!",
             "recommended_slogan": "Stay tuned for giveaways & tournaments! 🎁",
         },
@@ -1355,8 +1394,8 @@ def get_welcome_templates():
             "category": "Tenor Discord Welcome",
             "badge": "LOFI AESTHETIC",
             "media_type": "gif",
-            "gif_url": "https://media.tenor.com/BDaDHtwaGUwAAAAM/aesthetic-discord-welcome-message.gif",
-            "preview_image": "https://media.tenor.com/BDaDHtwaGUwAAAAM/aesthetic-discord-welcome-message.gif",
+            "gif_url": "https://media.tenor.com/BDaDHtwaGUwAAAAC/aesthetic-discord-welcome-message.gif",
+            "preview_image": "https://media.tenor.com/BDaDHtwaGUwAAAAC/aesthetic-discord-welcome-message.gif",
             "recommended_headline": "☕ Aesthetic Chill Corner // Welcome to Server",
             "recommended_slogan": "Grab a coffee and chat with us 💫",
         },
@@ -1366,8 +1405,8 @@ def get_welcome_templates():
             "category": "Tenor Discord Welcome",
             "badge": "CYBER GLOW",
             "media_type": "gif",
-            "gif_url": "https://media.tenor.com/pHoyZ-wl2G8AAAAM/welcome-gif.gif",
-            "preview_image": "https://media.tenor.com/pHoyZ-wl2G8AAAAM/welcome-gif.gif",
+            "gif_url": "https://media.tenor.com/pHoyZ-wl2G8AAAAC/welcome-gif.gif",
+            "preview_image": "https://media.tenor.com/pHoyZ-wl2G8AAAAC/welcome-gif.gif",
             "recommended_headline": "⚡ Cyber Glow Nexus Welcome",
             "recommended_slogan": "Verified Member • Access Granted 🌐",
         },
@@ -1377,8 +1416,8 @@ def get_welcome_templates():
             "category": "Tenor Discord Welcome",
             "badge": "COMMUNITY",
             "media_type": "gif",
-            "gif_url": "https://media.tenor.com/LdToNSeF3L0AAAAM/welcomehs3.gif",
-            "preview_image": "https://media.tenor.com/LdToNSeF3L0AAAAM/welcomehs3.gif",
+            "gif_url": "https://media.tenor.com/LdToNSeF3L0AAAAC/welcomehs3.gif",
+            "preview_image": "https://media.tenor.com/LdToNSeF3L0AAAAC/welcomehs3.gif",
             "recommended_headline": "🎉 Welcome New Community Member!",
             "recommended_slogan": "Let's make memories together 🤝",
         },
@@ -1510,6 +1549,24 @@ def get_guild_welcome_config(guild_id: str):
         cur.execute("SELECT * FROM guild_welcome_configs WHERE guild_id = ?", (guild_id,))
         row = cur.fetchone()
         
+        # If missing from SQLite, attempt recovery from persistent guild_configs.json
+        if not row and CONFIGS_JSON.exists():
+            try:
+                with open(CONFIGS_JSON, "r", encoding="utf-8") as f:
+                    jdata = json.load(f)
+                    if guild_id in jdata:
+                        rec = jdata[guild_id]
+                        cols = [k for k in rec.keys() if k != "id"]
+                        placeholders = ", ".join(["?"] * len(cols))
+                        updates = ", ".join([f"{col} = excluded.{col}" for col in cols if col != "guild_id"])
+                        sql = f"INSERT INTO guild_welcome_configs ({', '.join(cols)}) VALUES ({placeholders}) ON CONFLICT(guild_id) DO UPDATE SET {updates}"
+                        cur.execute(sql, [rec[c] for c in cols])
+                        conn.commit()
+                        cur.execute("SELECT * FROM guild_welcome_configs WHERE guild_id = ?", (guild_id,))
+                        row = cur.fetchone()
+            except Exception as e:
+                print(f"[CONFIG RECOVERY ERROR] {e}")
+
         is_vip = bool(vip_sub) or (row and row["is_premium"] == 1)
         
         if row:
@@ -1582,8 +1639,13 @@ def save_guild_welcome_config(guild_id: str, req: GuildWelcomeConfigRequest):
         curr = cur.fetchone()
         is_vip = bool(vip_sub) or (curr and curr["is_premium"] == 1)
         
+        # Clean banner & auto-upgrade Tenor preview URL to full-resolution banner (AAAAC)
+        banner_clean = req.banner_gif_url or ""
+        if "tenor.com" in banner_clean and "AAAAC" in banner_clean:
+            banner_clean = banner_clean.replace("AAAAC", "AAAAC")
+
         # If user is trying to set a custom animated GIF banner but is NOT VIP:
-        if req.banner_gif_url and req.banner_gif_url.strip() and not is_vip:
+        if banner_clean and banner_clean.strip() and not is_vip:
             return JSONResponse(
                 status_code=403,
                 content={
@@ -1645,7 +1707,7 @@ def save_guild_welcome_config(guild_id: str, req: GuildWelcomeConfigRequest):
             req.author_name or "",
             req.welcome_headline or "✨ Welcome to our server!!",
             req.custom_message or "Stay With Us !! ❤️",
-            req.banner_gif_url or "",
+            banner_clean,
             req.thumbnail_url or "",
             req.footer_text or "Thanks for joining! 🧿",
             req.auto_role_name or "Member",
@@ -1662,6 +1724,26 @@ def save_guild_welcome_config(guild_id: str, req: GuildWelcomeConfigRequest):
             1 if req.auto_ban_enabled else 0,
         ))
         conn.commit()
+
+        # Persist to guild_configs.json immediately
+        try:
+            CONFIGS_JSON.parent.mkdir(parents=True, exist_ok=True)
+            all_configs = {}
+            if CONFIGS_JSON.exists():
+                try:
+                    with open(CONFIGS_JSON, "r", encoding="utf-8") as f:
+                        all_configs = json.load(f)
+                except Exception:
+                    all_configs = {}
+            cur.execute("SELECT * FROM guild_welcome_configs WHERE guild_id = ?", (guild_id,))
+            saved_row = cur.fetchone()
+            if saved_row:
+                all_configs[guild_id] = dict(saved_row)
+                with open(CONFIGS_JSON, "w", encoding="utf-8") as f:
+                    json.dump(all_configs, f, indent=2, ensure_ascii=False)
+                print(f"[CONFIG PERSIST] Wrote guild {guild_id} to guild_configs.json")
+        except Exception as e:
+            print(f"[JSON SAVE ERROR] {e}")
 
     return {"status": "saved", "guild_id": guild_id, "is_premium": is_vip}
 

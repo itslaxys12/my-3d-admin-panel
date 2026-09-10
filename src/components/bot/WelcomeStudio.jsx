@@ -28,8 +28,8 @@ const DEFAULT_TEMPLATES = [
     name: 'Tenor Wumpus Discord Hello',
     category: 'Tenor Discord Welcome',
     badge: 'DISCORD ICON',
-    gif_url: 'https://media.tenor.com/l-ltKxPNF-gAAAAM/wumpus-discord.gif',
-    preview_image: 'https://media.tenor.com/l-ltKxPNF-gAAAAM/wumpus-discord.gif',
+    gif_url: 'https://media.tenor.com/l-ltKxPNF-gAAAAC/wumpus-discord.gif',
+    preview_image: 'https://media.tenor.com/l-ltKxPNF-gAAAAC/wumpus-discord.gif',
     recommended_headline: '👋 Wumpus Welcomes You to the Guild!',
     recommended_slogan: 'Say hi to everyone in #chat! ✨',
   },
@@ -38,8 +38,8 @@ const DEFAULT_TEMPLATES = [
     name: 'Tenor Sunrise Sunset Purple Glow',
     category: 'Tenor Discord Welcome',
     badge: 'PURPLE GLOW',
-    gif_url: 'https://media.tenor.com/SwfzM4B-iDgAAAAM/sunrise-sunset.gif',
-    preview_image: 'https://media.tenor.com/SwfzM4B-iDgAAAAM/sunrise-sunset.gif',
+    gif_url: 'https://media.tenor.com/SwfzM4B-iDgAAAAC/sunrise-sunset.gif',
+    preview_image: 'https://media.tenor.com/SwfzM4B-iDgAAAAC/sunrise-sunset.gif',
     recommended_headline: '🌅 Sunset Horizon Welcome Card',
     recommended_slogan: 'Vibe with us in voice channels 🎵',
   },
@@ -48,8 +48,8 @@ const DEFAULT_TEMPLATES = [
     name: 'Tenor Wind Chime Welcome',
     category: 'Tenor Discord Welcome',
     badge: 'PEACEFUL',
-    gif_url: 'https://media.tenor.com/EP_XfzfTxoUAAAAM/welcome-discord-image-welcome.gif',
-    preview_image: 'https://media.tenor.com/EP_XfzfTxoUAAAAM/welcome-discord-image-welcome.gif',
+    gif_url: 'https://media.tenor.com/EP_XfzfTxoUAAAAC/welcome-discord-image-welcome.gif',
+    preview_image: 'https://media.tenor.com/EP_XfzfTxoUAAAAC/welcome-discord-image-welcome.gif',
     recommended_headline: '🎐 Serene Sanctuary Welcome',
     recommended_slogan: 'Peaceful vibes, chill chat & gaming 🌸',
   },
@@ -58,8 +58,8 @@ const DEFAULT_TEMPLATES = [
     name: 'Tenor Sunset City Skyline Welcome',
     category: 'Tenor Discord Welcome',
     badge: 'CITY VIBES',
-    gif_url: 'https://media.tenor.com/9kUtnnOCJz4AAAAM/discord.gif',
-    preview_image: 'https://media.tenor.com/9kUtnnOCJz4AAAAM/discord.gif',
+    gif_url: 'https://media.tenor.com/9kUtnnOCJz4AAAAC/discord.gif',
+    preview_image: 'https://media.tenor.com/9kUtnnOCJz4AAAAC/discord.gif',
     recommended_headline: '🌆 Neon City Hub // Welcome!',
     recommended_slogan: 'Stay tuned for giveaways & tournaments! 🎁',
   },
@@ -68,8 +68,8 @@ const DEFAULT_TEMPLATES = [
     name: 'Tenor Aesthetic Coffee Welcome',
     category: 'Tenor Discord Welcome',
     badge: 'LOFI AESTHETIC',
-    gif_url: 'https://media.tenor.com/BDaDHtwaGUwAAAAM/aesthetic-discord-welcome-message.gif',
-    preview_image: 'https://media.tenor.com/BDaDHtwaGUwAAAAM/aesthetic-discord-welcome-message.gif',
+    gif_url: 'https://media.tenor.com/BDaDHtwaGUwAAAAC/aesthetic-discord-welcome-message.gif',
+    preview_image: 'https://media.tenor.com/BDaDHtwaGUwAAAAC/aesthetic-discord-welcome-message.gif',
     recommended_headline: '☕ Aesthetic Chill Corner // Welcome to Server',
     recommended_slogan: 'Grab a coffee and chat with us 💫',
   },
@@ -78,8 +78,8 @@ const DEFAULT_TEMPLATES = [
     name: 'Tenor Cyber Neon Violet Welcome',
     category: 'Tenor Discord Welcome',
     badge: 'CYBER GLOW',
-    gif_url: 'https://media.tenor.com/pHoyZ-wl2G8AAAAM/welcome-gif.gif',
-    preview_image: 'https://media.tenor.com/pHoyZ-wl2G8AAAAM/welcome-gif.gif',
+    gif_url: 'https://media.tenor.com/pHoyZ-wl2G8AAAAC/welcome-gif.gif',
+    preview_image: 'https://media.tenor.com/pHoyZ-wl2G8AAAAC/welcome-gif.gif',
     recommended_headline: '⚡ Cyber Glow Nexus Welcome',
     recommended_slogan: 'Verified Member • Access Granted 🌐',
   },
@@ -88,8 +88,8 @@ const DEFAULT_TEMPLATES = [
     name: 'Tenor Community HS3 Welcome',
     category: 'Tenor Discord Welcome',
     badge: 'COMMUNITY',
-    gif_url: 'https://media.tenor.com/LdToNSeF3L0AAAAM/welcomehs3.gif',
-    preview_image: 'https://media.tenor.com/LdToNSeF3L0AAAAM/welcomehs3.gif',
+    gif_url: 'https://media.tenor.com/LdToNSeF3L0AAAAC/welcomehs3.gif',
+    preview_image: 'https://media.tenor.com/LdToNSeF3L0AAAAC/welcomehs3.gif',
     recommended_headline: '🎉 Welcome New Community Member!',
     recommended_slogan: 'Let\'s make memories together 🤝',
   },
@@ -254,7 +254,23 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
     try {
       const res = await fetch(`${API}/api/bot/guild/${guildId}/welcome_config`);
       if (res.ok) {
-        const data = await res.json();
+        let data = await res.json();
+        // Auto-restore from localStorage cache if server had missing banner or channels
+        try {
+          const cachedStr = localStorage.getItem(`gmx_guild_config_${guildId}`);
+          if (cachedStr) {
+            const cached = JSON.parse(cachedStr);
+            if (!data.banner_gif_url && cached.banner_gif_url) {
+              data = { ...cached, ...data, banner_gif_url: cached.banner_gif_url };
+              fetch(`${API}/api/bot/guild/${guildId}/welcome_config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+              }).catch(() => {});
+            }
+          }
+        } catch {}
+
         setIsVip(!!data.is_premium);
         setWelcomeChannelId(data.welcome_channel_id || '');
         setWelcomeLogChannelId(data.welcome_log_channel_id || '');
@@ -351,6 +367,9 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
       }
 
       if (res.ok) {
+        try {
+          localStorage.setItem(`gmx_guild_config_${currentGuild.id}`, JSON.stringify(payload));
+        } catch {}
         showToast('Welcome configuration saved successfully!');
       } else {
         const err = await res.json();
@@ -1038,7 +1057,7 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-400 font-sans">
-                        অননুমোদিত চ্যানেল ডিলেট, রোল ডিলেট বা আক্রমণকারীদের প্রতিহত করে তাৎক্ষণিক অটো-ব্যান ও অডিট লগ ডিসপ্যাচ করবে।
+                        Blocks unauthorized channel deletions, role tampering, and raiders with instant auto-ban and audit logging.
                       </p>
                     </div>
 
@@ -1071,7 +1090,7 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-400 font-sans">
-                        ক্ষতিকর .exe, .bat ফাইল ও সন্দেহজনক এটাচমেন্ট পাঠানো হলে বট অটো রিমুভ ও সতর্ক করবে।
+                        Auto-removes malicious .exe, .bat files and suspicious attachments, warning or banning non-whitelisted senders.
                       </p>
                     </div>
 
@@ -1095,18 +1114,18 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                   {/* Commands Cheatsheet Box */}
                   <div className="space-y-2 pt-1">
                     <div className="text-[11px] font-bold text-rose-300 flex items-center justify-between px-1">
-                      <span>⚡ সংশ্লিষ্ট ডিসকর্ড কমান্ডসমূহ (Click Copy to use in Discord):</span>
+                      <span>⚡ Active Security & Ban Commands (Click Copy to use in Discord):</span>
                       <span className="text-slate-500 text-[10px]">Permission: Admin/Ban</span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {[
-                        { cmd: '!ban @user [reason]', desc: 'মেম্বারকে সরাসরি ব্যান ও ব্যান লগে অডিট পাঠানো' },
-                        { cmd: '!unban <user_id>', desc: 'ব্যান হওয়া মেম্বারকে আইডি দিয়ে আনব্যান করা' },
-                        { cmd: '!kick @user [reason]', desc: 'মেম্বারকে সার্ভার থেকে কিক করা' },
-                        { cmd: '!testban', desc: 'ব্যান লগ চ্যানেল ঠিকমতো কাজ করছে কিনা টেস্ট করা' },
-                        { cmd: '!whitelist @user', desc: 'বিশ্বস্ত স্টাফকে সিকিউরিটি বাইপাস লিস্টে যোগ করা' },
-                        { cmd: '!clear 20', desc: 'চ্যাট থেকে দ্রুত অনাকাঙ্ক্ষিত মেসেজ ক্লিন করা' },
+                        { cmd: '!ban @user [reason]', desc: 'Ban member directly and dispatch audit log to Ban Log channel' },
+                        { cmd: '!unban <user_id>', desc: 'Unban a previously banned user by their Discord User ID' },
+                        { cmd: '!kick @user [reason]', desc: 'Kick unauthorized member from the server' },
+                        { cmd: '!testban', desc: 'Test if the Ban Log channel receives security ban alerts properly' },
+                        { cmd: '!whitelist @user', desc: 'Add trusted staff member to security bypass whitelist' },
+                        { cmd: '!clear 20', desc: 'Quickly clean up unwanted spam messages from chat' },
                       ].map((item) => (
                         <div
                           key={item.cmd}
@@ -1149,7 +1168,7 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-400 font-sans">
-                        ১৯২kbps ক্রিস্টাল ক্লিয়ার অডিও স্ট্রিমিং ও লো-লেটেন্সি ভয়েস কানেকশন দিয়ে ইউটিউব গান বাজানো।
+                        192kbps crystal-clear audio streaming and low-latency voice playback for music and tracks.
                       </p>
                     </div>
 
@@ -1173,18 +1192,18 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                   {/* Commands Cheatsheet Box */}
                   <div className="space-y-2 pt-1">
                     <div className="text-[11px] font-bold text-purple-300 flex items-center justify-between px-1">
-                      <span>⚡ ভয়েস ও মিউজিক কমান্ডসমূহ (Click Copy to use in Discord):</span>
+                      <span>⚡ Voice & Music Commands (Click Copy to use in Discord):</span>
                       <span className="text-slate-500 text-[10px]">192kbps Opus Audio</span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {[
-                        { cmd: '!join', desc: 'বটকে আপনার ভয়েস চ্যানেলে জয়েন করানো (!vjoin)' },
-                        { cmd: '!song <নাম বা URL>', desc: '১৯২kbps হাই-কোয়ালিটি অডিও প্লে করা (!play)' },
-                        { cmd: '!stop', desc: 'মিউজিক থামানো ও প্লেলিস্ট ক্লিয়ার করা' },
-                        { cmd: '!volume 80', desc: 'সাউন্ড ভলিউম বাড়ানো বা কমানো (১-২০০)' },
-                        { cmd: '!leave', desc: 'ভয়েস চ্যানেল থেকে বটকে বের করা (!dc)' },
-                        { cmd: '!drag @user', desc: 'মজার ট্রোল ড্র্যাগ মুভ কমান্ড' },
+                        { cmd: '!join', desc: 'Connect bot to your current voice channel (!vjoin)' },
+                        { cmd: '!song <name or URL>', desc: 'Play 192kbps high-fidelity audio track (!play)' },
+                        { cmd: '!stop', desc: 'Stop music playback and clear the playlist queue' },
+                        { cmd: '!volume 80', desc: 'Adjust audio playback volume percentage (1-200)' },
+                        { cmd: '!leave', desc: 'Disconnect bot from voice channel (!dc)' },
+                        { cmd: '!drag @user', desc: 'Relocate mentioned user into your current voice channel' },
                       ].map((item) => (
                         <div
                           key={item.cmd}
@@ -1220,7 +1239,7 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                        <span className="font-bold text-emerald-300 text-sm">ওয়েলকাম চেক ও লাইভ ভেরিফিকেশন কমান্ড</span>
+                        <span className="font-bold text-emerald-300 text-sm">Welcome Check & Live Verification Command</span>
                       </div>
                       <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/40">
                         READY TO TEST
@@ -1228,7 +1247,7 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                     </div>
 
                     <p className="text-xs text-slate-300 font-sans leading-relaxed">
-                      আপনার ওয়েলকাম ফিচারটি সত্যিই কাজ করছে কিনা তা সরাসরি ডিসকর্ড চ্যাটে টেস্ট করার জন্য নিচে দেওয়া কমান্ডটি ব্যবহার করুন। এই কমান্ডটি দিলে বট সাথে সাথে আপনার কনফিগার করা লাইভ ওয়েলকাম কার্ড, Tenor অ্যানিমেটেড ব্যানার এবং চ্যানেল লিংক পোস্ট করে দেখিয়ে দেবে।
+                      To test whether your welcome system is really working, run the command below directly in your Discord chat. The bot will immediately post your live welcome card with the Tenor animated banner and channel links.
                     </p>
 
                     <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
@@ -1262,18 +1281,18 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                   {/* Commands Cheatsheet Box */}
                   <div className="space-y-2 pt-1">
                     <div className="text-[11px] font-bold text-emerald-300 flex items-center justify-between px-1">
-                      <span>⚡ ওয়েলকাম ও চ্যানেল সেটআপ কমান্ডসমূহ:</span>
+                      <span>⚡ Welcome & Channel Setup Commands:</span>
                       <span className="text-slate-500 text-[10px]">Permission: Admin</span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {[
-                        { cmd: '!welcome', desc: 'ওয়েলকাম কার্ড লাইভ টেস্ট করা ও কাজ করছে কিনা তা চেক' },
-                        { cmd: '!testwelcome', desc: 'অল্টারনেটিভ টেস্ট কমান্ড (একই কাজ করে)' },
-                        { cmd: '!setwelcome #welcome', desc: 'ডিসকর্ড চ্যাট থেকে সরাসরি ওয়েলকাম চ্যানেল নির্ধারণ' },
-                        { cmd: '!setlog #staff-logs', desc: 'ডিসকর্ড থেকে সিকিউরিটি ও ব্যান লগ চ্যানেল নির্ধারণ' },
-                        { cmd: '!autorole Member', desc: 'নতুনদের জন্য অটো-রোল সিলেক্ট করা' },
-                        { cmd: '!userinfo @user', desc: 'মেম্বারের বিস্তারিত প্রোফাইল ও সার্ভার জয়েন তথ্য' },
+                        { cmd: '!welcome', desc: 'Live test welcome card and verify delivery in chat' },
+                        { cmd: '!testwelcome', desc: 'Alternative test command (triggers same live welcome preview)' },
+                        { cmd: '!setwelcome #welcome', desc: 'Configure welcome channel directly from Discord chat' },
+                        { cmd: '!setlog #staff-logs', desc: 'Configure security and ban log audit channel directly from Discord' },
+                        { cmd: '!autorole Member', desc: 'Configure automatic role assignment for new joining members' },
+                        { cmd: '!userinfo @user', desc: 'Inspect member profile telemetry and server join date' },
                       ].map((item) => (
                         <div
                           key={item.cmd}
@@ -1520,7 +1539,7 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                 <Crown className="w-8 h-8 text-slate-950 fill-slate-950" />
               </div>
               <h3 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400 font-heading">
-                GMX VIP Premium Suite (150 ৳)
+                GMX VIP Premium Suite (150 BDT)
               </h3>
               <p className="text-xs text-slate-400 font-mono">
                 Full server customization for <strong>{currentGuild?.name || 'Your Server'}</strong> • Price: <span className="text-amber-400 font-bold">150 Taka Lifetime</span>
@@ -1539,7 +1558,7 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                 }`}
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>⚡ Buy VIP (150 ৳)</span>
+                <span>⚡ Buy VIP (150 BDT)</span>
               </button>
               <button
                 type="button"
@@ -1580,7 +1599,7 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                 <div className="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-500/30 text-xs font-mono space-y-1.5 text-slate-300">
                   <div className="flex items-center gap-2 text-amber-200 font-bold">
                     <Crown className="w-3.5 h-3.5 text-amber-400" />
-                    <span>ফুল ভিআইপি অ্যাক্সেসে যা যা পাবেন (150 ৳):</span>
+                    <span>What VIP Access Unlocks (150 BDT Lifetime):</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] pt-1 text-slate-300">
                     <div className="flex items-center gap-1.5">
@@ -1605,7 +1624,7 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>অটোমেটিক লাইসেন্স কি তৈরি</span>
+                      <span>Automatic VIP License Key Generation</span>
                     </div>
                   </div>
                 </div>
@@ -1615,23 +1634,23 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-mono font-bold text-emerald-400 flex items-center gap-1.5">
                       <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>পেমেন্ট মাধ্যম (Send Money 150 TK)</span>
+                      <span>Payment Method (Send Money 150 BDT)</span>
                     </span>
                     <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
-                      150 ৳ Personal
+                      150 BDT Personal
                     </span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-xs">
                     <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-center">
-                      <span className="text-pink-400 font-bold block text-[11px]">bKash (বিকাশ)</span>
+                      <span className="text-pink-400 font-bold block text-[11px]">bKash (Personal)</span>
                       <span className="text-slate-200 font-bold select-all">01878486009</span>
                     </div>
                     <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-center">
-                      <span className="text-orange-400 font-bold block text-[11px]">Nagad (নগদ)</span>
+                      <span className="text-orange-400 font-bold block text-[11px]">Nagad (Personal)</span>
                       <span className="text-slate-200 font-bold select-all">01878486009</span>
                     </div>
                     <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-center">
-                      <span className="text-purple-400 font-bold block text-[11px]">Rocket (রকেট)</span>
+                      <span className="text-purple-400 font-bold block text-[11px]">Rocket (Personal)</span>
                       <span className="text-slate-200 font-bold select-all">01878486009</span>
                     </div>
                   </div>
@@ -1641,20 +1660,20 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                 <form onSubmit={handleAutoBuyVip} className="space-y-3 font-mono">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-300">পেমেন্ট মেথড</label>
+                      <label className="text-[11px] font-bold text-slate-300">Payment Method</label>
                       <select
                         value={paymentMethod}
                         onChange={(e) => setPaymentMethod(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-400"
                       >
-                        <option value="bKash">bKash (বিকাশ)</option>
-                        <option value="Nagad">Nagad (নগদ)</option>
-                        <option value="Rocket">Rocket (রকেট)</option>
+                        <option value="bKash">bKash (Personal)</option>
+                        <option value="Nagad">Nagad (Personal)</option>
+                        <option value="Rocket">Rocket (Personal)</option>
                       </select>
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-300">আপনার নাম / Discord Tag</label>
+                      <label className="text-[11px] font-bold text-slate-300">Your Name / Discord Tag</label>
                       <input
                         type="text"
                         value={buyerNameInput}
@@ -1668,7 +1687,7 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                   <div className="space-y-1">
                     <label className="text-[11px] font-bold text-amber-300 flex items-center justify-between">
                       <span>Transaction ID (TrxID)</span>
-                      <span className="text-[10px] text-slate-500 font-normal">Send Money করার পর পাওয়া কোড</span>
+                      <span className="text-[10px] text-slate-500 font-normal">Transaction code received after sending money</span>
                     </label>
                     <input
                       type="text"
@@ -1691,13 +1710,13 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                     <div className="p-4 rounded-2xl bg-emerald-950/80 border-2 border-emerald-400 text-center space-y-2">
                       <div className="flex items-center justify-center gap-1.5 text-emerald-300 font-bold text-sm">
                         <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                        <span>ভিআইপি সফলভাবে সক্রিয় হয়েছে!</span>
+                        <span>VIP Successfully Activated!</span>
                       </div>
                       <div className="p-2.5 rounded-xl bg-slate-950 border border-emerald-500/40 font-mono text-xs text-amber-300 font-bold select-all tracking-wider">
                         {autoGeneratedKey}
                       </div>
                       <p className="text-[11px] text-slate-300">
-                        আপনার লাইসেন্স কি সেভ করে রাখুন। এই সার্ভারের জন্য আজীবন ভিআইপি আনলক হয়ে গেছে!
+                        Save your license key! Lifetime VIP is now permanently unlocked for this server.
                       </p>
                     </div>
                   )}
@@ -1707,7 +1726,7 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                     disabled={autoBuying}
                     className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-extrabold text-xs uppercase tracking-wider shadow-[0_0_25px_rgba(245,158,11,0.4)] transition-all active:scale-95 disabled:opacity-50"
                   >
-                    {autoBuying ? 'Verifying & Generating...' : '⚡ Verify & Generate VIP License Key (150 ৳)'}
+                    {autoBuying ? 'Verifying & Generating...' : '⚡ Verify & Generate VIP License Key (150 BDT)'}
                   </button>
 
                   <button
@@ -1784,7 +1803,7 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                     className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
                   >
                     <Crown className="w-3.5 h-3.5 text-yellow-300" />
-                    <span>{generatingKey ? 'Generating...' : '+ Generate 150 ৳ Key'}</span>
+                    <span>{generatingKey ? 'Generating...' : '+ Generate 150 BDT Key'}</span>
                   </button>
                 </div>
 
@@ -1816,7 +1835,7 @@ export function WelcomeStudio({ guilds = [], isOwner = false }) {
                             </span>
                           </div>
                           <div className="text-[10px] text-slate-500 mt-0.5">
-                            Price: 150 ৳ • Created: {k.created_at ? k.created_at.substring(0, 10) : 'Today'}
+                            Price: 150 BDT • Created: {k.created_at ? k.created_at.substring(0, 10) : 'Today'}
                           </div>
                         </div>
                         <button
