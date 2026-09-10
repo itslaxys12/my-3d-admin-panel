@@ -18,16 +18,14 @@ export function GlassCard({
   onClick,
 }) {
   const cardRef = useRef(null);
-  const [rotateX, setRotateX] = useState(0);
-  const [rotateY, setRotateY] = useState(0);
-  const [glarePos, setGlarePos] = useState({ x: 50, y: 50, opacity: 0 });
+  const glareRef = useRef(null);
 
   const glowStyles = {
-    cyan: 'border-cyan-500/20 hover:border-cyan-400/50 hover:shadow-[0_10px_35px_rgba(0,240,255,0.15)]',
-    purple: 'border-purple-500/20 hover:border-purple-400/50 hover:shadow-[0_10px_35px_rgba(168,85,247,0.15)]',
-    pink: 'border-pink-500/20 hover:border-pink-400/50 hover:shadow-[0_10px_35px_rgba(255,0,127,0.15)]',
-    green: 'border-emerald-500/20 hover:border-emerald-400/50 hover:shadow-[0_10px_35px_rgba(0,255,157,0.15)]',
-    default: 'border-slate-700/50 hover:border-slate-500/50 hover:shadow-lg',
+    cyan: 'border-cyan-500/20 hover:border-cyan-400/50 hover:shadow-[0_8px_30px_rgba(0,240,255,0.12)]',
+    purple: 'border-purple-500/20 hover:border-purple-400/50 hover:shadow-[0_8px_30px_rgba(168,85,247,0.12)]',
+    pink: 'border-pink-500/20 hover:border-pink-400/50 hover:shadow-[0_8px_30px_rgba(255,0,127,0.12)]',
+    green: 'border-emerald-500/20 hover:border-emerald-400/50 hover:shadow-[0_8px_30px_rgba(0,255,157,0.12)]',
+    default: 'border-slate-800/80 hover:border-slate-700 hover:shadow-lg',
   };
 
   const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0));
@@ -42,44 +40,43 @@ export function GlassCard({
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
 
-    const rotX = ((y - centerY) / centerY) * -7;
-    const rotY = ((x - centerX) / centerX) * 7;
+    const rotX = ((y - centerY) / centerY) * -4;
+    const rotY = ((x - centerX) / centerX) * 4;
 
-    setRotateX(rotX);
-    setRotateY(rotY);
-    setGlarePos({
-      x: (x / rect.width) * 100,
-      y: (y / rect.height) * 100,
-      opacity: 0.15,
-    });
+    cardRef.current.style.transform = `perspective(800px) rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg)`;
+    if (glareRef.current) {
+      glareRef.current.style.opacity = '0.12';
+      glareRef.current.style.background = `radial-gradient(circle at ${(x / rect.width) * 100}% ${(y / rect.height) * 100}%, rgba(255,255,255,0.2) 0%, transparent 60%)`;
+    }
   };
 
   const handleMouseLeave = () => {
-    if (!enableTilt) return;
-    setRotateX(0);
-    setRotateY(0);
-    setGlarePos((prev) => ({ ...prev, opacity: 0 }));
+    if (!enableTilt || !cardRef.current) return;
+    cardRef.current.style.transform = 'perspective(800px) rotateX(0deg) rotateY(0deg)';
+    if (glareRef.current) {
+      glareRef.current.style.opacity = '0';
+    }
   };
 
   return (
-    <motion.div
+    <div
       ref={cardRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onClick={onClick}
       style={{
-        transform: tiltEffect ? `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)` : 'none',
-        transition: 'transform 0.15s ease-out, border-color 0.3s ease, box-shadow 0.3s ease',
+        transform: 'perspective(800px) rotateX(0deg) rotateY(0deg)',
+        transition: 'transform 0.15s ease-out, border-color 0.2s ease, box-shadow 0.2s ease',
+        transformStyle: 'preserve-3d',
+        willChange: enableTilt ? 'transform' : 'auto',
       }}
-      className={`relative overflow-hidden rounded-2xl bg-slate-900/65 backdrop-blur-xl border ${glowStyles[glowColor] || glowStyles.default} p-5 ${className}`}
+      className={`relative overflow-hidden rounded-2xl bg-slate-900/80 backdrop-blur-md border ${glowStyles[glowColor] || glowStyles.default} p-5 ${className}`}
     >
       {/* Dynamic Glare Reflection Overlay */}
-      {tiltEffect && (
+      {enableTilt && (
         <div
-          className="pointer-events-none absolute inset-0 transition-opacity duration-300"
-          style={{
-            background: `radial-gradient(circle at ${glarePos.x}% ${glarePos.y}%, rgba(255,255,255,${glarePos.opacity}) 0%, transparent 60%)`,
-          }}
+          ref={glareRef}
+          className="pointer-events-none absolute inset-0 transition-opacity duration-200 opacity-0"
         />
       )}
 
@@ -103,7 +100,7 @@ export function GlassCard({
 
       {/* Card Content */}
       <div className={`relative z-10 ${contentClassName}`}>{children}</div>
-    </motion.div>
+    </div>
   );
 }
 

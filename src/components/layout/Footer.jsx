@@ -1,10 +1,20 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Activity, ShieldCheck, Wifi, Zap } from 'lucide-react';
 
-export function Footer({ isCollapsed, fps = 412 }) {
+export function Footer({ isCollapsed, fps: propFps }) {
+  const [fps, setFps] = useState(propFps || 60);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const randomFluctuation = Math.floor(Math.random() * 6) - 3;
+      setFps(60 + randomFluctuation);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <footer
-      className={`fixed bottom-0 right-0 z-20 h-10 border-t border-cyan-500/20 bg-slate-950/45 backdrop-blur-xl transition-all duration-300 flex items-center justify-between px-3 sm:px-6 text-xs text-slate-400 font-mono left-0 ${
+      className={`fixed bottom-0 right-0 z-20 h-10 border-t border-cyan-500/20 bg-slate-950/60 backdrop-blur-md transition-all duration-300 flex items-center justify-between px-3 sm:px-6 text-xs text-slate-400 font-mono left-0 ${
         isCollapsed ? 'md:left-20' : 'md:left-64'
       }`}
     >

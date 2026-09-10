@@ -50,7 +50,7 @@ export function Dashboard() {
   return (
     <div className="space-y-6 pb-12">
       {/* Top Welcome Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-purple-950/40 border border-cyan-500/30 backdrop-blur-xl shadow-2xl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-purple-950/40 border border-cyan-500/30 backdrop-blur-md shadow-2xl">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 text-xs font-mono">
@@ -223,7 +223,7 @@ export function Dashboard() {
           </div>
 
           {/* Real-Time Defense & Whitelist Banner */}
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-950/80 via-slate-900/60 to-cyan-950/30 border border-emerald-500/30 backdrop-blur-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono">
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-950/80 via-slate-900/60 to-cyan-950/30 border border-emerald-500/30 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
                 <ShieldCheck className="w-5 h-5" />

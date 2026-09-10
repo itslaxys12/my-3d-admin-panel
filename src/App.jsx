@@ -75,7 +75,6 @@ export function App() {
 
   const {
     mousePos,
-    fps,
     quality,
     updateQuality,
     bloomEnabled,
@@ -362,7 +361,7 @@ export function App() {
       />
 
       {/* Bottom Telemetry Footer */}
-      <Footer isCollapsed={isCollapsed} fps={fps} />
+      <Footer isCollapsed={isCollapsed} />
     </div>
   );
 }

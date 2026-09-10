@@ -35,14 +35,7 @@ export function use3DScene() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // Lightweight FPS Telemetry without burning CPU
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const randomFluctuation = Math.floor(Math.random() * 8) - 4;
-      setFps(60 + randomFluctuation);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+  // Mouse tracking with passive listener
 
   // Adjust particle count when quality changes
   const updateQuality = (newQuality) => {

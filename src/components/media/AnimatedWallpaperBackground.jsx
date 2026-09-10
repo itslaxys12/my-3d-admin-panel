@@ -187,32 +187,46 @@ export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
     };
   }, [isMobile]);
 
+  // Auto-pause video and canvas when tab is hidden or backgrounded (battery & CPU saver)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (videoRef.current) videoRef.current.pause();
+      } else {
+        if (videoRef.current) videoRef.current.play().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
   return (
     <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none bg-[#02040a]">
-      {/* Container with Ken Burns & Parallax */}
+      {/* Container with Static Hardware-Accelerated Staging */}
       <div
         ref={wrapperRef}
-        className="absolute inset-[-4%] w-[108%] h-[108%] transition-transform duration-500 ease-out will-change-transform"
+        className="absolute inset-0 w-full h-full will-change-transform"
         style={{
-          transform: isMobile ? 'scale(1.02)' : 'translate3d(0, 0, 0) scale(1.03)',
+          transform: 'translateZ(0)',
         }}
       >
-        {/* Animated 60 FPS Video Loop */}
+        {/* Animated Optimized Video Loop (No expensive continuous CPU scaling) */}
         <video
           ref={videoRef}
           key={activeWallpaper.video}
           src={activeWallpaper.video}
           poster={activeWallpaper.image}
+          preload="metadata"
           autoPlay
           loop
           muted
           playsInline
           onLoadedData={() => setIsVideoReady(true)}
-          className={`w-full h-full object-cover object-center filter brightness-[0.70] contrast-[1.08] saturate-[1.12] transition-opacity duration-1000 ${
+          className={`w-full h-full object-cover object-center filter brightness-[0.70] contrast-[1.08] saturate-[1.12] transition-opacity duration-700 ${
             isVideoReady ? 'opacity-90' : 'opacity-40'
           }`}
           style={{
-            animation: isMobile ? 'none' : 'kenBurnsSubtle 35s ease-in-out infinite alternate',
+            transform: 'translateZ(0)',
           }}
         />
 
