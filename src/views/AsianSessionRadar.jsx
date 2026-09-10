@@ -44,17 +44,31 @@ const DEMO_SETUPS = [
     sweepType: 'Asian Low Swept (SSL Taken)',
     phase: 'London Open Manipulation (Judas Swing)',
     direction: 'BULLISH',
+    marketDirection: 'BULLISH (UP)',
     probability: '92% High Probability (5M Scalp)',
     confidenceScore: 92,
-    predictedMove: '5M Bullish Expansion targeting Asia High and London High (+40 to +90 Pips)',
-    narrative: 'Asian Low (2354.20) was aggressively swept on the 5-Minute timeframe during London Open at 08:15 UTC. Smart Money purged retail stop losses below 2354.20, rejected sharply with a long wick, and confirmed a 5M Market Structure Shift (MSS) with an unfilled 5M Bullish Fair Value Gap (FVG). High-probability 5M scalping continuation toward Asian High.',
+    predictedMove: '5M Bullish Expansion targeting Asia High ($2368.50) and London High ($2374.00)',
+    narrative: 'Asian Low ($2354.20) was aggressively swept on the 5-Minute timeframe during London Open at 08:15 UTC. Smart Money purged retail stop losses below 2354.20, rejected sharply with a long wick, and confirmed a 5M Market Structure Shift (MSS) with an unfilled 5M Bullish Fair Value Gap (FVG). High-probability 5M scalping continuation toward Asian High.',
     entry: 2358.40,
     stopLoss: 2353.10,
+    slDistance: '5.3 Pips ($5.30)',
     takeProfit1: 2368.50,
+    tp1Distance: '+10.1 Pips ($10.10)',
     takeProfit2: 2374.00,
+    tp2Distance: '+15.6 Pips ($15.60)',
     riskReward: '1 : 3.6',
     pipsProjected: '+101 Pips',
-    status: 'ACTIVE 5M SIGNAL'
+    status: 'ACTIVE 5M SIGNAL',
+    bestOption: 'Limit Order inside 5M Bullish FVG at $2358.40. Tight 5-pip stop gives optimal 1:3.6 R:R.',
+    slPlacementGuide: 'Place SL at $2353.10 (exactly 2 pips below the $2354.20 sweep wick). If price crosses this, the setup is invalidated.',
+    tp1PlacementGuide: 'Take 50% Profit at $2368.50 (Asian High Buy-Side Liquidity Pool). Move Stop Loss to Entry (Risk-Free).',
+    tp2PlacementGuide: 'Trail remaining 50% runner to $2374.00 (London Session Peak Expansion High).',
+    howItMoves: [
+      { step: '1. Liquidity Sweep', title: 'Fake Break Below Asia Low', desc: 'Price purged $2354.20 trapping retail breakout sellers into bad short positions.' },
+      { step: '2. 5M Displacement', title: 'Institutional Buy Impulse', desc: 'Sharp 5M green candle displacement created a clear Bullish Fair Value Gap (FVG).' },
+      { step: '3. Optimal Retest', title: '5M FVG Tap @ $2358.40', desc: 'Best Entry: Price pulls back into the discount zone of the 5M FVG for high R:R entry.' },
+      { step: '4. Target Expansion', title: 'Pump to Asia High $2368.50', desc: 'Heavy buy momentum sweeps resting buy stops at $2368.50 for +101 pips profit.' }
+    ]
   },
   {
     id: 'setup-eur-1',
@@ -67,17 +81,31 @@ const DEMO_SETUPS = [
     sweepType: 'Asian High Swept (BSL Taken)',
     phase: 'London Open Judas Swing (Bearish Trap)',
     direction: 'BEARISH',
+    marketDirection: 'BEARISH (DOWN)',
     probability: '87% High Probability (5M Scalp)',
     confidenceScore: 87,
-    predictedMove: '5M Bearish Reversal targeting Asia Low and Previous Day Low (+35 to +55 Pips)',
+    predictedMove: '5M Bearish Reversal targeting Asia Low (1.0840) and Previous Day Low (1.0815)',
     narrative: 'Asian High (1.0895) was breached on the 5-Minute chart during Frankfurt pre-market, triggering early breakout buyers. Rapid bearish displacement followed with a 5M displacement candle closing below the 5M order block. Expect aggressive move lower towards Asian Low.',
     entry: 1.0885,
     stopLoss: 1.0902,
+    slDistance: '1.7 Pips',
     takeProfit1: 1.0840,
+    tp1Distance: '+4.5 Pips',
     takeProfit2: 1.0815,
+    tp2Distance: '+7.0 Pips',
     riskReward: '1 : 2.9',
     pipsProjected: '+45 Pips',
-    status: 'COMPLETED (+45 PIPS)'
+    status: 'COMPLETED (+45 PIPS)',
+    bestOption: 'Market execution on 5M candle close or limit sell at 1.0885 order block retest.',
+    slPlacementGuide: 'Place SL at 1.0902 (2 pips above Asian High sweep wick 1.0898). Tight risk of 17 pips.',
+    tp1PlacementGuide: 'Take 50% Profit at 1.0840 (Asian Low Sell-Side Liquidity). Move SL to Breakeven.',
+    tp2PlacementGuide: 'Hold remaining 50% runner to 1.0815 (Previous Day Low liquidity pool).',
+    howItMoves: [
+      { step: '1. Liquidity Sweep', title: 'Fake Spike Above Asia High', desc: 'Price broke 1.0895 triggering retail buy stops before reversing aggressively.' },
+      { step: '2. Bearish Displacement', title: '5M Order Block Formed', desc: 'Heavy selling displacement formed a Bearish FVG on the 5-Minute chart.' },
+      { step: '3. Optimal Retest', title: 'Pullback to 1.0885', desc: 'Best Entry: Tap into premium pricing before the London open drop.' },
+      { step: '4. Target Expansion', title: 'Dump to Asia Low 1.0840', desc: 'Smooth decline into Asian Low Sell-Side Liquidity (+45 pips).' }
+    ]
   }
 ];
 
@@ -425,12 +453,41 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                 <line x1="530" y1="180" x2="530" y2="240" stroke="#00ff9d" strokeWidth="2.5" />
                 <rect x="524" y="190" width="12" height="35" fill="#00ff9d" />
 
+                {/* ─── TRADINGVIEW POSITION TOOL (TP & SL BOX) ─── */}
+                {/* Green Take Profit Zone (Entry Y: 220 to TP1 Y: 100) */}
+                <rect x="540" y="100" width="220" height="120" fill="rgba(16, 185, 129, 0.15)" stroke="#10b981" strokeWidth="1" strokeDasharray="3 3" />
+                
+                {/* Red Stop Loss Zone (Entry Y: 220 to SL Y: 350) */}
+                <rect x="540" y="220" width="220" height="130" fill="rgba(244, 63, 94, 0.15)" stroke="#f43f5e" strokeWidth="1" strokeDasharray="3 3" />
+
+                {/* TP1 Line & Label */}
+                <line x1="530" y1="100" x2="760" y2="100" stroke="#10b981" strokeWidth="2" />
+                <rect x="630" y="86" width="130" height="20" rx="4" fill="#065f46" stroke="#10b981" strokeWidth="1" />
+                <text x="638" y="100" fill="#34d399" fontSize="10" fontFamily="monospace" fontWeight="bold">TP1: {activeSetup.takeProfit1} (+101p)</text>
+
+                {/* TP2 Line & Label */}
+                <line x1="530" y1="60" x2="760" y2="60" stroke="#10b981" strokeWidth="1.5" strokeDasharray="4 2" />
+                <rect x="630" y="46" width="130" height="20" rx="4" fill="#064e3b" stroke="#10b981" strokeWidth="1" />
+                <text x="638" y="60" fill="#6ee7b7" fontSize="10" fontFamily="monospace" fontWeight="bold">TP2: {activeSetup.takeProfit2} (+156p)</text>
+
+                {/* Entry (OTE) Line & Label */}
+                <line x1="500" y1="220" x2="760" y2="220" stroke="#00f0ff" strokeWidth="2.5" />
+                <circle cx="540" cy="220" r="5" fill="#00f0ff" className="animate-ping" />
+                <circle cx="540" cy="220" r="3" fill="#ffffff" />
+                <rect x="610" y="208" width="150" height="22" rx="4" fill="#083344" stroke="#00f0ff" strokeWidth="1.5" />
+                <text x="618" y="223" fill="#67e8f9" fontSize="10" fontFamily="monospace" fontWeight="bold">ENTRY (OTE): {activeSetup.entry}</text>
+
+                {/* Stop Loss (SL) Line & Label */}
+                <line x1="530" y1="350" x2="760" y2="350" stroke="#f43f5e" strokeWidth="2" />
+                <rect x="630" y="340" width="130" height="20" rx="4" fill="#881337" stroke="#f43f5e" strokeWidth="1" />
+                <text x="638" y="354" fill="#fda4af" fontSize="10" fontFamily="monospace" fontWeight="bold">SL: {activeSetup.stopLoss} (-53p)</text>
+
                 {/* Projected Trajectory Vector Arrow */}
                 <path
-                  d="M 545 200 Q 610 140 700 100"
+                  d="M 545 220 Q 610 160 700 100"
                   fill="none"
                   stroke="#00ff9d"
-                  strokeWidth="3"
+                  strokeWidth="3.5"
                   strokeDasharray="6 4"
                   className="animate-pulse"
                 />
@@ -644,6 +701,145 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
           </GlassCard>
         </div>
       </div>
+
+      {/* ─── 🎯 ICT Sniper Execution & Master Trade Blueprint ─── */}
+      <GlassCard
+        title="ICT Sniper Execution & Master Blueprint"
+        subtitle="Complete trade setup breakdown: Exact SL, TP1, TP2 targets, Best entry option, and market trajectory"
+        icon={Crosshair}
+        glowColor="cyan"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 pt-1">
+          {/* 1. Market Direction (বুলিশ নাকি বেয়ারিশ যাবে) */}
+          <div className="p-4 rounded-2xl bg-slate-900/80 border border-emerald-500/30 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+                  1. DIRECTION (মার্কেট ট্রেন্ড)
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">
+                  {activeSetup.confidenceScore}% WIN PROB
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                {activeSetup.direction === 'BULLISH' ? (
+                  <TrendingUp className="w-6 h-6 text-emerald-400 animate-bounce" />
+                ) : (
+                  <TrendingDown className="w-6 h-6 text-rose-400 animate-bounce" />
+                )}
+                <span className="text-lg font-black text-white font-heading tracking-wide">
+                  {activeSetup.marketDirection}
+                </span>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed font-mono">
+              Smart Money liquidity grab confirmed. Price is engineered to move toward{' '}
+              <strong className="text-emerald-400">
+                {activeSetup.direction === 'BULLISH' ? 'Asian High (BSL)' : 'Asian Low (SSL)'}
+              </strong>.
+            </p>
+          </div>
+
+          {/* 2. Stop Loss Blueprint (কোথা থেকে কি SL নিব) */}
+          <div className="p-4 rounded-2xl bg-slate-900/80 border border-rose-500/30 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+                  2. STOP LOSS (কোথা থেকে SL নিব)
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-mono font-bold">
+                  RISK: {activeSetup.slDistance}
+                </span>
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl font-black text-rose-400 font-mono">
+                  ${activeSetup.stopLoss}
+                </span>
+                <span className="text-xs text-slate-400 font-mono">Invalidation</span>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed font-mono">
+              {activeSetup.slPlacementGuide}
+            </p>
+          </div>
+
+          {/* 3. Take Profit Blueprint (কোথা থেকে কি TP নিব) */}
+          <div className="p-4 rounded-2xl bg-slate-900/80 border border-cyan-500/30 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+                  3. TAKE PROFIT (কোথা থেকে TP নিব)
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-mono font-bold">
+                  R:R {activeSetup.riskReward}
+                </span>
+              </div>
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <span className="text-emerald-400 font-bold">TP1 (50% Close):</span>
+                  <span className="text-white font-bold">${activeSetup.takeProfit1} ({activeSetup.tp1Distance})</span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <span className="text-cyan-400 font-bold">TP2 (Runner):</span>
+                  <span className="text-white font-bold">${activeSetup.takeProfit2} ({activeSetup.tp2Distance})</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed font-mono">
+              {activeSetup.tp1PlacementGuide}
+            </p>
+          </div>
+
+          {/* 4. Best Option Recommendation (কোনটা বেস্ট অপশন হবে) */}
+          <div className="p-4 rounded-2xl bg-slate-900/80 border border-purple-500/30 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+                  4. BEST OPTION (বেস্ট অপশন)
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-mono font-bold">
+                  RECOMMENDED
+                </span>
+              </div>
+              <div className="mt-2 text-sm font-bold text-purple-300 font-mono flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-purple-400" />
+                <span>Limit Entry @ ${activeSetup.entry}</span>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed font-mono">
+              {activeSetup.bestOption}
+            </p>
+          </div>
+        </div>
+
+        {/* ─── Trajectory Roadmap (কেমনে কি যাবে - 4-Step Path) ─── */}
+        <div className="mt-5 pt-4 border-t border-slate-800">
+          <div className="flex items-center gap-2 mb-3">
+            <Layers className="w-4 h-4 text-cyan-400" />
+            <h4 className="text-xs font-bold text-white font-mono uppercase tracking-wider">
+              MOVE TRAJECTORY ROADMAP (কেমনে কি যাবে — ৪টি ধাপের মুভমেন্ট)
+            </h4>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {activeSetup.howItMoves && activeSetup.howItMoves.map((m, idx) => (
+              <div
+                key={idx}
+                className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1.5 font-mono text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 text-[10px] font-bold">
+                    {m.step}
+                  </span>
+                  <span className="text-[10px] text-slate-500">Phase {idx + 1}</span>
+                </div>
+                <div className="font-bold text-slate-200 text-xs">{m.title}</div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">{m.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </GlassCard>
 
       {/* ─── Historical Asian Session Sweeps Log ─── */}
       <GlassCard
