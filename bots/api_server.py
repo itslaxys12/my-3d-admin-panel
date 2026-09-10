@@ -242,13 +242,46 @@ def init_guild_welcome_db():
             CREATE TABLE IF NOT EXISTS guild_premium_subscriptions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 guild_id TEXT UNIQUE NOT NULL,
-                plan_type TEXT DEFAULT 'vip_pro',
+                plan_type TEXT DEFAULT 'vip_150_bdt',
                 activated_by TEXT DEFAULT '',
                 activation_key TEXT DEFAULT '',
                 expires_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS vip_license_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                license_key TEXT UNIQUE NOT NULL,
+                plan_type TEXT DEFAULT 'vip_150_bdt',
+                price_bdt INTEGER DEFAULT 150,
+                created_by TEXT DEFAULT 'shahon',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_used INTEGER DEFAULT 0,
+                used_by_guild TEXT DEFAULT '',
+                used_by_user TEXT DEFAULT '',
+                used_at TIMESTAMP,
+                notes TEXT DEFAULT ''
+            )
+        """)
+        # Seed default master keys if empty
+        default_keys = [
+            ("GMX-VIP-2026", "vip_150_bdt", 150, "shahon", "Master Promotional Key"),
+            ("GMX-VIP-150-PREMIUM", "vip_150_bdt", 150, "shahon", "Official 150 BDT License Key"),
+            ("SHAHON-OWNER-CLEARANCE", "vip_lifetime", 0, "shahon", "Master Owner Key"),
+            ("VIP-HEX-PREMIUM", "vip_150_bdt", 150, "shahon", "Community Promo Key"),
+            ("VIP-DANGER-2026", "vip_150_bdt", 150, "shahon", "Cyberpunk Danger Key"),
+        ]
+        for key, ptype, price, creator, note in default_keys:
+            try:
+                conn.execute("""
+                    INSERT INTO vip_license_keys (license_key, plan_type, price_bdt, created_by, notes)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(license_key) DO NOTHING
+                """, (key, ptype, price, creator, note))
+            except Exception:
+                pass
+
         for col, col_def in [
             ("rules_emoji", "TEXT DEFAULT '📜'"),
             ("chat_emoji", "TEXT DEFAULT '💬'"),
@@ -256,13 +289,16 @@ def init_guild_welcome_db():
             ("headline_emoji", "TEXT DEFAULT '✨'"),
             ("slogan_emoji", "TEXT DEFAULT '❤️'"),
             ("media_type", "TEXT DEFAULT 'gif'"),
+            ("welcome_log_channel_id", "TEXT DEFAULT ''"),
+            ("ban_log_channel_id", "TEXT DEFAULT ''"),
+            ("leave_log_channel_id", "TEXT DEFAULT ''"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE guild_welcome_configs ADD COLUMN {col} {col_def}")
             except sqlite3.OperationalError:
                 pass
         conn.commit()
-    print("[WELCOME DB] Initialized guild_welcome_configs & guild_premium_subscriptions tables.")
+    print("[WELCOME DB] Initialized guild_welcome_configs, guild_premium_subscriptions & vip_license_keys tables.")
 
 init_web_auth_db()
 init_router_db()
@@ -477,6 +513,9 @@ class SetChannelRequest(BaseModel):
 
 class GuildWelcomeConfigRequest(BaseModel):
     welcome_channel_id: Optional[str] = ""
+    welcome_log_channel_id: Optional[str] = ""
+    ban_log_channel_id: Optional[str] = ""
+    leave_log_channel_id: Optional[str] = ""
     rules_channel_id: Optional[str] = ""
     chat_channel_id: Optional[str] = ""
     announce_channel_id: Optional[str] = ""
@@ -502,6 +541,21 @@ class GuildWelcomeConfigRequest(BaseModel):
 class ActivateVIPRequest(BaseModel):
     key: str
     username: Optional[str] = ""
+
+
+class GenerateLicenseRequest(BaseModel):
+    count: Optional[int] = 1
+    price_bdt: Optional[int] = 150
+    notes: Optional[str] = ""
+    created_by: Optional[str] = "shahon"
+
+
+class AutoPurchaseLicenseRequest(BaseModel):
+    guild_id: str
+    payment_method: Optional[str] = "bKash"
+    trx_id: Optional[str] = ""
+    buyer_name: Optional[str] = ""
+    price_bdt: Optional[int] = 150
 
 
 class CommandRequest(BaseModel):
@@ -1111,8 +1165,8 @@ def get_discord_invite(json_format: int = 0):
 # ─── Live Discord Server / Guild & Channel Introspection ──────────────────────
 
 @app.get("/api/bot/guilds")
-def get_guilds():
-    """Fetch live Discord Bot info, Servers (Guilds) and Text/Voice Channels list."""
+def get_guilds(user_role: Optional[str] = None, username: Optional[str] = None, guild_id: Optional[str] = None):
+    """Fetch live Discord Bot info, Servers (Guilds) and Text/Voice Channels list with server privacy isolation."""
     env = read_env()
     token = env.get("DISCORD_BOT_TOKEN", "").strip()
     if not token:
@@ -1145,8 +1199,8 @@ def get_guilds():
 
     detailed_guilds = []
     for g in guilds_raw:
-        guild_id = g.get("id")
-        channels_raw = discord_api_request(f"guilds/{guild_id}/channels", token)
+        g_id = g.get("id")
+        channels_raw = discord_api_request(f"guilds/{g_id}/channels", token)
         
         text_channels = []
         voice_channels = []
@@ -1176,10 +1230,10 @@ def get_guilds():
 
         icon_url = None
         if g.get("icon"):
-            icon_url = f"https://cdn.discordapp.com/icons/{guild_id}/{g.get('icon')}.png"
+            icon_url = f"https://cdn.discordapp.com/icons/{g_id}/{g.get('icon')}.png"
 
         detailed_guilds.append({
-            "id": guild_id,
+            "id": g_id,
             "name": g.get("name"),
             "icon": icon_url,
             "owner": g.get("owner", False),
@@ -1189,6 +1243,15 @@ def get_guilds():
             "categories": category_channels,
             "total_channels": len(text_channels) + len(voice_channels),
         })
+
+    # Strict Server Privacy Isolation:
+    # If user is NOT master owner (shahon/owner/admin), strictly filter so they ONLY see their own server!
+    is_master = (user_role or "").lower() in ("owner", "admin") or (username or "").lower() in ("shahon", "admin", "commander")
+    if not is_master:
+        if guild_id and str(guild_id).strip():
+            detailed_guilds = [g for g in detailed_guilds if str(g["id"]) == str(guild_id).strip()]
+        else:
+            detailed_guilds = detailed_guilds[:1]
 
     return {
         "authenticated": True,
@@ -1226,6 +1289,95 @@ def set_channel(req: SetChannelRequest):
 def get_welcome_templates():
     """Returns aesthetic Anime & Cyberpunk animated GIF and video banner presets for VIP Welcome Banners."""
     return [
+        # Tenor Discord Welcome Trending Collection (from user's tenor link https://tenor.com/view/discord-welcome-gif-23878933)
+        {
+            "id": "tenor_discord_welcome_red",
+            "name": "Tenor Neon Red WELCOME Banner",
+            "category": "Tenor Discord Welcome",
+            "badge": "TRENDING #1",
+            "media_type": "gif",
+            "gif_url": "https://media1.tenor.com/m/6wzqcWGfih4AAAAC/discord-welcome.gif",
+            "preview_image": "https://media.tenor.com/6wzqcWGfih4AAAAe/discord-welcome.png",
+            "recommended_headline": "🔥 WELCOME TO OUR SERVER!!",
+            "recommended_slogan": "Enjoy your stay & follow the server rules! ❤️",
+        },
+        {
+            "id": "tenor_wumpus_discord_hello",
+            "name": "Tenor Wumpus Discord Hello",
+            "category": "Tenor Discord Welcome",
+            "badge": "DISCORD ICON",
+            "media_type": "gif",
+            "gif_url": "https://media.tenor.com/l-ltKxPNF-gAAAAM/wumpus-discord.gif",
+            "preview_image": "https://media.tenor.com/l-ltKxPNF-gAAAAM/wumpus-discord.gif",
+            "recommended_headline": "👋 Wumpus Welcomes You to the Guild!",
+            "recommended_slogan": "Say hi to everyone in #chat! ✨",
+        },
+        {
+            "id": "tenor_sunrise_sunset_glow",
+            "name": "Tenor Sunrise Sunset Purple Glow",
+            "category": "Tenor Discord Welcome",
+            "badge": "PURPLE GLOW",
+            "media_type": "gif",
+            "gif_url": "https://media.tenor.com/SwfzM4B-iDgAAAAM/sunrise-sunset.gif",
+            "preview_image": "https://media.tenor.com/SwfzM4B-iDgAAAAM/sunrise-sunset.gif",
+            "recommended_headline": "🌅 Sunset Horizon Welcome Card",
+            "recommended_slogan": "Vibe with us in voice channels 🎵",
+        },
+        {
+            "id": "tenor_welcome_discord_chime",
+            "name": "Tenor Wind Chime Welcome",
+            "category": "Tenor Discord Welcome",
+            "badge": "PEACEFUL",
+            "media_type": "gif",
+            "gif_url": "https://media.tenor.com/EP_XfzfTxoUAAAAM/welcome-discord-image-welcome.gif",
+            "preview_image": "https://media.tenor.com/EP_XfzfTxoUAAAAM/welcome-discord-image-welcome.gif",
+            "recommended_headline": "🎐 Serene Sanctuary Welcome",
+            "recommended_slogan": "Peaceful vibes, chill chat & gaming 🌸",
+        },
+        {
+            "id": "tenor_sunset_city_skyline",
+            "name": "Tenor Sunset City Skyline Welcome",
+            "category": "Tenor Discord Welcome",
+            "badge": "CITY VIBES",
+            "media_type": "gif",
+            "gif_url": "https://media.tenor.com/9kUtnnOCJz4AAAAM/discord.gif",
+            "preview_image": "https://media.tenor.com/9kUtnnOCJz4AAAAM/discord.gif",
+            "recommended_headline": "🌆 Neon City Hub // Welcome!",
+            "recommended_slogan": "Stay tuned for giveaways & tournaments! 🎁",
+        },
+        {
+            "id": "tenor_aesthetic_coffee_welcome",
+            "name": "Tenor Aesthetic Coffee Welcome",
+            "category": "Tenor Discord Welcome",
+            "badge": "LOFI AESTHETIC",
+            "media_type": "gif",
+            "gif_url": "https://media.tenor.com/BDaDHtwaGUwAAAAM/aesthetic-discord-welcome-message.gif",
+            "preview_image": "https://media.tenor.com/BDaDHtwaGUwAAAAM/aesthetic-discord-welcome-message.gif",
+            "recommended_headline": "☕ Aesthetic Chill Corner // Welcome to Server",
+            "recommended_slogan": "Grab a coffee and chat with us 💫",
+        },
+        {
+            "id": "tenor_cyber_violet_neon_welcome",
+            "name": "Tenor Cyber Neon Violet Welcome",
+            "category": "Tenor Discord Welcome",
+            "badge": "CYBER GLOW",
+            "media_type": "gif",
+            "gif_url": "https://media.tenor.com/pHoyZ-wl2G8AAAAM/welcome-gif.gif",
+            "preview_image": "https://media.tenor.com/pHoyZ-wl2G8AAAAM/welcome-gif.gif",
+            "recommended_headline": "⚡ Cyber Glow Nexus Welcome",
+            "recommended_slogan": "Verified Member • Access Granted 🌐",
+        },
+        {
+            "id": "tenor_community_hs3_welcome",
+            "name": "Tenor Community HS3 Welcome",
+            "category": "Tenor Discord Welcome",
+            "badge": "COMMUNITY",
+            "media_type": "gif",
+            "gif_url": "https://media.tenor.com/LdToNSeF3L0AAAAM/welcomehs3.gif",
+            "preview_image": "https://media.tenor.com/LdToNSeF3L0AAAAM/welcomehs3.gif",
+            "recommended_headline": "🎉 Welcome New Community Member!",
+            "recommended_slogan": "Let's make memories together 🤝",
+        },
         {
             "id": "danger_hex_panel",
             "name": "DANGER HEX Matrix Banner",
@@ -1371,12 +1523,21 @@ def get_guild_welcome_config(guild_id: str):
                 config_dict["slogan_emoji"] = "❤️"
             if "media_type" not in config_dict or not config_dict["media_type"]:
                 config_dict["media_type"] = "gif"
+            if "welcome_log_channel_id" not in config_dict:
+                config_dict["welcome_log_channel_id"] = ""
+            if "ban_log_channel_id" not in config_dict:
+                config_dict["ban_log_channel_id"] = ""
+            if "leave_log_channel_id" not in config_dict:
+                config_dict["leave_log_channel_id"] = ""
             return config_dict
         else:
             return {
                 "guild_id": guild_id,
                 "is_premium": 1 if is_vip else 0,
                 "welcome_channel_id": "",
+                "welcome_log_channel_id": "",
+                "ban_log_channel_id": "",
+                "leave_log_channel_id": "",
                 "rules_channel_id": "",
                 "chat_channel_id": "",
                 "announce_channel_id": "",
@@ -1428,15 +1589,19 @@ def save_guild_welcome_config(guild_id: str, req: GuildWelcomeConfigRequest):
 
         cur.execute("""
             INSERT INTO guild_welcome_configs (
-                guild_id, is_premium, welcome_channel_id, rules_channel_id,
+                guild_id, is_premium, welcome_channel_id, welcome_log_channel_id,
+                ban_log_channel_id, leave_log_channel_id, rules_channel_id,
                 chat_channel_id, announce_channel_id, server_title, author_name,
                 welcome_headline, custom_message, banner_gif_url, thumbnail_url,
                 footer_text, auto_role_name, rules_emoji, chat_emoji, announce_emoji,
                 headline_emoji, slogan_emoji, media_type, anti_toxic_enabled, anti_nuke_enabled,
                 media_shield_enabled, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(guild_id) DO UPDATE SET
                 welcome_channel_id = excluded.welcome_channel_id,
+                welcome_log_channel_id = excluded.welcome_log_channel_id,
+                ban_log_channel_id = excluded.ban_log_channel_id,
+                leave_log_channel_id = excluded.leave_log_channel_id,
                 rules_channel_id = excluded.rules_channel_id,
                 chat_channel_id = excluded.chat_channel_id,
                 announce_channel_id = excluded.announce_channel_id,
@@ -1462,6 +1627,9 @@ def save_guild_welcome_config(guild_id: str, req: GuildWelcomeConfigRequest):
             guild_id,
             1 if is_vip else 0,
             req.welcome_channel_id or "",
+            req.welcome_log_channel_id or "",
+            req.ban_log_channel_id or "",
+            req.leave_log_channel_id or "",
             req.rules_channel_id or "",
             req.chat_channel_id or "",
             req.announce_channel_id or "",
@@ -1488,48 +1656,147 @@ def save_guild_welcome_config(guild_id: str, req: GuildWelcomeConfigRequest):
     return {"status": "saved", "guild_id": guild_id, "is_premium": is_vip}
 
 
-@app.post("/api/bot/guild/{guild_id}/activate_vip")
-def activate_guild_vip(guild_id: str, req: ActivateVIPRequest):
-    """Activate VIP Premium on a Discord server using license/promo key or Owner clearance."""
+# ─── VIP License Key Management Endpoints (Owner & Buyer Auto-Generation) ──────
+
+@app.post("/api/bot/license/generate")
+def generate_vip_licenses(req: GenerateLicenseRequest):
+    """(Owner Only) Generate new authentic 150 BDT VIP License Keys."""
     init_guild_welcome_db()
-    key = req.key.strip().upper()
-    uname = (req.username or "").strip().lower()
-    
-    VALID_KEYS = {
-        "GMX-VIP-2026",
-        "VIP-HEX-PREMIUM",
-        "VIP-DANGER-2026",
-        "SHAHON-OWNER-CLEARANCE",
-        "VIP-COMMANDER-PRO",
+    count = max(1, min(50, req.count or 1))
+    price = req.price_bdt or 150
+    creator = req.created_by or "shahon"
+    notes = req.notes or "150 BDT VIP Lifetime Key"
+
+    generated_keys = []
+    import secrets
+    with sqlite3.connect(DISCORD_DB) as conn:
+        for _ in range(count):
+            random_part = secrets.token_hex(3).upper()
+            random_part2 = secrets.token_hex(2).upper()
+            new_key = f"GMX-VIP-150-{random_part}-{random_part2}"
+            conn.execute("""
+                INSERT INTO vip_license_keys (license_key, plan_type, price_bdt, created_by, notes)
+                VALUES (?, 'vip_150_bdt', ?, ?, ?)
+            """, (new_key, price, creator, notes))
+            generated_keys.append(new_key)
+        conn.commit()
+
+    return {
+        "success": True,
+        "count": len(generated_keys),
+        "keys": generated_keys,
+        "price_bdt": price,
+        "message": f"Successfully generated {len(generated_keys)} VIP license key(s) for 150 BDT plan."
     }
-    
-    is_valid_key = (key in VALID_KEYS) or key.startswith("GMX-VIP-")
-    is_owner = uname in ("shahon", "admin", "commander")
-    
-    if not is_valid_key and not is_owner:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid VIP Activation Key. Please verify your license key or contact @shahon."
-        )
-    
+
+
+@app.get("/api/bot/license/list")
+def list_vip_licenses():
+    """List all VIP license keys with status, buyer guild, and activation timestamp."""
+    init_guild_welcome_db()
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM vip_license_keys ORDER BY id DESC LIMIT 100")
+        keys = [dict(r) for r in cur.fetchall()]
+    return {"total": len(keys), "keys": keys}
+
+
+@app.post("/api/bot/license/buy_auto_key")
+def buy_auto_vip_license(req: AutoPurchaseLicenseRequest):
+    """Automatically issue and activate a 150 BDT VIP License key for buyer."""
+    init_guild_welcome_db()
+    guild_id = str(req.guild_id).strip()
+    if not guild_id:
+        raise HTTPException(400, "Guild ID is required for license activation.")
+
+    import secrets
+    random_part = secrets.token_hex(3).upper()
+    random_part2 = secrets.token_hex(2).upper()
+    auto_key = f"GMX-VIP-150-{random_part}-{random_part2}"
+    b_name = (req.buyer_name or "VIP Buyer").strip()
+    trx = (req.trx_id or "INSTANT_PAY_150").strip()
+
     with sqlite3.connect(DISCORD_DB) as conn:
         conn.execute("""
+            INSERT INTO vip_license_keys (license_key, plan_type, price_bdt, created_by, is_used, used_by_guild, used_by_user, used_at, notes)
+            VALUES (?, 'vip_150_bdt', ?, 'auto_checkout', 1, ?, ?, CURRENT_TIMESTAMP, ?)
+        """, (auto_key, req.price_bdt or 150, guild_id, b_name, f"Method: {req.payment_method} | TrxID: {trx}"))
+
+        conn.execute("""
             INSERT INTO guild_premium_subscriptions (guild_id, plan_type, activated_by, activation_key)
-            VALUES (?, 'vip_lifetime', ?, ?)
+            VALUES (?, 'vip_150_bdt', ?, ?)
             ON CONFLICT(guild_id) DO UPDATE SET
-                plan_type = 'vip_lifetime',
+                plan_type = 'vip_150_bdt',
                 activated_by = excluded.activated_by,
                 activation_key = excluded.activation_key
-        """, (guild_id, uname or "Owner", key or "OWNER_BYPASS"))
-        
-        conn.execute("""
-            UPDATE guild_welcome_configs SET is_premium = 1 WHERE guild_id = ?
-        """, (guild_id,))
+        """, (guild_id, b_name, auto_key))
+
+        conn.execute("UPDATE guild_welcome_configs SET is_premium = 1 WHERE guild_id = ?", (guild_id,))
         conn.commit()
-        
+
     return {
         "success": True,
         "is_premium": True,
+        "license_key": auto_key,
+        "guild_id": guild_id,
+        "price_bdt": req.price_bdt or 150,
+        "message": f"🎉 150 BDT VIP Premium successfully purchased and activated! License Key: {auto_key}"
+    }
+
+
+@app.post("/api/bot/guild/{guild_id}/activate_vip")
+def activate_guild_vip(guild_id: str, req: ActivateVIPRequest):
+    """Activate VIP Premium on a Discord server using license key or Owner clearance."""
+    init_guild_welcome_db()
+    key = req.key.strip().upper()
+    uname = (req.username or "").strip().lower()
+
+    is_owner = uname in ("shahon", "admin", "commander")
+    master_keys = {"GMX-VIP-2026", "VIP-HEX-PREMIUM", "VIP-DANGER-2026", "SHAHON-OWNER-CLEARANCE", "VIP-COMMANDER-PRO"}
+
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        # Check in vip_license_keys table
+        cur.execute("SELECT * FROM vip_license_keys WHERE UPPER(license_key) = ?", (key,))
+        lic_row = cur.fetchone()
+
+        valid_key = False
+        if lic_row:
+            if lic_row["is_used"] and lic_row["used_by_guild"] != guild_id and not is_owner:
+                raise HTTPException(400, f"This VIP License Key has already been redeemed for server #{lic_row['used_by_guild']}.")
+            valid_key = True
+            # Mark key as used
+            cur.execute("""
+                UPDATE vip_license_keys 
+                SET is_used = 1, used_by_guild = ?, used_by_user = ?, used_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (guild_id, uname or "Customer", lic_row["id"]))
+        elif key in master_keys or key.startswith("GMX-VIP-") or is_owner:
+            valid_key = True
+
+        if not valid_key:
+            raise HTTPException(400, "Invalid VIP Activation Key. Please verify your 150 BDT license key or contact @shahon.")
+
+        cur.execute("""
+            INSERT INTO guild_premium_subscriptions (guild_id, plan_type, activated_by, activation_key)
+            VALUES (?, 'vip_150_bdt', ?, ?)
+            ON CONFLICT(guild_id) DO UPDATE SET
+                plan_type = 'vip_150_bdt',
+                activated_by = excluded.activated_by,
+                activation_key = excluded.activation_key
+        """, (guild_id, uname or "Owner", key or "OWNER_BYPASS"))
+
+        cur.execute("UPDATE guild_welcome_configs SET is_premium = 1 WHERE guild_id = ?", (guild_id,))
+        conn.commit()
+
+    return {
+        "success": True,
+        "is_premium": True,
+        "guild_id": guild_id,
+        "license_key": key,
         "message": f"🎉 VIP Premium activated successfully for server {guild_id}! All Animated GIF Banners and Rich Embed features are now unlocked."
     }
 

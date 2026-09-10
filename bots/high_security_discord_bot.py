@@ -444,7 +444,21 @@ async def find_or_create_auto_role(guild: discord.Guild) -> Optional[discord.Rol
 
 async def send_ban_log(guild: discord.Guild, user: discord.User | discord.Member, moderator: str, reason: str):
     """Sends a high-visibility security ban audit card into the configured log channel."""
-    log_ch_id = get_log_channel_id()
+    cfg = get_guild_welcome_record(str(guild.id))
+    log_ch_id = None
+    if cfg and cfg.get("ban_log_channel_id"):
+        try:
+            log_ch_id = int(cfg["ban_log_channel_id"])
+        except ValueError:
+            log_ch_id = None
+    if not log_ch_id and cfg and cfg.get("welcome_log_channel_id"):
+        try:
+            log_ch_id = int(cfg["welcome_log_channel_id"])
+        except ValueError:
+            log_ch_id = None
+    if not log_ch_id:
+        log_ch_id = get_log_channel_id()
+
     if not log_ch_id:
         return
 
@@ -587,6 +601,29 @@ async def send_welcome_embed(member: discord.Member, role: Optional[discord.Role
         print(f"[WELCOME] Sent rich welcome card for @{member.name} in #{channel.name}")
     except Exception as e:
         print(f"[WELCOME] Error sending welcome embed: {e}")
+
+    # Dispatch staff audit log to Welcome Log Channel if configured
+    if cfg and cfg.get("welcome_log_channel_id"):
+        try:
+            w_log_id = int(cfg["welcome_log_channel_id"])
+            w_log_ch = guild.get_channel(w_log_id)
+            if w_log_ch and w_log_ch.permissions_for(guild.me).send_messages:
+                join_embed = discord.Embed(
+                    title="📥 NEW MEMBER JOIN AUDIT LOG",
+                    description=f"{member.mention} (`@{member.name}`) joined **{guild.name}**.",
+                    color=discord.Color.from_rgb(0, 255, 157),
+                    timestamp=datetime.now()
+                )
+                join_embed.set_thumbnail(url=member.display_avatar.url)
+                join_embed.add_field(name="🆔 User ID", value=f"`{member.id}`", inline=True)
+                join_embed.add_field(name="👥 Total Members", value=f"**{guild.member_count}**", inline=True)
+                join_embed.add_field(name="📅 Account Created", value=f"<t:{int(member.created_at.timestamp())}:R>", inline=False)
+                if guild.icon:
+                    join_embed.set_footer(text=f"{guild.name} • Join Telemetry", icon_url=guild.icon.url)
+                await w_log_ch.send(embed=join_embed)
+                print(f"[JOIN AUDIT] Logged member join for @{member.name} to #{w_log_ch.name}", flush=True)
+        except Exception as join_log_err:
+            print(f"[JOIN AUDIT ERROR] {join_log_err}", flush=True)
 
     # Auto-DM security warning & welcome to the member
     try:
@@ -801,6 +838,50 @@ async def on_member_join(member: discord.Member):
     """Automatically assigns role and sends rich welcome card when a new member joins."""
     print(f"📥 [MEMBER JOIN] {member.name} ({member.id}) joined server: {member.guild.name}")
     await assign_auto_role_to_member(member, source="new_member_join")
+
+
+@bot.event
+async def on_member_remove(member: discord.Member):
+    """Logs when a member leaves or is removed from the server into the leave/welcome log channel."""
+    guild = member.guild
+    cfg = get_guild_welcome_record(str(guild.id))
+    log_ch_id = None
+    if cfg and cfg.get("leave_log_channel_id"):
+        try:
+            log_ch_id = int(cfg["leave_log_channel_id"])
+        except ValueError:
+            log_ch_id = None
+    if not log_ch_id and cfg and cfg.get("welcome_log_channel_id"):
+        try:
+            log_ch_id = int(cfg["welcome_log_channel_id"])
+        except ValueError:
+            log_ch_id = None
+    if not log_ch_id:
+        log_ch_id = get_log_channel_id()
+    if not log_ch_id:
+        return
+
+    channel = guild.get_channel(log_ch_id)
+    if not channel or not channel.permissions_for(guild.me).send_messages:
+        return
+
+    embed = discord.Embed(
+        title="📤 MEMBER DEPARTURE / LEAVE LOG",
+        description=f"{member.mention} (`@{member.name}`) has left **{guild.name}**.",
+        color=discord.Color.from_rgb(255, 140, 0),
+        timestamp=datetime.now()
+    )
+    avatar_url = member.display_avatar.url if hasattr(member, "display_avatar") else guild.me.display_avatar.url
+    embed.set_thumbnail(url=avatar_url)
+    embed.add_field(name="🆔 User ID", value=f"`{member.id}`", inline=True)
+    embed.add_field(name="👥 Remaining Members", value=f"**{guild.member_count}**", inline=True)
+    if guild.icon:
+        embed.set_footer(text=f"{guild.name} • Departure Telemetry", icon_url=guild.icon.url)
+    try:
+        await channel.send(embed=embed)
+        print(f"[LEAVE LOG] Posted departure log for @{member.name} to #{channel.name}", flush=True)
+    except Exception as e:
+        print(f"[LEAVE LOG ERROR] {e}", flush=True)
 
 
 @bot.event

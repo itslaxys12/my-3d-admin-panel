@@ -13,6 +13,95 @@ const API = getApiBase();
 
 // 20+ High-Tech Cyberpunk, Anime, Gaming, Retrowave Animated GIF & Video Templates
 const ANIMATION_TEMPLATES = [
+  // Tenor Discord Welcome Trending Collection (from user's link https://tenor.com/view/discord-welcome-gif-23878933)
+  {
+    id: 'tenor_discord_welcome_red',
+    name: 'Tenor Neon Red WELCOME Banner',
+    category: 'Tenor Discord Welcome',
+    badge: 'TRENDING #1',
+    media_type: 'gif',
+    gif_url: 'https://media1.tenor.com/m/6wzqcWGfih4AAAAC/discord-welcome.gif',
+    preview_image: 'https://media.tenor.com/6wzqcWGfih4AAAAe/discord-welcome.png',
+    recommended_headline: '🔥 WELCOME TO OUR SERVER!!',
+    recommended_slogan: 'Enjoy your stay & follow the server rules! ❤️',
+  },
+  {
+    id: 'tenor_wumpus_discord_hello',
+    name: 'Tenor Wumpus Discord Hello',
+    category: 'Tenor Discord Welcome',
+    badge: 'DISCORD ICON',
+    media_type: 'gif',
+    gif_url: 'https://media.tenor.com/l-ltKxPNF-gAAAAM/wumpus-discord.gif',
+    preview_image: 'https://media.tenor.com/l-ltKxPNF-gAAAAM/wumpus-discord.gif',
+    recommended_headline: '👋 Wumpus Welcomes You to the Guild!',
+    recommended_slogan: 'Say hi to everyone in #chat! ✨',
+  },
+  {
+    id: 'tenor_sunrise_sunset_glow',
+    name: 'Tenor Sunrise Sunset Purple Glow',
+    category: 'Tenor Discord Welcome',
+    badge: 'PURPLE GLOW',
+    media_type: 'gif',
+    gif_url: 'https://media.tenor.com/SwfzM4B-iDgAAAAM/sunrise-sunset.gif',
+    preview_image: 'https://media.tenor.com/SwfzM4B-iDgAAAAM/sunrise-sunset.gif',
+    recommended_headline: '🌅 Sunset Horizon Welcome Card',
+    recommended_slogan: 'Vibe with us in voice channels 🎵',
+  },
+  {
+    id: 'tenor_welcome_discord_chime',
+    name: 'Tenor Wind Chime Welcome',
+    category: 'Tenor Discord Welcome',
+    badge: 'PEACEFUL',
+    media_type: 'gif',
+    gif_url: 'https://media.tenor.com/EP_XfzfTxoUAAAAM/welcome-discord-image-welcome.gif',
+    preview_image: 'https://media.tenor.com/EP_XfzfTxoUAAAAM/welcome-discord-image-welcome.gif',
+    recommended_headline: '🎐 Serene Sanctuary Welcome',
+    recommended_slogan: 'Peaceful vibes, chill chat & gaming 🌸',
+  },
+  {
+    id: 'tenor_sunset_city_skyline',
+    name: 'Tenor Sunset City Skyline Welcome',
+    category: 'Tenor Discord Welcome',
+    badge: 'CITY VIBES',
+    media_type: 'gif',
+    gif_url: 'https://media.tenor.com/9kUtnnOCJz4AAAAM/discord.gif',
+    preview_image: 'https://media.tenor.com/9kUtnnOCJz4AAAAM/discord.gif',
+    recommended_headline: '🌆 Neon City Hub // Welcome!',
+    recommended_slogan: 'Stay tuned for giveaways & tournaments! 🎁',
+  },
+  {
+    id: 'tenor_aesthetic_coffee_welcome',
+    name: 'Tenor Aesthetic Coffee Welcome',
+    category: 'Tenor Discord Welcome',
+    badge: 'LOFI AESTHETIC',
+    media_type: 'gif',
+    gif_url: 'https://media.tenor.com/BDaDHtwaGUwAAAAM/aesthetic-discord-welcome-message.gif',
+    preview_image: 'https://media.tenor.com/BDaDHtwaGUwAAAAM/aesthetic-discord-welcome-message.gif',
+    recommended_headline: '☕ Aesthetic Chill Corner // Welcome to Server',
+    recommended_slogan: 'Grab a coffee and chat with us 💫',
+  },
+  {
+    id: 'tenor_cyber_violet_neon_welcome',
+    name: 'Tenor Cyber Neon Violet Welcome',
+    category: 'Tenor Discord Welcome',
+    badge: 'CYBER GLOW',
+    media_type: 'gif',
+    gif_url: 'https://media.tenor.com/pHoyZ-wl2G8AAAAM/welcome-gif.gif',
+    preview_image: 'https://media.tenor.com/pHoyZ-wl2G8AAAAM/welcome-gif.gif',
+    recommended_headline: '⚡ Cyber Glow Nexus Welcome',
+    recommended_slogan: 'Verified Member • Access Granted 🌐',
+  },
+  {
+    id: 'tenor_community_hs3_welcome',
+    name: 'Tenor Community HS3 Welcome',
+    category: 'Tenor Discord Welcome',
+    badge: 'COMMUNITY',
+    media_type: 'gif',
+    gif_url: 'https://media.tenor.com/LdToNSeF3L0AAAAM/welcomehs3.gif',
+    preview_image: 'https://media.tenor.com/LdToNSeF3L0AAAAM/welcomehs3.gif',
+    recommended_headline: '🎉 Welcome New Community Member!',
+    recommended_slogan: 'Let\'s make memories together 🤝',
+  },
   {
     id: 'danger_hex_panel',
     name: 'DANGER HEX Matrix Banner',
@@ -159,6 +248,9 @@ export function WelcomeHub({ userRole = 'owner' }) {
   // Welcome configuration state
   const [isVip, setIsVip] = useState(false);
   const [welcomeChannelId, setWelcomeChannelId] = useState('');
+  const [welcomeLogChannelId, setWelcomeLogChannelId] = useState('');
+  const [banLogChannelId, setBanLogChannelId] = useState('');
+  const [leaveLogChannelId, setLeaveLogChannelId] = useState('');
   const [rulesChannelId, setRulesChannelId] = useState('');
   const [chatChannelId, setChatChannelId] = useState('');
   const [announceChannelId, setAnnounceChannelId] = useState('');
@@ -190,22 +282,37 @@ export function WelcomeHub({ userRole = 'owner' }) {
   const [testingWelcome, setTestingWelcome] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
-  // VIP Modal
+  // VIP Modal & License System (150 BDT, bKash / Nagad / Rocket & Auto Key Generator)
   const [showVipModal, setShowVipModal] = useState(false);
+  const [vipModalTab, setVipModalTab] = useState('buy'); // 'buy' | 'key' | 'owner'
   const [vipKeyInput, setVipKeyInput] = useState('');
   const [vipActivating, setVipActivating] = useState(false);
   const [vipError, setVipError] = useState('');
+
+  // Auto-Purchase State
+  const [paymentMethod, setPaymentMethod] = useState('bKash');
+  const [trxIdInput, setTrxIdInput] = useState('');
+  const [buyerNameInput, setBuyerNameInput] = useState(currentUser?.username || '');
+  const [autoBuying, setAutoBuying] = useState(false);
+  const [autoGeneratedKey, setAutoGeneratedKey] = useState('');
+
+  // Owner License Manager State
+  const [ownerKeysList, setOwnerKeysList] = useState([]);
+  const [loadingOwnerKeys, setLoadingOwnerKeys] = useState(false);
+  const [generatingKey, setGeneratingKey] = useState(false);
 
   const showToast = (text, type = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 4500);
   };
 
-  // 1. Fetch connected Guilds
+  // 1. Fetch connected Guilds with server isolation
   const fetchGuilds = useCallback(async () => {
     setGuildsLoading(true);
     try {
-      const res = await fetch(`${API}/api/bot/guilds`);
+      const queryRole = isMasterOwner ? 'owner' : (userRole || 'user');
+      const queryUser = currentUser?.username || '';
+      const res = await fetch(`${API}/api/bot/guilds?user_role=${encodeURIComponent(queryRole)}&username=${encodeURIComponent(queryUser)}`);
       if (res.ok) {
         const data = await res.json();
         if (data.guilds && data.guilds.length > 0) {
@@ -220,7 +327,7 @@ export function WelcomeHub({ userRole = 'owner' }) {
     } finally {
       setGuildsLoading(false);
     }
-  }, [selectedGuildId]);
+  }, [isMasterOwner, userRole, currentUser?.username, selectedGuildId]);
 
   useEffect(() => {
     fetchGuilds();
@@ -260,6 +367,9 @@ export function WelcomeHub({ userRole = 'owner' }) {
         const data = await res.json();
         setIsVip(!!data.is_premium);
         setWelcomeChannelId(data.welcome_channel_id || '');
+        setWelcomeLogChannelId(data.welcome_log_channel_id || '');
+        setBanLogChannelId(data.ban_log_channel_id || '');
+        setLeaveLogChannelId(data.leave_log_channel_id || '');
         setRulesChannelId(data.rules_channel_id || '');
         setChatChannelId(data.chat_channel_id || '');
         setAnnounceChannelId(data.announce_channel_id || '');
@@ -333,6 +443,9 @@ export function WelcomeHub({ userRole = 'owner' }) {
     try {
       const payload = {
         welcome_channel_id: welcomeChannelId,
+        welcome_log_channel_id: welcomeLogChannelId,
+        ban_log_channel_id: banLogChannelId,
+        leave_log_channel_id: leaveLogChannelId,
         rules_channel_id: rulesChannelId,
         chat_channel_id: chatChannelId,
         announce_channel_id: announceChannelId,
@@ -376,6 +489,85 @@ export function WelcomeHub({ userRole = 'owner' }) {
       showToast('Network error while saving.', 'error');
     } finally {
       setSavingConfig(false);
+    }
+  };
+
+  // Auto-buy 150 BDT VIP Key
+  const handleAutoBuyVip = async (e) => {
+    e.preventDefault();
+    if (!currentGuild?.id) return;
+    if (!trxIdInput.trim()) {
+      setVipError('Please enter your payment Transaction ID (TrxID) to proceed.');
+      return;
+    }
+    setAutoBuying(true);
+    setVipError('');
+    try {
+      const res = await fetch(`${API}/api/bot/license/buy_auto_key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guild_id: currentGuild.id,
+          payment_method: paymentMethod,
+          trx_id: trxIdInput.trim(),
+          buyer_name: buyerNameInput.trim() || currentUser?.username || 'Customer',
+          price_bdt: 150,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIsVip(true);
+        setAutoGeneratedKey(data.license_key);
+        showToast(`🎉 VIP Activated! Your License Key: ${data.license_key}`);
+      } else {
+        setVipError(data.detail || 'Could not process purchase. Please contact @shahon.');
+      }
+    } catch {
+      setVipError('Network error while purchasing license.');
+    } finally {
+      setAutoBuying(false);
+    }
+  };
+
+  // Fetch owner license keys list
+  const fetchOwnerLicenses = useCallback(async () => {
+    if (!isMasterOwner) return;
+    setLoadingOwnerKeys(true);
+    try {
+      const res = await fetch(`${API}/api/bot/license/list`);
+      if (res.ok) {
+        const data = await res.json();
+        setOwnerKeysList(data.keys || []);
+      }
+    } catch {}
+    finally {
+      setLoadingOwnerKeys(false);
+    }
+  }, [isMasterOwner]);
+
+  // Generate new owner key (150 BDT)
+  const handleGenerateOwnerKey = async () => {
+    setGeneratingKey(true);
+    try {
+      const res = await fetch(`${API}/api/bot/license/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          count: 1,
+          price_bdt: 150,
+          created_by: currentUser?.username || 'shahon',
+          notes: '150 BDT VIP Lifetime License',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.keys && data.keys.length > 0) {
+        showToast(`Generated VIP key: ${data.keys[0]}`);
+        fetchOwnerLicenses();
+      }
+    } catch {
+      showToast('Failed to generate license key.', 'error');
+    } finally {
+      setGeneratingKey(false);
     }
   };
 
@@ -513,30 +705,53 @@ export function WelcomeHub({ userRole = 'owner' }) {
 
         {/* Server Switcher Controls */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          {accessibleGuilds.length > 1 && (
-            <div className="relative">
-              <select
-                value={selectedGuildId}
-                onChange={(e) => setSelectedGuildId(e.target.value)}
-                className="appearance-none bg-slate-900/90 border border-emerald-500/40 hover:border-emerald-400 text-slate-200 text-xs font-mono rounded-xl px-4 py-2.5 pr-9 focus:outline-none focus:ring-1 focus:ring-emerald-400 cursor-pointer shadow-lg"
+          {isMasterOwner ? (
+            <>
+              {accessibleGuilds.length > 1 && (
+                <div className="relative">
+                  <select
+                    value={selectedGuildId}
+                    onChange={(e) => setSelectedGuildId(e.target.value)}
+                    className="appearance-none bg-slate-900/90 border border-emerald-500/40 hover:border-emerald-400 text-slate-200 text-xs font-mono rounded-xl px-4 py-2.5 pr-9 focus:outline-none focus:ring-1 focus:ring-emerald-400 cursor-pointer shadow-lg"
+                  >
+                    {accessibleGuilds.map((g) => (
+                      <option key={g.id} value={g.id} className="bg-slate-950 text-slate-200">
+                        {g.name} ({g.id})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-emerald-400 absolute right-3 top-3 pointer-events-none" />
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  fetchOwnerLicenses();
+                  setVipModalTab('owner');
+                  setShowVipModal(true);
+                }}
+                className="px-3.5 py-2.5 rounded-xl bg-purple-950/80 hover:bg-purple-900 border border-purple-500/40 text-purple-200 font-mono text-xs flex items-center gap-1.5 shadow-lg transition-all"
               >
-                {accessibleGuilds.map((g) => (
-                  <option key={g.id} value={g.id} className="bg-slate-950 text-slate-200">
-                    {g.name} ({g.id})
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="w-4 h-4 text-emerald-400 absolute right-3 top-3 pointer-events-none" />
+                <Crown className="w-3.5 h-3.5 text-yellow-400" />
+                <span>👑 Owner VIP Keys</span>
+              </button>
+            </>
+          ) : (
+            <div className="px-4 py-2.5 rounded-xl bg-slate-950/80 border border-emerald-500/30 text-emerald-300 font-mono text-xs flex items-center gap-2 shadow-inner">
+              <Lock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>🔒 Private Server View: <strong>{currentGuild?.name || 'Your Server'}</strong></span>
             </div>
           )}
 
           {!isVip && (
             <button
-              onClick={() => setShowVipModal(true)}
+              onClick={() => {
+                setVipModalTab('buy');
+                setShowVipModal(true);
+              }}
               className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-bold text-xs font-mono flex items-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all active:scale-95"
             >
               <Crown className="w-4 h-4 fill-slate-950" />
-              <span>Upgrade to VIP</span>
+              <span>Buy VIP (150 ৳)</span>
             </button>
           )}
 
@@ -553,7 +768,7 @@ export function WelcomeHub({ userRole = 'owner' }) {
         </div>
       </div>
 
-      {/* Side-By-Side Plan Overview (Free Plan vs VIP Premium Plan) */}
+      {/* Side-By-Side Plan Overview (Free Plan vs VIP 150 BDT Plan) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Plan 1: Free Tier */}
         <div className={`p-5 rounded-2xl border transition-all ${
@@ -564,7 +779,7 @@ export function WelcomeHub({ userRole = 'owner' }) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-              <h3 className="text-sm font-bold text-slate-200 font-mono">🟢 FREE PLAN</h3>
+              <h3 className="text-sm font-bold text-slate-200 font-mono">🟢 FREE PLAN (0 ৳)</h3>
             </div>
             {!isVip && (
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
@@ -580,10 +795,6 @@ export function WelcomeHub({ userRole = 'owner' }) {
             </div>
             <div className="flex items-center gap-2 text-slate-300">
               <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Channel routing selector (#welcome, #rules, #chat)</span>
-            </div>
-            <div className="flex items-center gap-2 text-slate-300">
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
               <span>Standard Auto-Role assignment (e.g. Member)</span>
             </div>
             <div className="flex items-center gap-2 text-slate-300">
@@ -592,16 +803,24 @@ export function WelcomeHub({ userRole = 'owner' }) {
             </div>
             <div className="flex items-center gap-2 text-slate-500 line-through">
               <X className="w-3.5 h-3.5 text-slate-600" />
-              <span>Animated GIF / Video Banners (Locked)</span>
+              <span>Tenor & Custom Animated GIFs / Video Banners (Locked)</span>
             </div>
             <div className="flex items-center gap-2 text-slate-500 line-through">
               <X className="w-3.5 h-3.5 text-slate-600" />
-              <span>Custom Emoji Selector (Locked)</span>
+              <span>Welcome Join Log Channel for Staff (Locked)</span>
+            </div>
+            <div className="flex items-center gap-2 text-slate-500 line-through">
+              <X className="w-3.5 h-3.5 text-slate-600" />
+              <span>Dedicated Ban Log Channel with Reason & Mod (Locked)</span>
+            </div>
+            <div className="flex items-center gap-2 text-slate-500 line-through">
+              <X className="w-3.5 h-3.5 text-slate-600" />
+              <span>Custom 5x Emoji Selector (Locked)</span>
             </div>
           </div>
         </div>
 
-        {/* Plan 2: VIP Premium Plan */}
+        {/* Plan 2: VIP Premium Plan (150 BDT) */}
         <div className={`p-5 rounded-2xl border transition-all ${
           isVip
             ? 'bg-gradient-to-br from-amber-950/40 via-slate-900 to-black border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.25)]'
@@ -610,42 +829,60 @@ export function WelcomeHub({ userRole = 'owner' }) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Crown className="w-4 h-4 text-amber-400 fill-amber-400" />
-              <h3 className="text-sm font-bold text-amber-300 font-mono">👑 GMX VIP PREMIUM</h3>
+              <h3 className="text-sm font-bold text-amber-300 font-mono">👑 GMX VIP PREMIUM (150 ৳)</h3>
             </div>
             {isVip ? (
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
-                LIFETIME UNLOCKED
+                150 ৳ LIFETIME ACTIVE
               </span>
             ) : (
-              <button
-                onClick={() => setShowVipModal(true)}
-                className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
-              >
-                ENTER LICENSE KEY
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => {
+                    setVipModalTab('buy');
+                    setShowVipModal(true);
+                  }}
+                  className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-extrabold hover:from-amber-400 hover:to-yellow-300 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
+                >
+                  ⚡ BUY (150 ৳)
+                </button>
+                <button
+                  onClick={() => {
+                    setVipModalTab('key');
+                    setShowVipModal(true);
+                  }}
+                  className="text-[10px] font-mono px-2 py-1 rounded-lg bg-slate-800 text-amber-300 hover:bg-slate-700 border border-amber-500/30"
+                >
+                  ENTER KEY
+                </button>
+              </div>
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-1">Maximum aesthetic customization, rich animated media, and anti-nuke defense.</p>
+          <p className="text-xs text-slate-400 mt-1">Full access package for 150 Taka: animated GIFs, ban logs, join logs & custom emojis.</p>
           <div className="mt-3 space-y-1.5 text-xs font-mono">
             <div className="flex items-center gap-2 text-amber-200">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>20+ Animated Cyberpunk & Anime GIF/Video Banners</span>
+              <span>Tenor Discord Welcome GIFs & Custom MP4 Video URLs</span>
+            </div>
+            <div className="flex items-center gap-2 text-amber-200">
+              <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <span><strong>📋 Welcome Log Channel:</strong> Full join audit logs for staff</span>
+            </div>
+            <div className="flex items-center gap-2 text-amber-200">
+              <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <span><strong>🔨 Ban Log Channel:</strong> Instant ban embeds with mod & reason</span>
+            </div>
+            <div className="flex items-center gap-2 text-amber-200">
+              <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <span><strong>🚪 Leave / Kick Log Channel:</strong> Tracks departures in real time</span>
             </div>
             <div className="flex items-center gap-2 text-amber-200">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Custom GIF & MP4 Video URL / Direct Uploads</span>
+              <span><strong>✨ 5x Custom Emojis:</strong> Rules, Chat, Announce, Headline, Slogan</span>
             </div>
             <div className="flex items-center gap-2 text-amber-200">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Custom Emojis for Rules, Chat, Announce & Slogans</span>
-            </div>
-            <div className="flex items-center gap-2 text-amber-200">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Custom Cyber Ninja / Anime Avatars & Server Logos</span>
-            </div>
-            <div className="flex items-center gap-2 text-amber-200">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Advanced Anti-Nuke Shield (Instant Ban on channel/role delete)</span>
+              <span>Advanced Anti-Nuke Shield & Automated License Delivery</span>
             </div>
           </div>
         </div>
@@ -655,10 +892,10 @@ export function WelcomeHub({ userRole = 'owner' }) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Form Controls (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
-          {/* Card 1: Channel Routing */}
+          {/* Card 1: Channel Routing Matrix */}
           <GlassCard
-            title="Channel Routing Matrix"
-            subtitle="Configure which Discord channels receive the welcome card and rich mentions"
+            title="Channel & Security Log Matrix"
+            subtitle="Configure display channels, welcome audit logs, and instant ban notification channels"
             icon={Hash}
             glowColor="cyan"
           >
@@ -666,7 +903,7 @@ export function WelcomeHub({ userRole = 'owner' }) {
               {/* Target Welcome Channel */}
               <div className="space-y-1.5 sm:col-span-2">
                 <label className="text-xs font-mono font-bold text-cyan-300 flex items-center justify-between">
-                  <span>🚪 Welcome Card Channel</span>
+                  <span>🚪 Welcome Display Channel</span>
                   <span className="text-[10px] text-slate-400 font-normal">Where the join card is sent</span>
                 </label>
                 <select
@@ -678,6 +915,66 @@ export function WelcomeHub({ userRole = 'owner' }) {
                   {textChannels.map((c) => (
                     <option key={c.id} value={c.id}>
                       #{c.name} ({c.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Welcome Log Channel (VIP / Staff Audit) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-mono font-bold text-emerald-300 flex items-center justify-between">
+                  <span>📋 Welcome Log Channel</span>
+                  <span className="text-[10px] text-amber-400 font-normal">VIP / Staff</span>
+                </label>
+                <select
+                  value={welcomeLogChannelId}
+                  onChange={(e) => setWelcomeLogChannelId(e.target.value)}
+                  className="w-full bg-slate-950/80 border border-emerald-500/40 rounded-xl px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-400"
+                >
+                  <option value="">Disabled (or select audit channel)</option>
+                  {textChannels.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      #{c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Ban Log Channel (VIP / Security Alert) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-mono font-bold text-rose-300 flex items-center justify-between">
+                  <span>🔨 Ban Log Channel</span>
+                  <span className="text-[10px] text-rose-400 font-normal">Auto Ban Alert</span>
+                </label>
+                <select
+                  value={banLogChannelId}
+                  onChange={(e) => setBanLogChannelId(e.target.value)}
+                  className="w-full bg-slate-950/80 border border-rose-500/40 rounded-xl px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-rose-400"
+                >
+                  <option value="">Disabled (or select ban log channel)</option>
+                  {textChannels.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      #{c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Leave / Kick Log Channel */}
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="text-xs font-mono text-slate-300 flex items-center justify-between">
+                  <span>🚪 Leave / Kick Log Channel</span>
+                  <span className="text-[10px] text-slate-500 font-normal">Optional Departure Tracker</span>
+                </label>
+                <select
+                  value={leaveLogChannelId}
+                  onChange={(e) => setLeaveLogChannelId(e.target.value)}
+                  className="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-400"
+                >
+                  <option value="">Disabled (or select leave channel)</option>
+                  {textChannels.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      #{c.name}
                     </option>
                   ))}
                 </select>
@@ -1280,13 +1577,16 @@ export function WelcomeHub({ userRole = 'owner' }) {
         </div>
       </div>
 
-      {/* 👑 VIP UPGRADE MODAL 👑 */}
+      {/* 👑 VIP 150 BDT PURCHASE & LICENSE KEY MODAL 👑 */}
       {showVipModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="relative w-full max-w-lg rounded-3xl bg-gradient-to-b from-slate-900 via-slate-950 to-black border-2 border-amber-500/50 shadow-[0_0_50px_rgba(245,158,11,0.3)] p-6 sm:p-8 space-y-6 animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+          <div className="relative w-full max-w-xl rounded-3xl bg-gradient-to-b from-slate-900 via-slate-950 to-black border-2 border-amber-500/50 shadow-[0_0_50px_rgba(245,158,11,0.3)] p-6 sm:p-8 space-y-6 my-8 animate-in fade-in zoom-in duration-200">
             {/* Close Button */}
             <button
-              onClick={() => setShowVipModal(false)}
+              onClick={() => {
+                setShowVipModal(false);
+                setVipError('');
+              }}
               className="absolute top-5 right-5 p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors"
             >
               <X className="w-4 h-4" />
@@ -1294,87 +1594,328 @@ export function WelcomeHub({ userRole = 'owner' }) {
 
             {/* Header */}
             <div className="text-center space-y-2">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 mx-auto flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.5)]">
-                <Crown className="w-8 h-8 text-slate-950 fill-slate-950" />
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 mx-auto flex items-center justify-center shadow-[0_0_25px_rgba(245,158,11,0.5)]">
+                <Crown className="w-7 h-7 text-slate-950 fill-slate-950" />
               </div>
               <h3 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400 font-heading">
-                GMX VIP Premium Studio
+                GMX VIP Premium Suite (150 ৳)
               </h3>
               <p className="text-xs text-slate-400 font-mono">
-                Unlock high-fidelity animated GIF banners, custom emojis & anti-nuke defense for <strong>{currentGuild?.name}</strong>.
+                Full server customization for <strong>{currentGuild?.name || 'Your Server'}</strong> • Price: <span className="text-amber-400 font-bold">150 Taka Lifetime</span>
               </p>
             </div>
 
-            {/* Features List */}
-            <div className="space-y-2.5 p-4 rounded-2xl bg-slate-900/60 border border-amber-500/20 text-xs font-mono">
-              <div className="flex items-center gap-2.5 text-slate-200">
-                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>20+ Animated GIF & MP4 Banners (DANGER HEX, Matrix, Cyber Samurai)</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-slate-200">
-                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Custom Emoji Picker (Rules, Chat, Announce & Slogan)</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-slate-200">
-                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Custom Anime & Cyber Ninja Thumbnail Avatars</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-slate-200">
-                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Advanced Anti-Nuke Shield & Attachment Media Protection</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-slate-200">
-                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Permanent Lifetime Guild License (No monthly fee)</span>
-              </div>
-            </div>
-
-            {/* License Key Activation Form */}
-            <form onSubmit={handleActivateVip} className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-xs font-mono font-bold text-amber-300 flex items-center justify-between">
-                  <span>VIP License / Promo Key</span>
-                  <span className="text-[10px] text-slate-500 font-normal">e.g. GMX-VIP-2026</span>
-                </label>
-                <input
-                  type="text"
-                  value={vipKeyInput}
-                  onChange={(e) => setVipKeyInput(e.target.value)}
-                  placeholder="Enter key (e.g. GMX-VIP-2026)"
-                  className="w-full bg-slate-950 border-2 border-amber-500/40 rounded-xl px-4 py-3 text-xs font-mono text-amber-200 uppercase tracking-widest focus:outline-none focus:border-amber-400"
-                />
-              </div>
-
-              {vipError && (
-                <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-300 text-xs font-mono flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>{vipError}</span>
-                </div>
-              )}
-
+            {/* Tabs */}
+            <div className="flex rounded-xl bg-slate-900/90 p-1 border border-slate-800 font-mono text-xs">
               <button
-                type="submit"
-                disabled={vipActivating || !vipKeyInput.trim()}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-extrabold text-xs font-mono uppercase tracking-wider shadow-[0_0_25px_rgba(245,158,11,0.5)] transition-all active:scale-95 disabled:opacity-50"
+                type="button"
+                onClick={() => { setVipModalTab('buy'); setVipError(''); }}
+                className={`flex-1 py-2 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  vipModalTab === 'buy'
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
               >
-                {vipActivating ? 'Verifying License...' : 'Activate Lifetime VIP Now'}
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>⚡ Buy VIP (150 ৳)</span>
               </button>
-
+              <button
+                type="button"
+                onClick={() => { setVipModalTab('key'); setVipError(''); }}
+                className={`flex-1 py-2 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  vipModalTab === 'key'
+                    ? 'bg-slate-800 text-amber-300 shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>🔑 Enter Key</span>
+              </button>
               {isMasterOwner && (
                 <button
                   type="button"
                   onClick={() => {
-                    setVipKeyInput('SHAHON-OWNER-CLEARANCE');
+                    setVipModalTab('owner');
+                    setVipError('');
+                    fetchOwnerLicenses();
                   }}
-                  className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-mono border border-amber-500/30"
+                  className={`flex-1 py-2 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    vipModalTab === 'owner'
+                      ? 'bg-purple-900/80 text-purple-200 border border-purple-500/40 shadow-md'
+                      : 'text-purple-400 hover:text-purple-200'
+                  }`}
                 >
-                  ★ Fill Owner Clearance Key
+                  <Crown className="w-3.5 h-3.5 text-yellow-400" />
+                  <span>👑 Owner Generator</span>
                 </button>
               )}
-            </form>
+            </div>
+
+            {/* TAB 1: BUY VIP (150 BDT) */}
+            {vipModalTab === 'buy' && (
+              <div className="space-y-4">
+                {/* Features Highlights */}
+                <div className="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-500/30 text-xs font-mono space-y-1.5 text-slate-300">
+                  <div className="flex items-center gap-2 text-amber-200 font-bold">
+                    <Crown className="w-3.5 h-3.5 text-amber-400" />
+                    <span>ফুল ভিআইপি অ্যাক্সেসে যা যা পাবেন (150 ৳):</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] pt-1 text-slate-300">
+                    <div className="flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Tenor & Custom GIFs / Video</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Welcome Log Channel (Staff)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Ban Log Channel (Reason & Mod)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Leave / Departure Log Channel</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>5x Custom Emojis (Rules, Chat)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>অটোমেটিক লাইসেন্স কি তৈরি</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Numbers Box */}
+                <div className="p-4 rounded-2xl bg-slate-900/90 border border-emerald-500/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono font-bold text-emerald-400 flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>পেমেন্ট মাধ্যম (Send Money 150 TK)</span>
+                    </span>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                      150 ৳ Personal
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-xs">
+                    <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-center">
+                      <span className="text-pink-400 font-bold block text-[11px]">bKash (বিকাশ)</span>
+                      <span className="text-slate-200 font-bold select-all">01878486009</span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-center">
+                      <span className="text-orange-400 font-bold block text-[11px]">Nagad (নগদ)</span>
+                      <span className="text-slate-200 font-bold select-all">01878486009</span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-center">
+                      <span className="text-purple-400 font-bold block text-[11px]">Rocket (রকেট)</span>
+                      <span className="text-slate-200 font-bold select-all">01878486009</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Purchase / Auto License Form */}
+                <form onSubmit={handleAutoBuyVip} className="space-y-3 font-mono">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-300">পেমেন্ট মেথড</label>
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-400"
+                      >
+                        <option value="bKash">bKash (বিকাশ)</option>
+                        <option value="Nagad">Nagad (নগদ)</option>
+                        <option value="Rocket">Rocket (রকেট)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-300">আপনার নাম / Discord Tag</label>
+                      <input
+                        type="text"
+                        value={buyerNameInput}
+                        onChange={(e) => setBuyerNameInput(e.target.value)}
+                        placeholder="e.g. shahon / member"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-amber-300 flex items-center justify-between">
+                      <span>Transaction ID (TrxID)</span>
+                      <span className="text-[10px] text-slate-500 font-normal">Send Money করার পর পাওয়া কোড</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={trxIdInput}
+                      onChange={(e) => setTrxIdInput(e.target.value)}
+                      placeholder="e.g. BLA79X9Q12"
+                      className="w-full bg-slate-950 border-2 border-amber-500/40 rounded-xl px-3.5 py-2.5 text-xs text-amber-200 uppercase tracking-wider focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  {vipError && (
+                    <div className="p-2.5 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>{vipError}</span>
+                    </div>
+                  )}
+
+                  {/* Auto-Generated Key Success Alert */}
+                  {autoGeneratedKey && (
+                    <div className="p-4 rounded-2xl bg-emerald-950/80 border-2 border-emerald-400 text-center space-y-2">
+                      <div className="flex items-center justify-center gap-1.5 text-emerald-300 font-bold text-sm">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                        <span>ভিআইপি সফলভাবে সক্রিয় হয়েছে!</span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-slate-950 border border-emerald-500/40 font-mono text-xs text-amber-300 font-bold select-all tracking-wider">
+                        {autoGeneratedKey}
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        আপনার লাইসেন্স কি সেভ করে রাখুন। এই সার্ভারের জন্য আজীবন ভিআইপি আনলক হয়ে গেছে!
+                      </p>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={autoBuying}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-extrabold text-xs uppercase tracking-wider shadow-[0_0_25px_rgba(245,158,11,0.4)] transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {autoBuying ? 'Verifying & Generating...' : '⚡ Verify & Generate VIP License Key (150 ৳)'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setTrxIdInput('INSTANT-150-VIP-' + Math.floor(100000 + Math.random() * 900000));
+                    }}
+                    className="w-full py-1.5 rounded-lg text-[10px] text-slate-400 hover:text-amber-300 transition-colors"
+                  >
+                    Quick Fill Instant TrxID Demo
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* TAB 2: ENTER LICENSE KEY */}
+            {vipModalTab === 'key' && (
+              <form onSubmit={handleActivateVip} className="space-y-4 font-mono">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-amber-300 flex items-center justify-between">
+                    <span>VIP License Key</span>
+                    <span className="text-[10px] text-slate-500 font-normal">e.g. GMX-VIP-150-XXXX-XXXX</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={vipKeyInput}
+                    onChange={(e) => setVipKeyInput(e.target.value)}
+                    placeholder="Enter 150 BDT License Key"
+                    className="w-full bg-slate-950 border-2 border-amber-500/40 rounded-xl px-4 py-3 text-xs text-amber-200 uppercase tracking-widest focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                {vipError && (
+                  <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>{vipError}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={vipActivating || !vipKeyInput.trim()}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-extrabold text-xs uppercase tracking-wider shadow-[0_0_25px_rgba(245,158,11,0.5)] transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {vipActivating ? 'Verifying License...' : 'Activate Lifetime VIP Now'}
+                </button>
+
+                {isMasterOwner && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVipKeyInput('SHAHON-OWNER-CLEARANCE');
+                    }}
+                    className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs border border-amber-500/30"
+                  >
+                    ★ Fill Owner Clearance Key
+                  </button>
+                )}
+              </form>
+            )}
+
+            {/* TAB 3: OWNER KEY GENERATOR */}
+            {vipModalTab === 'owner' && isMasterOwner && (
+              <div className="space-y-4 font-mono text-xs">
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-purple-950/40 border border-purple-500/30">
+                  <div>
+                    <h4 className="font-bold text-purple-200">👑 Master Owner License Generator</h4>
+                    <p className="text-[11px] text-slate-400">Generate 150 BDT authentic VIP license keys for buyers.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGenerateOwnerKey}
+                    disabled={generatingKey}
+                    className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <Crown className="w-3.5 h-3.5 text-yellow-300" />
+                    <span>{generatingKey ? 'Generating...' : '+ Generate 150 ৳ Key'}</span>
+                  </button>
+                </div>
+
+                {/* Keys List */}
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                    <span>Generated Keys ({ownerKeysList.length})</span>
+                    <button onClick={fetchOwnerLicenses} className="text-purple-400 hover:underline">Refresh</button>
+                  </div>
+                  {loadingOwnerKeys ? (
+                    <div className="p-4 text-center text-slate-400">Loading licenses...</div>
+                  ) : ownerKeysList.length === 0 ? (
+                    <div className="p-4 text-center text-slate-500 bg-slate-950 rounded-xl border border-slate-800">
+                      No custom keys generated yet. Click above to generate one.
+                    </div>
+                  ) : (
+                    ownerKeysList.map((k) => (
+                      <div
+                        key={k.id || k.license_key}
+                        className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-amber-300 text-xs tracking-wider select-all">{k.license_key}</span>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                              k.is_used ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                            }`}>
+                              {k.is_used ? `Used by #${k.used_by_guild}` : '🟢 Available'}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">
+                            Price: 150 ৳ • Created: {k.created_at ? k.created_at.substring(0, 10) : 'Today'}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(k.license_key);
+                            showToast(`Copied ${k.license_key}!`);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px]"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="text-center text-[11px] font-mono text-slate-500">
-              Need a license key? Contact Server Owner <span className="text-amber-400 font-bold">@shahon</span> or enter your promotional code.
+              Need assistance? Contact Master Owner <span className="text-amber-400 font-bold">@shahon</span>.
             </div>
           </div>
         </div>
