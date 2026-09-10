@@ -759,11 +759,18 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
               </div>
 
               <div>
-                <span className="text-slate-400 font-semibold">Step 2: Run the Watcher Script</span>
+                <span className="text-slate-400 font-semibold">Step 2: Run Dedicated Gold (XAUUSD) Live Sniper</span>
+                <p className="text-slate-400 text-[11px] mt-0.5">
+                  Watches your live TradingView Gold chart, tracks real-time bid/ask, and announces Judas Swings:
+                </p>
                 <div className="mt-1 flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 text-cyan-300 font-mono">
-                  <code>python bots/tv_vision_watcher.py</code>
+                  <code>python bots/xauusd_tradingview_live_bot.py</code>
                   <button
-                    onClick={copyCommand}
+                    onClick={() => {
+                      navigator.clipboard.writeText('python bots/xauusd_tradingview_live_bot.py');
+                      setCopiedCmd(true);
+                      setTimeout(() => setCopiedCmd(false), 2000);
+                    }}
                     className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
                     title="Copy command"
                   >
