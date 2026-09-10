@@ -292,6 +292,8 @@ def init_guild_welcome_db():
             ("welcome_log_channel_id", "TEXT DEFAULT ''"),
             ("ban_log_channel_id", "TEXT DEFAULT ''"),
             ("leave_log_channel_id", "TEXT DEFAULT ''"),
+            ("voice_music_enabled", "INTEGER DEFAULT 1"),
+            ("auto_ban_enabled", "INTEGER DEFAULT 1"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE guild_welcome_configs ADD COLUMN {col} {col_def}")
@@ -536,6 +538,8 @@ class GuildWelcomeConfigRequest(BaseModel):
     anti_toxic_enabled: Optional[bool] = True
     anti_nuke_enabled: Optional[bool] = True
     media_shield_enabled: Optional[bool] = True
+    voice_music_enabled: Optional[bool] = True
+    auto_ban_enabled: Optional[bool] = True
 
 
 class ActivateVIPRequest(BaseModel):
@@ -1558,6 +1562,8 @@ def get_guild_welcome_config(guild_id: str):
                 "anti_toxic_enabled": 1,
                 "anti_nuke_enabled": 1,
                 "media_shield_enabled": 1,
+                "voice_music_enabled": 1,
+                "auto_ban_enabled": 1,
             }
 
 
@@ -1595,8 +1601,8 @@ def save_guild_welcome_config(guild_id: str, req: GuildWelcomeConfigRequest):
                 welcome_headline, custom_message, banner_gif_url, thumbnail_url,
                 footer_text, auto_role_name, rules_emoji, chat_emoji, announce_emoji,
                 headline_emoji, slogan_emoji, media_type, anti_toxic_enabled, anti_nuke_enabled,
-                media_shield_enabled, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                media_shield_enabled, voice_music_enabled, auto_ban_enabled, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(guild_id) DO UPDATE SET
                 welcome_channel_id = excluded.welcome_channel_id,
                 welcome_log_channel_id = excluded.welcome_log_channel_id,
@@ -1622,6 +1628,8 @@ def save_guild_welcome_config(guild_id: str, req: GuildWelcomeConfigRequest):
                 anti_toxic_enabled = excluded.anti_toxic_enabled,
                 anti_nuke_enabled = excluded.anti_nuke_enabled,
                 media_shield_enabled = excluded.media_shield_enabled,
+                voice_music_enabled = excluded.voice_music_enabled,
+                auto_ban_enabled = excluded.auto_ban_enabled,
                 updated_at = CURRENT_TIMESTAMP
         """, (
             guild_id,
@@ -1650,6 +1658,8 @@ def save_guild_welcome_config(guild_id: str, req: GuildWelcomeConfigRequest):
             1 if req.anti_toxic_enabled else 0,
             1 if req.anti_nuke_enabled else 0,
             1 if req.media_shield_enabled else 0,
+            1 if req.voice_music_enabled else 0,
+            1 if req.auto_ban_enabled else 0,
         ))
         conn.commit()
 

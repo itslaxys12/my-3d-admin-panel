@@ -1685,6 +1685,31 @@ async def ban_cmd(ctx, member: discord.Member, *, reason: str = "Violating serve
         await ctx.send(f"❌ Failed to ban {member.name}: {e}")
 
 
+@bot.command(name="unban", help="Unban a previously banned user by their ID")
+@commands.has_permissions(ban_members=True)
+async def unban_cmd(ctx, user_id: str, *, reason: str = "Pardoned by Administrator"):
+    """Unbans a user by their user ID and logs the audit action."""
+    clean_id = "".join(filter(str.isdigit, user_id))
+    if not clean_id:
+        return await ctx.send("⚠️ Please provide a valid User ID to unban (e.g. `!unban 123456789012345678`).")
+
+    try:
+        user = await bot.fetch_user(int(clean_id))
+        await ctx.guild.unban(user, reason=f"{reason} (Action by @{ctx.author.name})")
+        embed = discord.Embed(
+            title="🔓 Member Unbanned",
+            description=f"Successfully unbanned **{user.name}** (`{user.id}`) from **{ctx.guild.name}**.",
+            color=discord.Color.from_rgb(0, 255, 157)
+        )
+        embed.add_field(name="Reason", value=f"```{reason}```", inline=False)
+        embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+        await ctx.send(embed=embed)
+    except discord.NotFound:
+        await ctx.send(f"⚠️ User with ID `{clean_id}` was not found or is not banned in this server.")
+    except Exception as e:
+        await ctx.send(f"❌ Failed to unban user `{clean_id}`: {e}")
+
+
 @bot.command(name="testban", help="Simulate a test ban audit card in the log channel")
 @commands.has_permissions(administrator=True)
 async def test_ban_cmd(ctx, member: discord.Member = None):
@@ -1844,14 +1869,95 @@ async def userinfo(ctx, member: discord.Member = None):
     await ctx.send(embed=embed)
 
 
-@bot.command(name="testwelcome", aliases=["welcometest", "checkwelcome"], help="Tests the configured aesthetic welcome embed in the current channel")
-async def test_welcome_cmd(ctx):
-    """Tests the configured welcome embed for this server directly in chat."""
+@bot.command(name="welcome", aliases=["testwelcome", "welcometest", "checkwelcome", "welcomecheck", "showwelcome", "previewwelcome"], help="Checks if the welcome system is active and sends a live test card directly in chat")
+async def welcome_cmd(ctx):
+    """
+    Checks if the welcome system is active and sends a live test card directly in chat.
+    Commands:
+      !welcome           - Live welcome card test & verification
+      !testwelcome       - Alternative trigger for test welcome
+      !checkwelcome      - Channel & VIP status audit
+    """
     if not is_whitelisted_user(ctx.author.id, ctx.guild):
-        return await ctx.reply("❌ **Restricted:** Only Whitelisted Admins and the Server Owner can trigger welcome tests.", mention_author=False)
+        return await ctx.reply("❌ **Restricted:** Only Whitelisted Admins and the Server Owner can trigger welcome checks.", mention_author=False)
 
-    await ctx.reply("🧪 **[GMX BOT HUB]** Triggering test welcome embed...", mention_author=False)
+    cfg = get_guild_welcome_record(str(ctx.guild.id))
+    target_ch_id = cfg.get("welcome_channel_id") if cfg else None
+    welcome_log_id = cfg.get("welcome_log_channel_id") if cfg else None
+    ban_log_id = cfg.get("ban_log_channel_id") if cfg else None
+    is_vip = bool(cfg.get("is_premium")) if cfg else False
+    role_name = cfg.get("auto_role_name") if cfg else "Member"
+
+    target_ch = ctx.guild.get_channel(int(target_ch_id)) if target_ch_id and target_ch_id.isdigit() else None
+    welcome_log_ch = ctx.guild.get_channel(int(welcome_log_id)) if welcome_log_id and welcome_log_id.isdigit() else None
+    ban_log_ch = ctx.guild.get_channel(int(ban_log_id)) if ban_log_id and ban_log_id.isdigit() else None
+
+    # Status check card
+    status_embed = discord.Embed(
+        title="✨ GMX Welcome & Security Gateway — Live Status Check",
+        description=f"Operational verification for **{ctx.guild.name}**. The card below demonstrates the exact welcome embed new members receive upon joining.",
+        color=discord.Color.from_rgb(0, 255, 157)
+    )
+    status_embed.add_field(name="🚪 Welcome Channel", value=target_ch.mention if target_ch else "`#general` (Auto-fallback)", inline=True)
+    status_embed.add_field(name="👑 VIP Status", value="⭐ **LIFETIME VIP ACTIVE**" if is_vip else "🔒 Freemium Tier (150 ৳ Upgrade Available)", inline=True)
+    status_embed.add_field(name="🎭 Auto-Assigned Role", value=f"`@{role_name}`", inline=True)
+    if welcome_log_ch:
+        status_embed.add_field(name="📋 Staff Welcome Log", value=welcome_log_ch.mention, inline=True)
+    if ban_log_ch:
+        status_embed.add_field(name="🔨 Ban & Security Log", value=ban_log_ch.mention, inline=True)
+
+    status_embed.set_footer(text="GMX System Intelligence • Commands: !welcome, !setwelcome, !setlog, !autorole")
+    await ctx.send(embed=status_embed)
+
+    # Immediately trigger the real live welcome embed with banner GIF!
     await send_welcome_embed(ctx.author, role=None, target_channel=ctx.channel)
+
+
+@bot.command(name="features", aliases=["security", "shields", "botfeatures"], help="Displays all active bot security, voice, ban and welcome features and their commands")
+async def features_cmd(ctx):
+    """Displays a complete cheatsheet of active bot features and their associated Discord commands."""
+    cfg = get_guild_welcome_record(str(ctx.guild.id))
+    is_vip = bool(cfg.get("is_premium")) if cfg else False
+
+    embed = discord.Embed(
+        title="⚡ GMX Bot Features & Command Cheatsheet",
+        description=f"Server: **{ctx.guild.name}** | Status: {'⭐ **VIP LIFETIME**' if is_vip else '🟢 **FREEMIUM**'}\nBelow are all available modules and their trigger commands:",
+        color=discord.Color.from_rgb(0, 255, 157)
+    )
+
+    embed.add_field(
+        name="🚪 1. Welcome & Verification System (সক্রিয়)",
+        value="• `!welcome` বা `!testwelcome` — **ওয়েলকাম লাইভ চেক** (কার্ড ও ব্যানার কাজ করছে কিনা তা যাচাই)\n"
+              "• `!setwelcome #channel` — ওয়েলকাম চ্যানেল পরিবর্তন\n"
+              "• `!setlog #channel` — অডিট ও সিকিউরিটি লগ চ্যানেল সেট\n"
+              "• `!autorole <RoleName>` — নতুন মেম্বারদের জন্য অটো-রোল সেট",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🛡️ 2. Security & Auto-Ban System (সক্রিয়)",
+        value="• `!ban @User [reason]` — মেম্বারকে ব্যান ও অডিট লগ পাঠানো\n"
+              "• `!unban <user_id>` — ব্যান তুলে নেওয়া (আনব্যান)\n"
+              "• `!kick @User [reason]` — মেম্বারকে কিক করা\n"
+              "• `!testban` — ব্যান লগ চ্যানেল টেস্ট করা\n"
+              "• `!whitelist @User` — সিকিউরিটি বাইপাস লিস্টে এড করা\n"
+              "• `!clear <1-100>` — ক্ষতিকর মেসেজ মুছতে",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎵 3. Voice & 192kbps Music Player (সক্রিয়)",
+        value="• `!join` বা `!vjoin` — বটকে আপনার ভয়েস চ্যানেলে জয়েন করানো\n"
+              "• `!song <নাম/URL>` বা `!play` — হাই-কোয়ালিটি গান প্লে করা\n"
+              "• `!stop` — গান থামানো\n"
+              "• `!volume <1-200>` — ভলিউম বাড়ানো/কমানো\n"
+              "• `!leave` বা `!dc` — ভয়েস চ্যানেল থেকে ডিসকানেক্ট\n"
+              "• `!drag @User` — ট্রোল ড্র্যাগ মুভ",
+        inline=False
+    )
+
+    embed.set_footer(text="GMX High-Security Systems • Web Panel: Discord Welcome Hub")
+    await ctx.send(embed=embed)
 
 
 

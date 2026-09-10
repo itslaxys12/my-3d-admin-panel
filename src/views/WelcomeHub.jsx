@@ -3,7 +3,7 @@ import {
   Sparkles, Crown, Shield, ShieldCheck, Hash, MessageSquare, Image as ImageIcon,
   Check, AlertTriangle, ExternalLink, Save, Send, RefreshCw, Lock, Unlock, X,
   Zap, Info, Radio, Server, CheckCircle2, ChevronDown, Smile, Video, ArrowRight,
-  Flame, Heart, Bell, Music, Play, Layers, Eye
+  Flame, Heart, Bell, Music, Play, Layers, Eye, Copy, Terminal, Volume2, ShieldAlert
 } from 'lucide-react';
 import GlassCard from '../components/UI/GlassCard';
 import AnimatedButton from '../components/UI/AnimatedButton';
@@ -270,10 +270,13 @@ export function WelcomeHub({ userRole = 'owner' }) {
   const [headlineEmoji, setHeadlineEmoji] = useState('✨');
   const [sloganEmoji, setSloganEmoji] = useState('❤️');
 
-  // Security Toggles
+  // Security & Feature Toggles
   const [antiToxicEnabled, setAntiToxicEnabled] = useState(true);
   const [antiNukeEnabled, setAntiNukeEnabled] = useState(true);
   const [mediaShieldEnabled, setMediaShieldEnabled] = useState(true);
+  const [voiceMusicEnabled, setVoiceMusicEnabled] = useState(true);
+  const [autoBanEnabled, setAutoBanEnabled] = useState(true);
+  const [activeFeatureTab, setActiveFeatureTab] = useState('security'); // 'security' | 'voice' | 'welcome'
 
   // Status & Templates
   const [templates, setTemplates] = useState(ANIMATION_TEMPLATES);
@@ -391,6 +394,8 @@ export function WelcomeHub({ userRole = 'owner' }) {
         setAntiToxicEnabled(data.anti_toxic_enabled !== 0);
         setAntiNukeEnabled(data.anti_nuke_enabled !== 0);
         setMediaShieldEnabled(data.media_shield_enabled !== 0);
+        setVoiceMusicEnabled(data.voice_music_enabled !== 0);
+        setAutoBanEnabled(data.auto_ban_enabled !== 0);
       }
     } catch {
       showToast('Could not load guild configuration.', 'error');
@@ -466,6 +471,8 @@ export function WelcomeHub({ userRole = 'owner' }) {
         anti_toxic_enabled: antiToxicEnabled,
         anti_nuke_enabled: antiNukeEnabled,
         media_shield_enabled: mediaShieldEnabled,
+        voice_music_enabled: voiceMusicEnabled,
+        auto_ban_enabled: autoBanEnabled,
       };
 
       const res = await fetch(`${API}/api/bot/guild/${currentGuild.id}/welcome_config`, {
@@ -1375,6 +1382,334 @@ export function WelcomeHub({ userRole = 'owner' }) {
                   className="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-100 focus:outline-none focus:border-purple-400"
                 />
               </div>
+            </div>
+          </GlassCard>
+
+          {/* Card: Active Feature Modules & Discord Command Cheatsheet */}
+          <GlassCard
+            title="Active Feature Modules & Discord Command Cheatsheet"
+            subtitle="Configure Security, Voice, and Welcome features. View live trigger commands for your server."
+            icon={Terminal}
+            glowColor="amber"
+          >
+            <div className="space-y-4 font-mono text-xs">
+              {/* Feature Selector Tabs */}
+              <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setActiveFeatureTab('security')}
+                  className={`flex-1 py-2 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    activeFeatureTab === 'security'
+                      ? 'bg-rose-950/80 text-rose-300 border border-rose-500/40 shadow-md'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-rose-400" />
+                  <span>🛡️ Ban & Anti-Nuke ({antiNukeEnabled ? 'ON' : 'OFF'})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveFeatureTab('voice')}
+                  className={`flex-1 py-2 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    activeFeatureTab === 'voice'
+                      ? 'bg-purple-950/80 text-purple-300 border border-purple-500/40 shadow-md'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Music className="w-3.5 h-3.5 text-purple-400" />
+                  <span>🎵 Voice & Music ({voiceMusicEnabled ? 'ON' : 'OFF'})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveFeatureTab('welcome')}
+                  className={`flex-1 py-2 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    activeFeatureTab === 'welcome'
+                      ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 shadow-md'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>🚪 Welcome Check (!welcome)</span>
+                </button>
+              </div>
+
+              {/* TAB 1: BAN & SECURITY SYSTEM */}
+              {activeFeatureTab === 'security' && (
+                <div className="space-y-3 animate-in fade-in duration-200">
+                  {/* Master Anti-Nuke Toggle */}
+                  <div className="p-3.5 rounded-xl bg-slate-950/90 border border-rose-500/30 flex items-center justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-100 text-sm">Anti-Nuke & Auto-Ban Defense Shield</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                          antiNukeEnabled ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40' : 'bg-rose-950 text-rose-400 border border-rose-500/40'
+                        }`}>
+                          {antiNukeEnabled ? 'Active 🟢' : 'Disabled 🔴'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 font-sans">
+                        অননুমোদিত চ্যানেল ডিলেট, রোল ডিলেট বা আক্রমণকারীদের প্রতিহত করে তাৎক্ষণিক অটো-ব্যান ও অডিট লগ ডিসপ্যাচ করবে।
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !antiNukeEnabled;
+                        setAntiNukeEnabled(next);
+                        showToast(next ? '🛡️ Anti-Nuke & Auto-Ban Enabled!' : '⚠️ Anti-Nuke Disabled');
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        antiNukeEnabled ? 'bg-emerald-500' : 'bg-slate-800'
+                      }`}
+                    >
+                      <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        antiNukeEnabled ? 'translate-x-5' : 'translate-x-0'
+                      }`} />
+                    </button>
+                  </div>
+
+                  {/* Media Shield Toggle */}
+                  <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 flex items-center justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-200">Media & Malicious Attachment Shield</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                          mediaShieldEnabled ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          {mediaShieldEnabled ? 'Active 🟢' : 'Disabled 🔴'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 font-sans">
+                        ক্ষতিকর .exe, .bat ফাইল ও সন্দেহজনক এটাচমেন্ট পাঠানো হলে বট অটো রিমুভ ও সতর্ক করবে।
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !mediaShieldEnabled;
+                        setMediaShieldEnabled(next);
+                        showToast(next ? '📁 Media Shield Enabled!' : 'Media Shield Disabled');
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        mediaShieldEnabled ? 'bg-emerald-500' : 'bg-slate-800'
+                      }`}
+                    >
+                      <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        mediaShieldEnabled ? 'translate-x-5' : 'translate-x-0'
+                      }`} />
+                    </button>
+                  </div>
+
+                  {/* Commands Cheatsheet Box */}
+                  <div className="space-y-2 pt-1">
+                    <div className="text-[11px] font-bold text-rose-300 flex items-center justify-between px-1">
+                      <span>⚡ সংশ্লিষ্ট ডিসকর্ড কমান্ডসমূহ (Click Copy to use in Discord):</span>
+                      <span className="text-slate-500 text-[10px]">Permission: Admin/Ban</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {[
+                        { cmd: '!ban @user [reason]', desc: 'মেম্বারকে সরাসরি ব্যান ও ব্যান লগে অডিট পাঠানো' },
+                        { cmd: '!unban <user_id>', desc: 'ব্যান হওয়া মেম্বারকে আইডি দিয়ে আনব্যান করা' },
+                        { cmd: '!kick @user [reason]', desc: 'মেম্বারকে সার্ভার থেকে কিক করা' },
+                        { cmd: '!testban', desc: 'ব্যান লগ চ্যানেল ঠিকমতো কাজ করছে কিনা টেস্ট করা' },
+                        { cmd: '!whitelist @user', desc: 'বিশ্বস্ত স্টাফকে সিকিউরিটি বাইপাস লিস্টে যোগ করা' },
+                        { cmd: '!clear 20', desc: 'চ্যাট থেকে দ্রুত অনাকাঙ্ক্ষিত মেসেজ ক্লিন করা' },
+                      ].map((item) => (
+                        <div
+                          key={item.cmd}
+                          className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-rose-500/40 flex items-center justify-between gap-2 group transition-all"
+                        >
+                          <div className="min-w-0">
+                            <code className="text-amber-300 font-bold text-xs block truncate">{item.cmd}</code>
+                            <span className="text-[10px] text-slate-400 font-sans block truncate">{item.desc}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(item.cmd);
+                              showToast(`Copied ${item.cmd} to clipboard!`);
+                            }}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-500 hover:text-black text-slate-300 transition-colors shrink-0"
+                            title="Copy Command"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: VOICE & MUSIC SYSTEM */}
+              {activeFeatureTab === 'voice' && (
+                <div className="space-y-3 animate-in fade-in duration-200">
+                  {/* Master Voice Toggle */}
+                  <div className="p-3.5 rounded-xl bg-slate-950/90 border border-purple-500/30 flex items-center justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-100 text-sm">Voice Channel Connect & 192kbps Audio Player</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                          voiceMusicEnabled ? 'bg-purple-950 text-purple-300 border border-purple-500/40' : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          {voiceMusicEnabled ? 'Active 🟢' : 'Disabled 🔴'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 font-sans">
+                        ১৯২kbps ক্রিস্টাল ক্লিয়ার অডিও স্ট্রিমিং ও লো-লেটেন্সি ভয়েস কানেকশন দিয়ে ইউটিউব গান বাজানো।
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !voiceMusicEnabled;
+                        setVoiceMusicEnabled(next);
+                        showToast(next ? '🎵 Voice & Music System Enabled!' : 'Voice System Disabled');
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        voiceMusicEnabled ? 'bg-purple-500' : 'bg-slate-800'
+                      }`}
+                    >
+                      <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        voiceMusicEnabled ? 'translate-x-5' : 'translate-x-0'
+                      }`} />
+                    </button>
+                  </div>
+
+                  {/* Commands Cheatsheet Box */}
+                  <div className="space-y-2 pt-1">
+                    <div className="text-[11px] font-bold text-purple-300 flex items-center justify-between px-1">
+                      <span>⚡ ভয়েস ও মিউজিক কমান্ডসমূহ (Click Copy to use in Discord):</span>
+                      <span className="text-slate-500 text-[10px]">192kbps Opus Audio</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {[
+                        { cmd: '!join', desc: 'বটকে আপনার ভয়েস চ্যানেলে জয়েন করানো (!vjoin)' },
+                        { cmd: '!song <নাম বা URL>', desc: '১৯২kbps হাই-কোয়ালিটি অডিও প্লে করা (!play)' },
+                        { cmd: '!stop', desc: 'মিউজিক থামানো ও প্লেলিস্ট ক্লিয়ার করা' },
+                        { cmd: '!volume 80', desc: 'সাউন্ড ভলিউম বাড়ানো বা কমানো (১-২০০)' },
+                        { cmd: '!leave', desc: 'ভয়েস চ্যানেল থেকে বটকে বের করা (!dc)' },
+                        { cmd: '!drag @user', desc: 'মজার ট্রোল ড্র্যাগ মুভ কমান্ড' },
+                      ].map((item) => (
+                        <div
+                          key={item.cmd}
+                          className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-purple-500/40 flex items-center justify-between gap-2 group transition-all"
+                        >
+                          <div className="min-w-0">
+                            <code className="text-amber-300 font-bold text-xs block truncate">{item.cmd}</code>
+                            <span className="text-[10px] text-slate-400 font-sans block truncate">{item.desc}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(item.cmd);
+                              showToast(`Copied ${item.cmd} to clipboard!`);
+                            }}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-purple-500 hover:text-black text-slate-300 transition-colors shrink-0"
+                            title="Copy Command"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: WELCOME VERIFICATION SYSTEM */}
+              {activeFeatureTab === 'welcome' && (
+                <div className="space-y-3 animate-in fade-in duration-200">
+                  {/* Verification Highlight Banner */}
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/60 via-slate-950 to-emerald-950/40 border-2 border-emerald-500/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                        <span className="font-bold text-emerald-300 text-sm">ওয়েলকাম চেক ও লাইভ ভেরিফিকেশন কমান্ড</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/40">
+                        READY TO TEST
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                      আপনার ওয়েলকাম ফিচারটি সত্যিই কাজ করছে কিনা তা সরাসরি ডিসকর্ড চ্যাটে টেস্ট করার জন্য নিচে দেওয়া কমান্ডটি ব্যবহার করুন। এই কমান্ডটি দিলে বট সাথে সাথে আপনার কনফিগার করা লাইভ ওয়েলকাম কার্ড, Tenor অ্যানিমেটেড ব্যানার এবং চ্যানেল লিংক পোস্ট করে দেখিয়ে দেবে।
+                    </p>
+
+                    <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                      <div className="flex-1 w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-emerald-500/40 font-mono text-xs">
+                        <span className="text-amber-300 font-bold select-all">!welcome</span>
+                        <span className="text-slate-500 text-[10px]">(or !testwelcome)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText('!welcome');
+                          showToast('Copied "!welcome" to clipboard! Paste it into your Discord channel.');
+                        }}
+                        className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copy !welcome</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleTestWelcome}
+                        disabled={testingWelcome || !welcomeChannelId}
+                        className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-xs border border-cyan-500/30 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>{testingWelcome ? 'Sending...' : 'Trigger Discord Test Now'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Commands Cheatsheet Box */}
+                  <div className="space-y-2 pt-1">
+                    <div className="text-[11px] font-bold text-emerald-300 flex items-center justify-between px-1">
+                      <span>⚡ ওয়েলকাম ও চ্যানেল সেটআপ কমান্ডসমূহ:</span>
+                      <span className="text-slate-500 text-[10px]">Permission: Admin</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {[
+                        { cmd: '!welcome', desc: 'ওয়েলকাম কার্ড লাইভ টেস্ট করা ও কাজ করছে কিনা তা চেক' },
+                        { cmd: '!testwelcome', desc: 'অল্টারনেটিভ টেস্ট কমান্ড (একই কাজ করে)' },
+                        { cmd: '!setwelcome #welcome', desc: 'ডিসকর্ড চ্যাট থেকে সরাসরি ওয়েলকাম চ্যানেল নির্ধারণ' },
+                        { cmd: '!setlog #staff-logs', desc: 'ডিসকর্ড থেকে সিকিউরিটি ও ব্যান লগ চ্যানেল নির্ধারণ' },
+                        { cmd: '!autorole Member', desc: 'নতুনদের জন্য অটো-রোল সিলেক্ট করা' },
+                        { cmd: '!userinfo @user', desc: 'মেম্বারের বিস্তারিত প্রোফাইল ও সার্ভার জয়েন তথ্য' },
+                      ].map((item) => (
+                        <div
+                          key={item.cmd}
+                          className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/40 flex items-center justify-between gap-2 group transition-all"
+                        >
+                          <div className="min-w-0">
+                            <code className="text-amber-300 font-bold text-xs block truncate">{item.cmd}</code>
+                            <span className="text-[10px] text-slate-400 font-sans block truncate">{item.desc}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(item.cmd);
+                              showToast(`Copied ${item.cmd} to clipboard!`);
+                            }}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-emerald-500 hover:text-black text-slate-300 transition-colors shrink-0"
+                            title="Copy Command"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </GlassCard>
 
