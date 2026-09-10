@@ -237,7 +237,7 @@ export function AnimatedWallpaperBackground({ mousePos = { x: 0, y: 0 } }) {
       {/* Cyber Subtle Dark Vignette & Mesh Tint */}
       <div className="absolute inset-0 bg-gradient-to-t from-[#02040a]/90 via-transparent to-[#02040a]/75 opacity-70" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_35%,#02040a_90%)] opacity-75" />
-      <div className="absolute inset-0 bg-slate-950/20 backdrop-blur-[0.3px]" />
+      <div className="absolute inset-0 bg-slate-950/30" />
     </div>
   );
 }

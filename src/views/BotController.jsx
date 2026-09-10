@@ -12,6 +12,7 @@ import GlassCard from '../components/UI/GlassCard';
 import AnimatedButton from '../components/UI/AnimatedButton';
 import openDiscordBotInvite from '../utils/discordInvite';
 import { getApiBase } from '../utils/apiConfig';
+import WelcomeStudio from '../components/bot/WelcomeStudio';
 
 // Bot API base URL — dynamically routes to Railway backend when on Vercel
 const API = getApiBase();
@@ -24,6 +25,13 @@ const BOT_COMMANDS = [
   { cmd: '!volume [1-200]', desc: 'Adjusts playback volume percentage (1 to 200%)', category: 'Music & Voice', icon: Volume2, badge: 'Audio Control', usage: '!volume 85' },
   { cmd: '!stop', desc: 'Stops audio playback immediately', category: 'Music & Voice', icon: Power, badge: 'Voice AI', usage: '!stop' },
   { cmd: '!leave', desc: 'Disconnects bot from the active voice channel', category: 'Music & Voice', icon: XCircle, badge: 'Voice AI', usage: '!leave' },
+
+  // WiFi & Router Defense
+  { cmd: '!check', desc: 'Scans real-time connected Wi-Fi devices on your Netis/Tenda router and flags unauthorized devices', category: 'WiFi & Router', icon: Radio, badge: 'WiFi Radar', usage: '!check' },
+  { cmd: '!devices', desc: 'Lists all currently active online Wi-Fi clients with MAC, IP, and dual-band frequency', category: 'WiFi & Router', icon: Radio, badge: 'WiFi Clients', usage: '!devices' },
+  { cmd: '!macallow [MAC] [Name]', desc: 'Authorizes and assigns a friendly name to a device directly from Discord chat (updates website in real time)', category: 'WiFi & Router', icon: ShieldCheck, badge: 'Whitelist', usage: '!macallow EA:77:8F:0E:2E:5C My Phone' },
+  { cmd: '!macdeny [MAC]', desc: 'Displays instructions to kick and block an unauthorized device on Netis NC21 / Tenda', category: 'WiFi & Router', icon: ShieldAlert, badge: 'Block MAC', usage: '!macdeny EA:77:8F:0E:2E:5C' },
+  { cmd: '!router', desc: 'Alias for !check to inspect router hardware telemetry and active client list', category: 'WiFi & Router', icon: Server, badge: 'Router Info', usage: '!router' },
 
   // Whitelist & Cyber Security
   { cmd: '!whitelist', desc: 'Displays all current security whitelisted members', category: 'Security', icon: Shield, badge: 'Whitelist', usage: '!whitelist' },
@@ -67,6 +75,7 @@ const CATEGORY_COLORS = {
   Music: 'pink',
   'Music & Voice': 'pink',
   'Auto-Role': 'emerald',
+  'WiFi & Router': 'cyan',
 };
 
 export function BotController({ onOpenInvitePage }) {
@@ -526,6 +535,7 @@ export function BotController({ onOpenInvitePage }) {
       {/* Tabs Navigation (Dark Emerald Matrix - No solid blue) */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto">
         {[
+          { id: 'welcome_studio', label: '🌟 Welcome & VIP Studio', icon: Sparkles, badge: 'VIP' },
           { id: 'control', label: 'Telemetry & Logs', icon: Radio },
           { id: 'servers', label: 'Server & Channels', icon: Server, badge: guildsData.guilds?.length || 0 },
           { id: 'terminal', label: 'Web Terminal', icon: Terminal },
@@ -540,7 +550,7 @@ export function BotController({ onOpenInvitePage }) {
               key={tab.id}
               onClick={() => {
                 setActiveTab(tab.id);
-                if (tab.id === 'servers') fetchGuilds();
+                if (tab.id === 'welcome_studio' || tab.id === 'servers') fetchGuilds();
                 if (tab.id === 'database') fetchDbStats();
                 if (tab.id === 'config') fetchConfig();
               }}
@@ -563,6 +573,14 @@ export function BotController({ onOpenInvitePage }) {
           );
         })}
       </div>
+
+      {/* ── TAB 0: WELCOME & VIP STUDIO ─────────────────────────────────── */}
+      {activeTab === 'welcome_studio' && (
+        <WelcomeStudio
+          guilds={guildsData.guilds || []}
+          isOwner={isOwner}
+        />
+      )}
 
       {/* ── TAB 1: TELEMETRY & LIVE LOGS ─────────────────────────────────── */}
       {activeTab === 'control' && (

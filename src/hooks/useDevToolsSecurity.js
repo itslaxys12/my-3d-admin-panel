@@ -184,9 +184,15 @@ export function useDevToolsSecurity() {
       return false;
     };
 
-    // 3. Window Dimension Differential Trap (Detects docked devtools in any tab)
+    // Guard: Real mobile and touch devices have dynamic browser chrome / keyboards that cause false positives
+    const isTouchMobile =
+      (('ontouchstart' in window) || (navigator.maxTouchPoints > 0)) &&
+      (window.screen.width <= 1024 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
+
+    // 3. Window Dimension Differential Trap (Detects docked devtools in any tab on desktop)
     const checkWindowSize = () => {
-      const threshold = 160;
+      if (isTouchMobile) return;
+      const threshold = 220;
       const widthDiff = window.outerWidth - window.innerWidth > threshold;
       const heightDiff = window.outerHeight - window.innerHeight > threshold;
       if (widthDiff || heightDiff) {
@@ -196,6 +202,8 @@ export function useDevToolsSecurity() {
 
     // 4. Chrome DevTools Device Toolbar / Phone Emulation Trap
     const checkDeviceToolbarEmulation = () => {
+      if (isTouchMobile) return;
+
       // Vector A: Responsive / Mobile viewport emulation inside desktop browser window
       if (window.outerWidth > 800 && window.innerWidth <= 550) {
         triggerBan('Device Toolbar emulation anomaly (viewport mismatch)');
@@ -220,18 +228,22 @@ export function useDevToolsSecurity() {
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     window.addEventListener('contextmenu', handleContextMenu, { capture: true });
-    window.addEventListener('resize', checkWindowSize);
-    window.addEventListener('resize', checkDeviceToolbarEmulation);
+    if (!isTouchMobile) {
+      window.addEventListener('resize', checkWindowSize);
+      window.addEventListener('resize', checkDeviceToolbarEmulation);
+    }
 
     // Run initial checks on load
-    checkWindowSize();
-    checkDeviceToolbarEmulation();
-
-    // Periodic detection loop for detached/pre-opened devtools and device toolbar (non-blocking)
-    const detectInterval = setInterval(() => {
+    if (!isTouchMobile) {
       checkWindowSize();
       checkDeviceToolbarEmulation();
-    }, 4000);
+    }
+
+    // Periodic detection loop for detached/pre-opened devtools and device toolbar (non-blocking)
+    const detectInterval = isTouchMobile ? null : setInterval(() => {
+      checkWindowSize();
+      checkDeviceToolbarEmulation();
+    }, 5000);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown, { capture: true });

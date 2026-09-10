@@ -12,6 +12,7 @@ import Login from './views/Login';
 import CryptoRadarView from './components/crypto/CryptoRadarView';
 import RouterManager from './views/RouterManager';
 import { FXReplayBacktest } from './components/trading/FXReplayBacktest';
+import WelcomeHub from './views/WelcomeHub';
 import InteractiveModel from './components/3d/InteractiveModel';
 import GlassCard from './components/UI/GlassCard';
 import SecurityLockdown from './components/security/SecurityLockdown';
@@ -241,6 +242,9 @@ export function App() {
             setBloomEnabled={setBloomEnabled}
           />
         );
+
+      case 'welcome_hub':
+        return <WelcomeHub userRole={userRole} />;
 
       default:
         return <Dashboard />;

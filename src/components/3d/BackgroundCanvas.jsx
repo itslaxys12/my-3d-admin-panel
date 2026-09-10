@@ -93,17 +93,21 @@ function CyberGridFloor() {
 }
 
 export function BackgroundCanvas({ quality = 'high', particleCount = 2000 }) {
+  const isMobile = typeof window !== 'undefined' && (window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
+  const effectiveCount = isMobile ? 450 : (quality === 'low' ? 700 : particleCount);
+
   return (
     <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden opacity-80">
       <Canvas
         camera={{ position: [0, 0, 15], fov: 60 }}
-        gl={{ antialias: quality !== 'low', alpha: true, powerPreference: 'high-performance' }}
+        dpr={isMobile ? 1 : [1, 1.5]}
+        gl={{ antialias: !isMobile && quality !== 'low', alpha: true, powerPreference: 'high-performance' }}
       >
         <ambientLight intensity={0.5} />
         <pointLight position={[10, 10, 10]} intensity={1.5} color="#00f0ff" />
         <pointLight position={[-10, -10, -10]} intensity={1.2} color="#a855f7" />
 
-        <ParticleGalaxy count={quality === 'low' ? 800 : particleCount} />
+        <ParticleGalaxy count={effectiveCount} />
         <CyberGridFloor />
       </Canvas>
     </div>

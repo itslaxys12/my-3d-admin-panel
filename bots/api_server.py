@@ -213,9 +213,61 @@ def init_security_bans_db():
         conn.commit()
     print("[SECURITY DB] Initialized security_bans table.")
 
+def init_guild_welcome_db():
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS guild_welcome_configs (
+                guild_id TEXT PRIMARY KEY,
+                is_premium INTEGER DEFAULT 0,
+                welcome_channel_id TEXT DEFAULT '',
+                rules_channel_id TEXT DEFAULT '',
+                chat_channel_id TEXT DEFAULT '',
+                announce_channel_id TEXT DEFAULT '',
+                server_title TEXT DEFAULT '',
+                author_name TEXT DEFAULT '',
+                welcome_headline TEXT DEFAULT '✨ Welcome to our server!!',
+                custom_message TEXT DEFAULT 'Stay With Us !! ❤️',
+                banner_gif_url TEXT DEFAULT '',
+                thumbnail_url TEXT DEFAULT '',
+                footer_text TEXT DEFAULT 'Thanks for joining! 🧿',
+                auto_role_name TEXT DEFAULT 'Member',
+                anti_toxic_enabled INTEGER DEFAULT 1,
+                anti_nuke_enabled INTEGER DEFAULT 1,
+                media_shield_enabled INTEGER DEFAULT 1,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS guild_premium_subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id TEXT UNIQUE NOT NULL,
+                plan_type TEXT DEFAULT 'vip_pro',
+                activated_by TEXT DEFAULT '',
+                activation_key TEXT DEFAULT '',
+                expires_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        for col, col_def in [
+            ("rules_emoji", "TEXT DEFAULT '📜'"),
+            ("chat_emoji", "TEXT DEFAULT '💬'"),
+            ("announce_emoji", "TEXT DEFAULT '📢'"),
+            ("headline_emoji", "TEXT DEFAULT '✨'"),
+            ("slogan_emoji", "TEXT DEFAULT '❤️'"),
+            ("media_type", "TEXT DEFAULT 'gif'"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE guild_welcome_configs ADD COLUMN {col} {col_def}")
+            except sqlite3.OperationalError:
+                pass
+        conn.commit()
+    print("[WELCOME DB] Initialized guild_welcome_configs & guild_premium_subscriptions tables.")
+
 init_web_auth_db()
 init_router_db()
 init_security_bans_db()
+init_guild_welcome_db()
 
 # ─── Security Ban In-Memory Store & Helper Functions ──────────────────────────
 ACTIVE_IP_BANS: Dict[str, float] = {}
@@ -378,7 +430,7 @@ def write_env(data: Dict[str, str]):
 
 # ─── Discord API Introspection Helpers ─────────────────────────────────────────
 
-def discord_api_request(endpoint: str, token: str) -> Optional[Any]:
+def discord_api_request(endpoint: str, token: str, method: str = "GET", json_data: Optional[Dict[str, Any]] = None) -> Optional[Any]:
     """Helper to query the Discord REST v10 API using bot token authorization."""
     if not token or not token.strip():
         return None
@@ -388,12 +440,19 @@ def discord_api_request(endpoint: str, token: str) -> Optional[Any]:
         "User-Agent": "GlitchMatrixBotController/2.0",
         "Content-Type": "application/json",
     }
-    req = urllib.request.Request(url, headers=headers)
+    encoded_data = json.dumps(json_data).encode("utf-8") if json_data else None
+    req = urllib.request.Request(url, data=encoded_data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=8) as response:
-            return json.loads(response.read().decode("utf-8"))
+        with urllib.request.urlopen(req, timeout=10) as response:
+            res_body = response.read().decode("utf-8")
+            return json.loads(res_body) if res_body else {"status": "ok"}
     except urllib.error.HTTPError as exc:
-        return {"error": f"HTTP {exc.code}: {exc.reason}"}
+        err_text = ""
+        try:
+            err_text = exc.read().decode("utf-8")
+        except Exception:
+            pass
+        return {"error": f"HTTP {exc.code}: {exc.reason}", "detail": err_text}
     except Exception as exc:
         return {"error": str(exc)}
 
@@ -414,6 +473,35 @@ class EnvConfig(BaseModel):
 class SetChannelRequest(BaseModel):
     channel_type: str  # 'log' | 'welcome'
     channel_id: str
+
+
+class GuildWelcomeConfigRequest(BaseModel):
+    welcome_channel_id: Optional[str] = ""
+    rules_channel_id: Optional[str] = ""
+    chat_channel_id: Optional[str] = ""
+    announce_channel_id: Optional[str] = ""
+    server_title: Optional[str] = ""
+    author_name: Optional[str] = ""
+    welcome_headline: Optional[str] = "✨ Welcome to our server!!"
+    custom_message: Optional[str] = "Stay With Us !! ❤️"
+    banner_gif_url: Optional[str] = ""
+    thumbnail_url: Optional[str] = ""
+    footer_text: Optional[str] = "Thanks for joining! 🧿"
+    auto_role_name: Optional[str] = "Member"
+    rules_emoji: Optional[str] = "📜"
+    chat_emoji: Optional[str] = "💬"
+    announce_emoji: Optional[str] = "📢"
+    headline_emoji: Optional[str] = "✨"
+    slogan_emoji: Optional[str] = "❤️"
+    media_type: Optional[str] = "gif"
+    anti_toxic_enabled: Optional[bool] = True
+    anti_nuke_enabled: Optional[bool] = True
+    media_shield_enabled: Optional[bool] = True
+
+
+class ActivateVIPRequest(BaseModel):
+    key: str
+    username: Optional[str] = ""
 
 
 class CommandRequest(BaseModel):
@@ -1130,6 +1218,394 @@ def set_channel(req: SetChannelRequest):
 
     write_env(existing)
     return {"status": "updated", "channel_type": req.channel_type, "channel_id": req.channel_id}
+
+
+# ─── Per-Server Welcome & VIP Studio Endpoints ──────────────────────────────
+
+@app.get("/api/bot/welcome_templates")
+def get_welcome_templates():
+    """Returns aesthetic Anime & Cyberpunk animated GIF and video banner presets for VIP Welcome Banners."""
+    return [
+        {
+            "id": "danger_hex_panel",
+            "name": "DANGER HEX Matrix Banner",
+            "category": "Cyber Glitch",
+            "badge": "HEX OFFICIAL",
+            "media_type": "gif",
+            "gif_url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHp1MGpqY2Z4Z285Nmd4YnY3Y201Z2tzc3B1YW5pOWZqMWo5dWhqZSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/xT9IgzoKnwFNmISR8I/giphy.gif",
+            "preview_image": "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/200.gif",
+            "recommended_headline": "DANGER HEX ⚡ || Panel.Project.Chilling .",
+            "recommended_slogan": "Stay With Us !! ❤️",
+        },
+        {
+            "id": "cyber_ninja_red",
+            "name": "Red Aura Cyber Ninja",
+            "category": "Anime Gaming",
+            "badge": "VIP ELITE",
+            "media_type": "gif",
+            "gif_url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbDVnNnM2Ym1jYm10bmdyeXRidmhrZTNudmdyeW5wY2tpdGZ0dWxpeSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/f6P20EYU672FdR0gfQ/giphy.gif",
+            "preview_image": "https://media.giphy.com/media/f6P20EYU672FdR0gfQ/200.gif",
+            "recommended_headline": "HEX COMMUNITY 💥 | Cyber Warrior Portal",
+            "recommended_slogan": "Unleash The Cyber Matrix! ⚔️",
+        },
+        {
+            "id": "neon_tokyo_rain",
+            "name": "Tokyo Midnight Rain",
+            "category": "Anime Aesthetic",
+            "badge": "CHILL VIBES",
+            "media_type": "gif",
+            "gif_url": "https://i.giphy.com/media/3o7TKTDnUxE0gpn344/giphy.gif",
+            "preview_image": "https://i.giphy.com/media/3o7TKTDnUxE0gpn344/200.gif",
+            "recommended_headline": "Welcome to Tokyo Midnight 🌧️",
+            "recommended_slogan": "Chill in Voice & Listen to 192kbps Lofi ❤️",
+        },
+        {
+            "id": "cyber_samurai_glow",
+            "name": "Neon Blade Samurai",
+            "category": "Cyberpunk",
+            "badge": "LEGENDARY",
+            "media_type": "gif",
+            "gif_url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExN3Q5dWl6MTRwbWJqYmt4dGlhN3dpNzN1NDV2bDBhOHJucnV4aDhnZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/L1R1tvI9svkIWwpVYr/giphy.gif",
+            "preview_image": "https://media.giphy.com/media/L1R1tvI9svkIWwpVYr/200.gif",
+            "recommended_headline": "⚡ THE SHADOW GUILD // Welcome",
+            "recommended_slogan": "Rules in #rules • Enter the Battleground 🛡️",
+        },
+        {
+            "id": "matrix_code_stream",
+            "name": "Quantum Matrix Terminal",
+            "category": "Sci-Fi Code",
+            "badge": "QUANTUM",
+            "media_type": "gif",
+            "gif_url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOW82bmN5a3J4NDdvZXoxYWNmdmhpZWZ0dDF4czVwdG45bXZkZXh3ZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3oKIPnAiaMCws8nOsE/giphy.gif",
+            "preview_image": "https://media.giphy.com/media/3oKIPnAiaMCws8nOsE/200.gif",
+            "recommended_headline": "GMX QUANTUM COMMAND // Node Verified",
+            "recommended_slogan": "Security Protocols Active 24/7 🚀",
+        },
+        {
+            "id": "neon_dragon_plasma",
+            "name": "Neon Dragon Plasma Burst",
+            "category": "Gaming VIP",
+            "badge": "DRAGON",
+            "media_type": "gif",
+            "gif_url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2psZWg4Z3R5OWtzbXB4a3QzaGQwNnQ0dXozOGN2dHlzZWtrZDFzOCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKSjRrfIPjeiVyM/giphy.gif",
+            "preview_image": "https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/200.gif",
+            "recommended_headline": "🐉 DRAGON REALM // Royal Welcomer",
+            "recommended_slogan": "Honor the Guild • Rise in Ranks ⚔️",
+        },
+        {
+            "id": "synthwave_sunset_runner",
+            "name": "Synthwave Sunset Highway",
+            "category": "Retrowave",
+            "badge": "RETRO 80S",
+            "media_type": "gif",
+            "gif_url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMGxleDN4NDQxb2N0M2Z2b2I3azFpcnVxdXpnN3drMzFndzF2NzdiciZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3ov9jG3eSUe9t9i2vK/giphy.gif",
+            "preview_image": "https://media.giphy.com/media/3ov9jG3eSUe9t9i2vK/200.gif",
+            "recommended_headline": "🌴 RETROWAVE PARADISE // Night City",
+            "recommended_slogan": "Cruising into the Future ✨",
+        },
+        {
+            "id": "anime_sakura_storm",
+            "name": "Sakura Petal Blizzard",
+            "category": "Anime Nature",
+            "badge": "BLOSSOM",
+            "media_type": "gif",
+            "gif_url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOWl6aW5zNzZmaDNkOHV3dGhhazlzbjkyNWtrMmxyOW9zM3F2czRmaCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/YrkK0A2mS3EPRyIHz7/giphy.gif",
+            "preview_image": "https://media.giphy.com/media/YrkK0A2mS3EPRyIHz7/200.gif",
+            "recommended_headline": "🌸 SAKURA SANCTUARY // Welcome Home",
+            "recommended_slogan": "Peace, Friendship & Gaming 💖",
+        },
+        {
+            "id": "shadow_monarch_purple",
+            "name": "Shadow Monarch Purple Void",
+            "category": "Anime VIP",
+            "badge": "ARISE",
+            "media_type": "gif",
+            "gif_url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMjFhNnVnd3RjZ3h2bnY0cnhkY3h6ODR1b2d3ZjJ4c2Vld2J6d2F4dSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/DYB4CXrXI95BQEPdX3/giphy.gif",
+            "preview_image": "https://media.giphy.com/media/DYB4CXrXI95BQEPdX3/200.gif",
+            "recommended_headline": "👑 THE SHADOW LEGION // Welcome",
+            "recommended_slogan": "Arise and claim your destiny 🛡️",
+        },
+        {
+            "id": "cyber_hacker_terminal_green",
+            "name": "Cyber Breach Terminal CLI",
+            "category": "Hacker",
+            "badge": "ROOT ACCESS",
+            "media_type": "gif",
+            "gif_url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExenFscWZtc2tmdXpsZjNwbTN2MDR5c3N3YWd6NHdpdHVzdTN3MWU0MCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/eCqFYAVjjD0GY/giphy.gif",
+            "preview_image": "https://media.giphy.com/media/eCqFYAVjjD0GY/200.gif",
+            "recommended_headline": "💻 GMX MAINFRAME // Access Granted",
+            "recommended_slogan": "Root User Detected • Welcome 🌐",
+        },
+    ]
+
+
+@app.get("/api/bot/guild/{guild_id}/welcome_config")
+def get_guild_welcome_config(guild_id: str):
+    """Retrieve the welcome configuration and VIP status for a specific guild."""
+    init_guild_welcome_db()
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        
+        # Check VIP subscription
+        cur.execute("SELECT * FROM guild_premium_subscriptions WHERE guild_id = ?", (guild_id,))
+        vip_sub = cur.fetchone()
+        
+        cur.execute("SELECT * FROM guild_welcome_configs WHERE guild_id = ?", (guild_id,))
+        row = cur.fetchone()
+        
+        is_vip = bool(vip_sub) or (row and row["is_premium"] == 1)
+        
+        if row:
+            config_dict = dict(row)
+            config_dict["is_premium"] = 1 if is_vip else 0
+            if "rules_emoji" not in config_dict or not config_dict["rules_emoji"]:
+                config_dict["rules_emoji"] = "📜"
+            if "chat_emoji" not in config_dict or not config_dict["chat_emoji"]:
+                config_dict["chat_emoji"] = "💬"
+            if "announce_emoji" not in config_dict or not config_dict["announce_emoji"]:
+                config_dict["announce_emoji"] = "📢"
+            if "headline_emoji" not in config_dict or not config_dict["headline_emoji"]:
+                config_dict["headline_emoji"] = "✨"
+            if "slogan_emoji" not in config_dict or not config_dict["slogan_emoji"]:
+                config_dict["slogan_emoji"] = "❤️"
+            if "media_type" not in config_dict or not config_dict["media_type"]:
+                config_dict["media_type"] = "gif"
+            return config_dict
+        else:
+            return {
+                "guild_id": guild_id,
+                "is_premium": 1 if is_vip else 0,
+                "welcome_channel_id": "",
+                "rules_channel_id": "",
+                "chat_channel_id": "",
+                "announce_channel_id": "",
+                "server_title": "",
+                "author_name": "",
+                "welcome_headline": "✨ Welcome to our server!!",
+                "custom_message": "Stay With Us !! ❤️",
+                "banner_gif_url": "",
+                "thumbnail_url": "",
+                "footer_text": "Thanks for joining! 🧿",
+                "auto_role_name": "Member",
+                "rules_emoji": "📜",
+                "chat_emoji": "💬",
+                "announce_emoji": "📢",
+                "headline_emoji": "✨",
+                "slogan_emoji": "❤️",
+                "media_type": "gif",
+                "anti_toxic_enabled": 1,
+                "anti_nuke_enabled": 1,
+                "media_shield_enabled": 1,
+            }
+
+
+@app.post("/api/bot/guild/{guild_id}/welcome_config")
+def save_guild_welcome_config(guild_id: str, req: GuildWelcomeConfigRequest):
+    """Save the welcome configuration for a specific guild, enforcing VIP protection for animated GIFs/Videos."""
+    init_guild_welcome_db()
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        
+        cur.execute("SELECT * FROM guild_premium_subscriptions WHERE guild_id = ?", (guild_id,))
+        vip_sub = cur.fetchone()
+        
+        cur.execute("SELECT is_premium FROM guild_welcome_configs WHERE guild_id = ?", (guild_id,))
+        curr = cur.fetchone()
+        is_vip = bool(vip_sub) or (curr and curr["is_premium"] == 1)
+        
+        # If user is trying to set a custom animated GIF banner but is NOT VIP:
+        if req.banner_gif_url and req.banner_gif_url.strip() and not is_vip:
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "VIP Premium Required",
+                    "requires_vip": True,
+                    "message": "Custom Animated GIF Banners and Rich Interactive Embeds require GMX VIP Premium Access! Please upgrade or enter your VIP Activation Key."
+                }
+            )
+
+        cur.execute("""
+            INSERT INTO guild_welcome_configs (
+                guild_id, is_premium, welcome_channel_id, rules_channel_id,
+                chat_channel_id, announce_channel_id, server_title, author_name,
+                welcome_headline, custom_message, banner_gif_url, thumbnail_url,
+                footer_text, auto_role_name, rules_emoji, chat_emoji, announce_emoji,
+                headline_emoji, slogan_emoji, media_type, anti_toxic_enabled, anti_nuke_enabled,
+                media_shield_enabled, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(guild_id) DO UPDATE SET
+                welcome_channel_id = excluded.welcome_channel_id,
+                rules_channel_id = excluded.rules_channel_id,
+                chat_channel_id = excluded.chat_channel_id,
+                announce_channel_id = excluded.announce_channel_id,
+                server_title = excluded.server_title,
+                author_name = excluded.author_name,
+                welcome_headline = excluded.welcome_headline,
+                custom_message = excluded.custom_message,
+                banner_gif_url = excluded.banner_gif_url,
+                thumbnail_url = excluded.thumbnail_url,
+                footer_text = excluded.footer_text,
+                auto_role_name = excluded.auto_role_name,
+                rules_emoji = excluded.rules_emoji,
+                chat_emoji = excluded.chat_emoji,
+                announce_emoji = excluded.announce_emoji,
+                headline_emoji = excluded.headline_emoji,
+                slogan_emoji = excluded.slogan_emoji,
+                media_type = excluded.media_type,
+                anti_toxic_enabled = excluded.anti_toxic_enabled,
+                anti_nuke_enabled = excluded.anti_nuke_enabled,
+                media_shield_enabled = excluded.media_shield_enabled,
+                updated_at = CURRENT_TIMESTAMP
+        """, (
+            guild_id,
+            1 if is_vip else 0,
+            req.welcome_channel_id or "",
+            req.rules_channel_id or "",
+            req.chat_channel_id or "",
+            req.announce_channel_id or "",
+            req.server_title or "",
+            req.author_name or "",
+            req.welcome_headline or "✨ Welcome to our server!!",
+            req.custom_message or "Stay With Us !! ❤️",
+            req.banner_gif_url or "",
+            req.thumbnail_url or "",
+            req.footer_text or "Thanks for joining! 🧿",
+            req.auto_role_name or "Member",
+            req.rules_emoji or "📜",
+            req.chat_emoji or "💬",
+            req.announce_emoji or "📢",
+            req.headline_emoji or "✨",
+            req.slogan_emoji or "❤️",
+            req.media_type or "gif",
+            1 if req.anti_toxic_enabled else 0,
+            1 if req.anti_nuke_enabled else 0,
+            1 if req.media_shield_enabled else 0,
+        ))
+        conn.commit()
+
+    return {"status": "saved", "guild_id": guild_id, "is_premium": is_vip}
+
+
+@app.post("/api/bot/guild/{guild_id}/activate_vip")
+def activate_guild_vip(guild_id: str, req: ActivateVIPRequest):
+    """Activate VIP Premium on a Discord server using license/promo key or Owner clearance."""
+    init_guild_welcome_db()
+    key = req.key.strip().upper()
+    uname = (req.username or "").strip().lower()
+    
+    VALID_KEYS = {
+        "GMX-VIP-2026",
+        "VIP-HEX-PREMIUM",
+        "VIP-DANGER-2026",
+        "SHAHON-OWNER-CLEARANCE",
+        "VIP-COMMANDER-PRO",
+    }
+    
+    is_valid_key = (key in VALID_KEYS) or key.startswith("GMX-VIP-")
+    is_owner = uname in ("shahon", "admin", "commander")
+    
+    if not is_valid_key and not is_owner:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid VIP Activation Key. Please verify your license key or contact @shahon."
+        )
+    
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.execute("""
+            INSERT INTO guild_premium_subscriptions (guild_id, plan_type, activated_by, activation_key)
+            VALUES (?, 'vip_lifetime', ?, ?)
+            ON CONFLICT(guild_id) DO UPDATE SET
+                plan_type = 'vip_lifetime',
+                activated_by = excluded.activated_by,
+                activation_key = excluded.activation_key
+        """, (guild_id, uname or "Owner", key or "OWNER_BYPASS"))
+        
+        conn.execute("""
+            UPDATE guild_welcome_configs SET is_premium = 1 WHERE guild_id = ?
+        """, (guild_id,))
+        conn.commit()
+        
+    return {
+        "success": True,
+        "is_premium": True,
+        "message": f"🎉 VIP Premium activated successfully for server {guild_id}! All Animated GIF Banners and Rich Embed features are now unlocked."
+    }
+
+
+@app.post("/api/bot/guild/{guild_id}/test_welcome")
+def send_test_welcome_embed(guild_id: str):
+    """Send a live test welcome embed directly into the server's configured welcome channel."""
+    env = read_env()
+    token = env.get("DISCORD_BOT_TOKEN", "").strip()
+    if not token:
+        raise HTTPException(400, "No DISCORD_BOT_TOKEN configured.")
+        
+    init_guild_welcome_db()
+    with sqlite3.connect(DISCORD_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM guild_welcome_configs WHERE guild_id = ?", (guild_id,))
+        config = cur.fetchone()
+        
+    if not config or not config["welcome_channel_id"]:
+        raise HTTPException(400, "No Welcome Channel configured for this server yet. Please select a welcome channel first.")
+        
+    target_channel_id = config["welcome_channel_id"].strip()
+    
+    rules_mention = f"<#{config['rules_channel_id']}>" if config['rules_channel_id'] else "# 📄 · RULES"
+    chat_mention = f"<#{config['chat_channel_id']}>" if config['chat_channel_id'] else "# 💬 · PUBLIC · CHAT"
+    announce_mention = f"<#{config['announce_channel_id']}>" if config['announce_channel_id'] else "# 📢 · ANNOUNCEMENTS"
+    
+    headline = config['welcome_headline'] or "✨ Welcome to our server!!"
+    custom_msg = config['custom_message'] or "Stay With Us !! ❤️"
+    footer_msg = config['footer_text'] or "Thanks for joining! 🧿"
+    author_text = config['author_name'] or "DANGER HEX ⚡ || Panel.Project.Chilling ."
+    
+    rules_em = config['rules_emoji'] if 'rules_emoji' in config.keys() and config['rules_emoji'] else "📜"
+    chat_em = config['chat_emoji'] if 'chat_emoji' in config.keys() and config['chat_emoji'] else "💬"
+    ann_em = config['announce_emoji'] if 'announce_emoji' in config.keys() and config['announce_emoji'] else "📢"
+    head_em = config['headline_emoji'] if 'headline_emoji' in config.keys() and config['headline_emoji'] else "✨"
+    slog_em = config['slogan_emoji'] if 'slogan_emoji' in config.keys() and config['slogan_emoji'] else "❤️"
+    
+    desc = (
+        f"{head_em} {headline}\n\n"
+        f"{rules_em} **Rules** {rules_mention}\n"
+        f"{chat_em} **Chat in** {chat_mention}\n"
+        f"{ann_em} **Announce** {announce_mention}\n\n"
+        f"**{custom_msg}** {slog_em}"
+    )
+    
+    embed_payload: Dict[str, Any] = {
+        "title": headline,
+        "description": desc,
+        "color": 0x00FF9D,  # Cyber Emerald
+        "author": {
+            "name": author_text,
+        },
+        "footer": {
+            "text": f"{footer_msg} • Live Test Card",
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    
+    if config["thumbnail_url"]:
+        embed_payload["thumbnail"] = {"url": config["thumbnail_url"]}
+    
+    if config["banner_gif_url"]:
+        embed_payload["image"] = {"url": config["banner_gif_url"]}
+        
+    payload = {
+        "content": "🧪 **[GMX BOT HUB TEST]** Welcome Card Preview:",
+        "embeds": [embed_payload],
+    }
+    
+    res = discord_api_request(f"channels/{target_channel_id}/messages", token, method="POST", json_data=payload)
+    if res and "error" in res:
+        raise HTTPException(400, f"Discord API Error: {res.get('error')} - {res.get('detail', '')}")
+        
+    return {"success": True, "message": f"✅ Test Welcome Embed posted to channel #{target_channel_id} successfully!"}
 
 
 # ─── Database Statistics ──────────────────────────────────────────────────────

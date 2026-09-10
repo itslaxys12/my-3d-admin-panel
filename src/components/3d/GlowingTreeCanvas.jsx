@@ -12,17 +12,34 @@ export function GlowingTreeCanvas({ className = '' }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d', { alpha: false });
-    let animationFrameId;
 
-    let width = (canvas.width = window.innerWidth);
-    let height = (canvas.height = window.innerHeight);
+    const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0));
+    const isMobile = typeof window !== 'undefined' && (window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
+
+    // Cap DPR to 1.0 on mobile/iPhone to prevent 3x Retina memory/fill-rate lag, 1.25 max on desktop
+    const dpr = isMobile ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.25);
+
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    if (!ctx) return;
+
+    let animationFrameId;
+    let isPaused = false;
+
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    ctx.scale(dpr, dpr);
 
     let mouse = { x: width * 0.5, y: height * 0.5, targetX: width * 0.5, targetY: height * 0.5 };
 
     const handleResize = () => {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      ctx.scale(dpr, dpr);
       buildOffscreenTree();
     };
 
@@ -32,7 +49,9 @@ export function GlowingTreeCanvas({ className = '' }) {
     };
 
     window.addEventListener('resize', handleResize, { passive: true });
-    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    if (!isTouch) {
+      window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    }
 
     // ─── Offscreen Canvas for Tree Pre-Rendering (Massive FPS Gain) ─────
     let offscreenCanvas = document.createElement('canvas');
@@ -92,8 +111,8 @@ export function GlowingTreeCanvas({ className = '' }) {
 
     buildOffscreenTree();
 
-    // ─── Lightweight Falling Sakura Petals & Stars ──────────────────────
-    const PETAL_COUNT = 45;
+    // ─── Lightweight Falling Sakura Petals & Stars Scaled for Devices ───
+    const PETAL_COUNT = isMobile ? 12 : 28;
     const petals = [];
     const colors = [
       'rgba(216, 180, 254, 0.85)',
@@ -116,7 +135,7 @@ export function GlowingTreeCanvas({ className = '' }) {
       });
     }
 
-    const STAR_COUNT = 70;
+    const STAR_COUNT = isMobile ? 24 : 45;
     const stars = [];
     for (let i = 0; i < STAR_COUNT; i++) {
       stars.push({
@@ -129,17 +148,21 @@ export function GlowingTreeCanvas({ className = '' }) {
 
     let time = 0;
 
-    // ─── Super Fast Render Loop ─────────────────────────────────────────
+    // ─── Super Fast Render Loop with Page Visibility ────────────────────
     const render = () => {
+      if (isPaused) return;
+
       time += 0.016;
 
-      mouse.x += (mouse.targetX - mouse.x) * 0.06;
-      mouse.y += (mouse.targetY - mouse.y) * 0.06;
-      const parallaxX = (mouse.x - width * 0.5) * 0.012;
-      const parallaxY = (mouse.y - height * 0.5) * 0.012;
+      if (!isTouch) {
+        mouse.x += (mouse.targetX - mouse.x) * 0.06;
+        mouse.y += (mouse.targetY - mouse.y) * 0.06;
+      }
+      const parallaxX = isTouch ? 0 : (mouse.x - width * 0.5) * 0.012;
+      const parallaxY = isTouch ? 0 : (mouse.y - height * 0.5) * 0.012;
 
       // 1. Blit pre-rendered background & tree
-      ctx.drawImage(offscreenCanvas, 0, 0);
+      ctx.drawImage(offscreenCanvas, 0, 0, width, height);
 
       // 2. Stars
       ctx.fillStyle = 'rgba(216, 180, 254, 0.6)';
@@ -179,9 +202,24 @@ export function GlowingTreeCanvas({ className = '' }) {
 
     render();
 
+    // Pause canvas completely when browser tab is inactive to free CPU/GPU
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        isPaused = true;
+        cancelAnimationFrame(animationFrameId);
+      } else {
+        isPaused = false;
+        animationFrameId = requestAnimationFrame(render);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('mousemove', handleMouseMove);
+      if (!isTouch) {
+        window.removeEventListener('mousemove', handleMouseMove);
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       cancelAnimationFrame(animationFrameId);
     };
   }, []);
@@ -189,7 +227,7 @@ export function GlowingTreeCanvas({ className = '' }) {
   return (
     <canvas
       ref={canvasRef}
-      className={`fixed inset-0 w-full h-full pointer-events-none z-0 ${className}`}
+      className={`fixed inset-0 w-full h-full pointer-events-none z-0 gpu-layer ${className}`}
       style={{ background: '#020106' }}
     />
   );

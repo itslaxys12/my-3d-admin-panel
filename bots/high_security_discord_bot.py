@@ -477,11 +477,42 @@ async def send_ban_log(guild: discord.Guild, user: discord.User | discord.Member
         print(f"[BAN LOG] Failed to post log to #{channel.name}: {e}")
 
 
-async def send_welcome_embed(member: discord.Member, role: Optional[discord.Role] = None):
+def get_guild_welcome_record(guild_id: str) -> Optional[dict]:
+    """Retrieve welcome card configuration from discord.db for this specific guild."""
+    if not DISCORD_DB.exists():
+        return None
+    try:
+        conn = sqlite3.connect(DISCORD_DB)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM guild_welcome_configs WHERE guild_id = ?", (str(guild_id),))
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            return dict(row)
+    except Exception as e:
+        print(f"[WELCOME DB ERROR] {e}")
+    return None
+
+
+async def send_welcome_embed(member: discord.Member, role: Optional[discord.Role] = None, target_channel: Optional[discord.TextChannel] = None):
     """Sends a rich aesthetic Cyberpunk welcome card into the configured welcome channel."""
     guild = member.guild
-    welcome_ch_id = get_welcome_channel_id()
-    channel = guild.get_channel(welcome_ch_id) if welcome_ch_id else guild.system_channel
+    cfg = get_guild_welcome_record(str(guild.id))
+
+    channel = target_channel
+    if not channel:
+        welcome_ch_id = None
+        if cfg and cfg.get("welcome_channel_id"):
+            try:
+                welcome_ch_id = int(cfg["welcome_channel_id"])
+            except ValueError:
+                welcome_ch_id = None
+
+        if not welcome_ch_id:
+            welcome_ch_id = get_welcome_channel_id()
+
+        channel = guild.get_channel(welcome_ch_id) if welcome_ch_id else guild.system_channel
 
     if not channel:
         for c in guild.text_channels:
@@ -494,33 +525,62 @@ async def send_welcome_embed(member: discord.Member, role: Optional[discord.Role
         print(f"[WELCOME] No writable welcome channel found in '{guild.name}'")
         return
 
-    member_count = guild.member_count
-    role_text = role.mention if role else "`None`"
-    account_created = member.created_at.strftime("%b %d, %Y")
+    # Check custom configuration or fallback to defaults
+    headline = (cfg.get("welcome_headline") if cfg else None) or f"Welcome to {guild.name}!!"
+    custom_msg = (cfg.get("custom_message") if cfg else None) or "Stay With Us !!"
+    footer_msg = (cfg.get("footer_text") if cfg else None) or "Thanks for joining! 🧿"
+    author_text = (cfg.get("author_name") if cfg else None) or f"{guild.name} ⚡ || Panel.Project.Chilling ."
+
+    rules_ch_id = cfg.get("rules_channel_id") if cfg else ""
+    chat_ch_id = cfg.get("chat_channel_id") if cfg else ""
+    announce_ch_id = cfg.get("announce_channel_id") if cfg else ""
+
+    rules_em = (cfg.get("rules_emoji") if cfg else None) or "📜"
+    chat_em = (cfg.get("chat_emoji") if cfg else None) or "💬"
+    ann_em = (cfg.get("announce_emoji") if cfg else None) or "📢"
+    head_em = (cfg.get("headline_emoji") if cfg else None) or "✨"
+    slog_em = (cfg.get("slogan_emoji") if cfg else None) or "❤️"
+
+    rules_str = f"<#{rules_ch_id}> · RULES" if rules_ch_id else "#rules · RULES"
+    chat_str = f"<#{chat_ch_id}> · PUBLIC · CHAT" if chat_ch_id else "#chat · PUBLIC · CHAT"
+    announce_str = f"<#{announce_ch_id}> · ANNOUNCEMENTS" if announce_ch_id else "#announcements · ANNOUNCEMENTS"
+
+    description = (
+        f"{head_em} **{headline}**\n\n"
+        f"{rules_em} **Rules** {rules_str}\n"
+        f"{chat_em} **Chat in** {chat_str}\n"
+        f"{ann_em} **Announce** {announce_str}\n\n"
+        f"**{custom_msg}** {slog_em}"
+    )
 
     embed = discord.Embed(
-        title=f"🎉 Welcome to {guild.name}! 👋",
-        description=(
-            f"Greetings {member.mention}, welcome aboard the server matrix! ✨\n"
-            f"We are thrilled to have you here in **{guild.name}**.\n\n"
-            f"• Please review the server rules and enjoy your stay!\n"
-            f"• Say hello in the chat and have a great time! 🚀"
-        ),
-        color=discord.Color.from_rgb(0, 255, 157),  # Cyber Emerald
+        description=description,
+        color=discord.Color.from_rgb(0, 255, 157),  # Cyber Emerald / Neon
         timestamp=datetime.now()
     )
-    embed.set_thumbnail(url=member.display_avatar.url)
-    embed.add_field(name="👤 Member", value=f"**{member.display_name}** (`@{member.name}`)", inline=True)
-    embed.add_field(name="🆔 User ID", value=f"`{member.id}`", inline=True)
-    embed.add_field(name="👥 Member Number", value=f"**#{member_count}**", inline=True)
-    embed.add_field(name="👑 Assigned Role", value=role_text, inline=True)
-    embed.add_field(name="📅 Account Created", value=f"`{account_created}`", inline=True)
-    embed.add_field(name="🛡️ Security Status", value="`VERIFIED ACTIVE`", inline=True)
 
+    # Author header matching HEX COMMUNITY screenshot
     if guild.icon:
-        embed.set_footer(text=f"{guild.name} • Official Member Gateway", icon_url=guild.icon.url)
+        embed.set_author(name=author_text, icon_url=guild.icon.url)
     else:
-        embed.set_footer(text=f"{guild.name} • Official Member Gateway")
+        embed.set_author(name=author_text)
+
+    # Thumbnail: user avatar or custom avatar
+    thumb_url = (cfg.get("thumbnail_url") if cfg else None) or member.display_avatar.url
+    if thumb_url:
+        embed.set_thumbnail(url=thumb_url)
+
+    # VIP Animated GIF Banner (matching DANGER HEX screenshot)
+    banner_url = cfg.get("banner_gif_url") if cfg else None
+    if banner_url and banner_url.strip():
+        embed.set_image(url=banner_url.strip())
+
+    # Footer matching screenshot
+    footer_icon = guild.icon.url if guild.icon else None
+    if footer_icon:
+        embed.set_footer(text=f"{footer_msg} • Today at {datetime.now().strftime('%I:%M %p')}", icon_url=footer_icon)
+    else:
+        embed.set_footer(text=f"{footer_msg} • Today at {datetime.now().strftime('%I:%M %p')}")
 
     try:
         await channel.send(content=f"👋 Welcome {member.mention}! 🎉", embed=embed)
@@ -1701,6 +1761,17 @@ async def userinfo(ctx, member: discord.Member = None):
     embed.set_thumbnail(url=target.display_avatar.url)
     embed.set_footer(text="GMX System Intelligence")
     await ctx.send(embed=embed)
+
+
+@bot.command(name="testwelcome", aliases=["welcometest", "checkwelcome"], help="Tests the configured aesthetic welcome embed in the current channel")
+async def test_welcome_cmd(ctx):
+    """Tests the configured welcome embed for this server directly in chat."""
+    if not is_whitelisted_user(ctx.author.id, ctx.guild):
+        return await ctx.reply("❌ **Restricted:** Only Whitelisted Admins and the Server Owner can trigger welcome tests.", mention_author=False)
+
+    await ctx.reply("🧪 **[GMX BOT HUB]** Triggering test welcome embed...", mention_author=False)
+    await send_welcome_embed(ctx.author, role=None, target_channel=ctx.channel)
+
 
 
 # ─── ROUTER MAC MONITORING & DEVICE ALERT COMMAND ────────────────────────────

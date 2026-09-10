@@ -7,27 +7,14 @@ import { motion } from 'framer-motion';
  * and neon aura responsive to mouse tilt. Zero heavy WebGL overhead.
  */
 export default function HolographicCoin3D({ symbol = 'QAI', name = 'Quantum AI', color = '#00ff9d', isBullish = true }) {
-  const [rotateY, setRotateY] = useState(0);
   const [mouseOffset, setMouseOffset] = useState({ x: 0, y: 0 });
 
-  useEffect(() => {
-    let animationFrameId;
-    let currentRotation = 0;
-
-    const animateRotation = () => {
-      currentRotation = (currentRotation + 0.75) % 360;
-      setRotateY(currentRotation);
-      animationFrameId = requestAnimationFrame(animateRotation);
-    };
-
-    animationFrameId = requestAnimationFrame(animateRotation);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, []);
-
   const handleMouseMove = (e) => {
+    // Touch devices do not need mouse tracking
+    if (window.matchMedia('(pointer: coarse)').matches) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width - 0.5) * 20;
-    const y = ((e.clientY - rect.top) / rect.height - 0.5) * -20;
+    const x = ((e.clientX - rect.left) / rect.width - 0.5) * 16;
+    const y = ((e.clientY - rect.top) / rect.height - 0.5) * -16;
     setMouseOffset({ x, y });
   };
 
@@ -74,10 +61,9 @@ export default function HolographicCoin3D({ symbol = 'QAI', name = 'Quantum AI',
 
         {/* 3D Spinning Holographic Coin Cylinder */}
         <div
-          className="relative w-24 h-24 rounded-full flex items-center justify-center font-black text-xl font-mono tracking-widest shadow-2xl transition-all"
+          className="relative w-24 h-24 rounded-full flex items-center justify-center font-black text-xl font-mono tracking-widest shadow-2xl transition-all animate-spin-holo gpu-layer"
           style={{
             transformStyle: 'preserve-3d',
-            transform: `rotateY(${rotateY}deg)`,
             background: `radial-gradient(circle at 35% 35%, ${color}33, #020617 80%)`,
             border: `2px solid ${color}`,
             boxShadow: `0 0 35px ${color}55, inset 0 0 20px ${color}33`,

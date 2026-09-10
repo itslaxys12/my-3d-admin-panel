@@ -55,29 +55,46 @@ export function ScrollVideoPlayer({
     }
   };
 
-  // Scroll Sync Listener
+  // Throttled Scroll Sync Listener
   useEffect(() => {
     if (!scrollSync) return;
 
+    let rafId = null;
+    let lastSeek = 0;
+
     const handleScroll = () => {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const windowHeight = window.innerHeight;
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (!containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const windowHeight = window.innerHeight;
 
-      // Progress inside viewport (0 when entering bottom, 1 when exiting top)
-      const visibleRange = windowHeight + rect.height;
-      const currentPos = windowHeight - rect.top;
-      const progress = Math.min(Math.max(currentPos / visibleRange, 0), 1);
+        // Skip if outside viewport
+        if (rect.bottom < 0 || rect.top > windowHeight) return;
 
-      setScrubProgress(progress);
+        // Progress inside viewport (0 when entering bottom, 1 when exiting top)
+        const visibleRange = windowHeight + rect.height;
+        const currentPos = windowHeight - rect.top;
+        const progress = Math.min(Math.max(currentPos / visibleRange, 0), 1);
 
-      if (videoRef.current && videoRef.current.duration) {
-        videoRef.current.currentTime = progress * videoRef.current.duration;
-      }
+        setScrubProgress((prev) => (Math.abs(prev - progress) > 0.01 ? progress : prev));
+
+        if (videoRef.current && videoRef.current.duration && !videoRef.current.seeking) {
+          const targetTime = progress * videoRef.current.duration;
+          if (Math.abs(targetTime - lastSeek) > 0.15) {
+            lastSeek = targetTime;
+            videoRef.current.currentTime = targetTime;
+          }
+        }
+      });
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
   }, [scrollSync]);
 
   const togglePlay = (e) => {

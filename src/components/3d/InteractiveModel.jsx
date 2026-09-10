@@ -97,7 +97,10 @@ export function InteractiveModel({
     <div className="relative w-full rounded-2xl overflow-hidden bg-slate-950/70 border border-cyan-500/20 backdrop-blur-xl shadow-2xl">
       {/* Three.js Interactive Canvas */}
       <div style={{ height }}>
-        <Canvas camera={{ position: [0, 0, 5], fov: 50 }}>
+        <Canvas
+          camera={{ position: [0, 0, 5], fov: 50 }}
+          dpr={typeof window !== 'undefined' && (window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) ? 1 : [1, 1.5]}
+        >
           <ambientLight intensity={0.7} />
           <directionalLight position={[10, 10, 5]} intensity={1.5} color="#ffffff" />
           <pointLight position={[-10, -10, -5]} intensity={2} color={color} />

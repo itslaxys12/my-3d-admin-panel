@@ -13,6 +13,7 @@ export const NAV_ITEMS = [
   { id: 'router_manager', label: 'WiFi & Router Hub', icon: 'Wifi', badge: 'VIP Owner', ownerOnly: true },
   { id: 'fx_replay', label: 'FX Replay Simulator', icon: 'TrendingUp', badge: 'PRO' },
   { id: 'settings', label: 'Settings', icon: 'Settings', badge: null },
+  { id: 'welcome_hub', label: 'Discord Welcome Hub', icon: 'Sparkles', badge: 'VIP / Free' },
 ];
 
 export const KPI_METRICS = [

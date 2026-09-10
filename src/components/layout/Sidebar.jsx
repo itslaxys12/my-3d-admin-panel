@@ -16,6 +16,7 @@ import {
   X,
   Wifi,
   TrendingUp,
+  Sparkles,
 } from 'lucide-react';
 import { NAV_ITEMS, APP_CONFIG } from '../../utils/constants';
 
@@ -29,6 +30,7 @@ const ICON_MAP = {
   Wifi,
   TrendingUp,
   Settings,
+  Sparkles,
   Box,
 };
 
