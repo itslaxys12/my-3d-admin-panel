@@ -3499,7 +3499,7 @@ CAPTURES_DIR.mkdir(parents=True, exist_ok=True)
 
 CURRENT_ASIAN_SESSION = {
     "pair": "XAUUSD (Gold)",
-    "timeframe": "15M",
+    "timeframe": "5M",
     "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
     "asianHigh": 2368.50,
     "asianLow": 2354.20,
@@ -3510,7 +3510,7 @@ CURRENT_ASIAN_SESSION = {
     "probability": "89% High Probability",
     "confidenceScore": 89,
     "predictedMove": "Bullish Expansion targeting Asia High and London High (+60 to +110 Pips)",
-    "narrative": "Asian Low (2354.20) was aggressively swept during London Open at 08:15 UTC. Smart Money grabbed sell-side liquidity from retail breakout traders, created a clean liquidity purge wick, and initiated a 15M Market Structure Shift (MSS) with an unfilled Bullish Fair Value Gap (FVG). Expect strong continuation toward Asian High.",
+    "narrative": "Asian Low (2354.20) was aggressively swept during London Open at 08:15 UTC. Smart Money grabbed sell-side liquidity from retail breakout traders, created a clean liquidity purge wick, and initiated a 5M Market Structure Shift (MSS) with an unfilled Bullish Fair Value Gap (FVG). Expect strong continuation toward Asian High.",
     "entry": 2358.40,
     "stopLoss": 2352.10,
     "takeProfit1": 2368.50,
@@ -3523,7 +3523,7 @@ CURRENT_ASIAN_SESSION = {
 class AsianUploadPayload(BaseModel):
     image_base64: Optional[str] = None
     pair: Optional[str] = "XAUUSD"
-    timeframe: Optional[str] = "15M"
+    timeframe: Optional[str] = "5M"
     analysis: Optional[Dict[str, Any]] = None
 
 @app.get("/api/trading/asian-session")

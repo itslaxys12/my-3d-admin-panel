@@ -59,7 +59,7 @@ RESET = "\033[0m"
 # ─── XAUUSD STATE ────────────────────────────────────────────────────────────
 state = {
     "pair": "XAUUSD (Gold)",
-    "timeframe": "15M",
+    "timeframe": "5M",
     "asian_high": 2368.50,
     "asian_low": 2354.20,
     "current_price": 2358.90,
@@ -244,7 +244,7 @@ def analyze_and_sync():
     try:
         body = json.dumps({
             "pair": "XAUUSD",
-            "timeframe": "15M",
+            "timeframe": state["timeframe"],
             "image_base64": img_b64,
             "analysis": payload
         }).encode("utf-8")

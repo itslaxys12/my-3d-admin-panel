@@ -36,7 +36,7 @@ const DEMO_SETUPS = [
   {
     id: 'setup-gold-1',
     pair: 'XAUUSD (Gold)',
-    timeframe: '15M',
+    timeframe: '5M',
     timestamp: 'Today, 08:35 UTC',
     asianHigh: 2368.50,
     asianLow: 2354.20,
@@ -44,22 +44,22 @@ const DEMO_SETUPS = [
     sweepType: 'Asian Low Swept (SSL Taken)',
     phase: 'London Open Manipulation (Judas Swing)',
     direction: 'BULLISH',
-    probability: '89% High Probability',
-    confidenceScore: 89,
-    predictedMove: 'Bullish Expansion targeting Asia High and London High (+60 to +110 Pips)',
-    narrative: 'Asian Low (2354.20) was aggressively swept during London Open at 08:15 UTC. Smart Money grabbed sell-side liquidity from retail breakout traders, created a clean liquidity purge wick, and initiated a 15M Market Structure Shift (MSS) with an unfilled Bullish Fair Value Gap (FVG). Expect strong continuation toward Asian High.',
+    probability: '92% High Probability (5M Scalp)',
+    confidenceScore: 92,
+    predictedMove: '5M Bullish Expansion targeting Asia High and London High (+40 to +90 Pips)',
+    narrative: 'Asian Low (2354.20) was aggressively swept on the 5-Minute timeframe during London Open at 08:15 UTC. Smart Money purged retail stop losses below 2354.20, rejected sharply with a long wick, and confirmed a 5M Market Structure Shift (MSS) with an unfilled 5M Bullish Fair Value Gap (FVG). High-probability 5M scalping continuation toward Asian High.',
     entry: 2358.40,
-    stopLoss: 2352.10,
+    stopLoss: 2353.10,
     takeProfit1: 2368.50,
-    takeProfit2: 2376.00,
-    riskReward: '1 : 3.4',
+    takeProfit2: 2374.00,
+    riskReward: '1 : 3.6',
     pipsProjected: '+101 Pips',
-    status: 'ACTIVE SIGNAL'
+    status: 'ACTIVE 5M SIGNAL'
   },
   {
     id: 'setup-eur-1',
     pair: 'EURUSD',
-    timeframe: '15M',
+    timeframe: '5M',
     timestamp: 'Yesterday, 07:45 UTC',
     asianHigh: 1.0895,
     asianLow: 1.0840,
@@ -67,15 +67,15 @@ const DEMO_SETUPS = [
     sweepType: 'Asian High Swept (BSL Taken)',
     phase: 'London Open Judas Swing (Bearish Trap)',
     direction: 'BEARISH',
-    probability: '84% High Probability',
-    confidenceScore: 84,
-    predictedMove: 'Bearish Reversal targeting Asia Low and Previous Day Low (+45 to +65 Pips)',
-    narrative: 'Asian High (1.0895) was breached during Frankfurt pre-market, triggering early buy stops. Rapid bearish displacement followed with a displacement candle below the 15M order block. Expect aggressive move lower towards Asian Low.',
+    probability: '87% High Probability (5M Scalp)',
+    confidenceScore: 87,
+    predictedMove: '5M Bearish Reversal targeting Asia Low and Previous Day Low (+35 to +55 Pips)',
+    narrative: 'Asian High (1.0895) was breached on the 5-Minute chart during Frankfurt pre-market, triggering early breakout buyers. Rapid bearish displacement followed with a 5M displacement candle closing below the 5M order block. Expect aggressive move lower towards Asian Low.',
     entry: 1.0885,
-    stopLoss: 1.0905,
+    stopLoss: 1.0902,
     takeProfit1: 1.0840,
     takeProfit2: 1.0815,
-    riskReward: '1 : 2.8',
+    riskReward: '1 : 2.9',
     pipsProjected: '+45 Pips',
     status: 'COMPLETED (+45 PIPS)'
   }
@@ -415,7 +415,7 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
 
                 {/* Bullish FVG Box */}
                 <rect x="465" y="220" width="70" height="45" fill="url(#fvgGrad)" stroke="#00f0ff" strokeWidth="1" strokeDasharray="3 3" />
-                <text x="475" y="245" fill="#00f0ff" fontSize="10" fontFamily="monospace" fontWeight="bold">15M BULLISH FVG</text>
+                <text x="475" y="245" fill="#00f0ff" fontSize="10" fontFamily="monospace" fontWeight="bold">5M BULLISH FVG</text>
 
                 {/* Strong Bullish Displacement Candle */}
                 <line x1="490" y1="190" x2="490" y2="270" stroke="#00ff9d" strokeWidth="2.5" />
@@ -449,8 +449,8 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                       <span className="text-[10px] font-mono text-slate-400">Target 1</span>
                     </div>
 
-                    <span className="px-2 py-0.5 rounded bg-slate-900/80 text-slate-400 border border-slate-800 text-[10px] font-mono">
-                      15M Timeframe
+                    <span className="px-2 py-0.5 rounded bg-slate-900/80 text-emerald-400 border border-slate-800 text-[10px] font-mono font-bold">
+                      {activeSetup.timeframe} Scalping
                     </span>
                   </div>
 
@@ -505,7 +505,7 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                   ICT Asian Judas Sweep
                 </span>
                 <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold">
-                  15M Bullish FVG
+                  {activeSetup.timeframe} Bullish FVG
                 </span>
               </div>
 
