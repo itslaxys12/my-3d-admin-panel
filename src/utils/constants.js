@@ -14,6 +14,7 @@ export const NAV_ITEMS = [
   { id: 'fx_replay', label: 'FX Replay Simulator', icon: 'TrendingUp', badge: 'PRO' },
   { id: 'settings', label: 'Settings', icon: 'Settings', badge: null },
   { id: 'welcome_hub', label: 'Discord Welcome Hub', icon: 'Sparkles', badge: 'VIP / Free' },
+  { id: 'asian_session_ai', label: 'Asian Session AI Radar', icon: 'Crosshair', badge: 'AI Vision' },
 ];
 
 export const KPI_METRICS = [

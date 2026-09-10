@@ -13,6 +13,7 @@ import CryptoRadarView from './components/crypto/CryptoRadarView';
 import RouterManager from './views/RouterManager';
 import { FXReplayBacktest } from './components/trading/FXReplayBacktest';
 import WelcomeHub from './views/WelcomeHub';
+import AsianSessionRadar from './views/AsianSessionRadar';
 import InteractiveModel from './components/3d/InteractiveModel';
 import GlassCard from './components/UI/GlassCard';
 import SecurityLockdown from './components/security/SecurityLockdown';
@@ -244,6 +245,9 @@ export function App() {
 
       case 'welcome_hub':
         return <WelcomeHub userRole={userRole} />;
+
+      case 'asian_session_ai':
+        return <AsianSessionRadar userRole={userRole} />;
 
       default:
         return <Dashboard />;

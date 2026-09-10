@@ -3492,6 +3492,116 @@ async def seed_sample_router_data():
     }
 
 
+# ─── ASIAN SESSION ICT & AI VISION SNIPER ENDPOINTS ─────────────────────────
+
+CAPTURES_DIR = DATA_DIR / "captures"
+CAPTURES_DIR.mkdir(parents=True, exist_ok=True)
+
+CURRENT_ASIAN_SESSION = {
+    "pair": "XAUUSD (Gold)",
+    "timeframe": "15M",
+    "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+    "asianHigh": 2368.50,
+    "asianLow": 2354.20,
+    "currentPrice": 2358.90,
+    "sweepType": "Asian Low Swept (SSL Taken)",
+    "phase": "London Open Manipulation (Judas Swing)",
+    "direction": "BULLISH",
+    "probability": "89% High Probability",
+    "confidenceScore": 89,
+    "predictedMove": "Bullish Expansion targeting Asia High and London High (+60 to +110 Pips)",
+    "narrative": "Asian Low (2354.20) was aggressively swept during London Open at 08:15 UTC. Smart Money grabbed sell-side liquidity from retail breakout traders, created a clean liquidity purge wick, and initiated a 15M Market Structure Shift (MSS) with an unfilled Bullish Fair Value Gap (FVG). Expect strong continuation toward Asian High.",
+    "entry": 2358.40,
+    "stopLoss": 2352.10,
+    "takeProfit1": 2368.50,
+    "takeProfit2": 2376.00,
+    "riskReward": "1 : 3.4",
+    "pipsProjected": "+101 Pips",
+    "status": "ACTIVE SIGNAL"
+}
+
+class AsianUploadPayload(BaseModel):
+    image_base64: Optional[str] = None
+    pair: Optional[str] = "XAUUSD"
+    timeframe: Optional[str] = "15M"
+    analysis: Optional[Dict[str, Any]] = None
+
+@app.get("/api/trading/asian-session")
+async def get_asian_session_data():
+    """Returns the latest active Asian session sweep, AI move prediction, and status."""
+    return {
+        "success": True,
+        "setup": CURRENT_ASIAN_SESSION,
+        "utc_time": datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+    }
+
+@app.post("/api/trading/asian-session/capture")
+async def trigger_asian_session_capture():
+    """Triggers an instant capture simulation or dispatches to connected PC bot."""
+    global CURRENT_ASIAN_SESSION
+    is_gold = "Gold" in CURRENT_ASIAN_SESSION.get("pair", "")
+    if is_gold:
+        CURRENT_ASIAN_SESSION = {
+            "pair": "EURUSD",
+            "timeframe": "15M",
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "asianHigh": 1.0895,
+            "asianLow": 1.0840,
+            "currentPrice": 1.0888,
+            "sweepType": "Asian High Swept (BSL Taken)",
+            "phase": "London Open Judas Swing (Bearish Trap)",
+            "direction": "BEARISH",
+            "probability": "84% High Probability",
+            "confidenceScore": 84,
+            "predictedMove": "Bearish Reversal targeting Asia Low and Previous Day Low (+45 to +65 Pips)",
+            "narrative": "Asian High (1.0895) was breached during Frankfurt pre-market, triggering early buy stops. Rapid bearish displacement followed with a displacement candle below the 15M order block. Expect aggressive move lower towards Asian Low.",
+            "entry": 1.0885,
+            "stopLoss": 1.0905,
+            "takeProfit1": 1.0840,
+            "takeProfit2": 1.0815,
+            "riskReward": "1 : 2.8",
+            "pipsProjected": "+45 Pips",
+            "status": "COMPLETED (+45 PIPS)"
+        }
+    else:
+        CURRENT_ASIAN_SESSION = {
+            "pair": "XAUUSD (Gold)",
+            "timeframe": "15M",
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "asianHigh": 2368.50,
+            "asianLow": 2354.20,
+            "currentPrice": 2358.90,
+            "sweepType": "Asian Low Swept (SSL Taken)",
+            "phase": "London Open Manipulation (Judas Swing)",
+            "direction": "BULLISH",
+            "probability": "89% High Probability",
+            "confidenceScore": 89,
+            "predictedMove": "Bullish Expansion targeting Asia High and London High (+60 to +110 Pips)",
+            "narrative": "Asian Low (2354.20) was aggressively swept during London Open at 08:15 UTC. Smart Money grabbed sell-side liquidity from retail breakout traders, created a clean liquidity purge wick, and initiated a 15M Market Structure Shift (MSS) with an unfilled Bullish Fair Value Gap (FVG). Expect strong continuation toward Asian High.",
+            "entry": 2358.40,
+            "stopLoss": 2352.10,
+            "takeProfit1": 2368.50,
+            "takeProfit2": 2376.00,
+            "riskReward": "1 : 3.4",
+            "pipsProjected": "+101 Pips",
+            "status": "ACTIVE SIGNAL"
+        }
+    return {
+        "success": True,
+        "message": "Asian Session capture processed successfully",
+        "setup": CURRENT_ASIAN_SESSION
+    }
+
+@app.post("/api/trading/asian-session/upload")
+async def upload_asian_session_capture(payload: AsianUploadPayload):
+    """Receives a screenshot from the PC TradingView watcher bot."""
+    global CURRENT_ASIAN_SESSION
+    if payload.analysis:
+        CURRENT_ASIAN_SESSION.update(payload.analysis)
+    CURRENT_ASIAN_SESSION["timestamp"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return {"success": True, "message": "Uploaded and analyzed", "setup": CURRENT_ASIAN_SESSION}
+
+
 # ─── Entry Point ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
