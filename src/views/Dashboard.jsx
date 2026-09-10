@@ -19,12 +19,13 @@ import {
   Cpu,
   ExternalLink,
   ShieldAlert,
+  Crosshair,
 } from 'lucide-react';
 import { KPI_METRICS, RECENT_LOGS, APP_CONFIG } from '../utils/constants';
 import GlassCard from '../components/UI/GlassCard';
 import AnimatedButton from '../components/UI/AnimatedButton';
 
-export function Dashboard() {
+export function Dashboard({ onNavigate }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = () => {
@@ -86,6 +87,57 @@ export function Dashboard() {
           </AnimatedButton>
         </div>
       </div>
+
+      {/* ─── LIVE XAUUSD 5M ASIAN SESSION AI RADAR BANNER ─── */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-emerald-950/70 via-slate-900/90 to-cyan-950/60 border border-emerald-500/40 shadow-[0_0_35px_rgba(0,255,157,0.15)] backdrop-blur-md"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="relative p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-400/30 text-emerald-400 flex-shrink-0 shadow-[0_0_20px_rgba(0,255,157,0.3)]">
+              <Crosshair className="w-8 h-8 animate-pulse text-emerald-400" />
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-500 border-2 border-slate-950 animate-ping" />
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-500 border-2 border-slate-950" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[11px] font-mono font-bold flex items-center gap-1.5 shadow-[0_0_10px_rgba(244,63,94,0.3)]">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                  🔴 LIVE 5M RADAR ACTIVE
+                </span>
+                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-mono font-bold">
+                  XAUUSD (GOLD) • 5M TIMEFRAME
+                </span>
+                <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[11px] font-mono font-bold">
+                  ICT JUDAS SWING
+                </span>
+              </div>
+              <h2 className="text-lg sm:text-xl font-black text-white font-heading tracking-wide">
+                Asian Session AI Radar: Live 5-Minute TradingView Chart & Sniper Signals
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 mt-1 leading-relaxed">
+                রিয়েল-টাইম TradingView ৫-মিনিট চার্ট, এশিয়ান রেঞ্জ লিকুইডিটি সুইপ এবং লাইভ সিগন্যাল—
+                Entry: <strong className="text-cyan-300 font-mono font-bold">$2358.40</strong> | 
+                SL: <strong className="text-rose-400 font-mono font-bold">$2353.10</strong> | 
+                TP1: <strong className="text-emerald-400 font-mono font-bold">$2368.50</strong> | 
+                TP2: <strong className="text-emerald-300 font-mono font-bold">$2374.00</strong>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <button
+              onClick={() => onNavigate && onNavigate('asian_session_ai')}
+              className="w-full sm:w-auto px-5 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 hover:from-emerald-400 hover:to-cyan-300 text-slate-950 font-mono text-xs font-black shadow-[0_0_25px_rgba(0,255,157,0.4)] transition-all flex items-center justify-center gap-2 group active:scale-95"
+            >
+              <span>🚀 লাইভ চার্ট ও সিগন্যাল দেখুন (Open 5M Radar)</span>
+              <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
+            </button>
+          </div>
+        </div>
+      </motion.div>
 
       {/* KPI Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">

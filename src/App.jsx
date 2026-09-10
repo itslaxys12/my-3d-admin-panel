@@ -112,7 +112,7 @@ export function App() {
   const renderContent = () => {
     switch (currentTab) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onNavigate={setCurrentTab} />;
 
       case 'bot_control':
         // Regular users cannot access internal Bot Controller

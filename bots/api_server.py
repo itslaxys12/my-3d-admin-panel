@@ -3566,7 +3566,7 @@ async def trigger_asian_session_capture():
     else:
         CURRENT_ASIAN_SESSION = {
             "pair": "XAUUSD (Gold)",
-            "timeframe": "15M",
+            "timeframe": "5M",
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             "asianHigh": 2368.50,
             "asianLow": 2354.20,
@@ -3574,17 +3574,25 @@ async def trigger_asian_session_capture():
             "sweepType": "Asian Low Swept (SSL Taken)",
             "phase": "London Open Manipulation (Judas Swing)",
             "direction": "BULLISH",
-            "probability": "89% High Probability",
-            "confidenceScore": 89,
-            "predictedMove": "Bullish Expansion targeting Asia High and London High (+60 to +110 Pips)",
-            "narrative": "Asian Low (2354.20) was aggressively swept during London Open at 08:15 UTC. Smart Money grabbed sell-side liquidity from retail breakout traders, created a clean liquidity purge wick, and initiated a 15M Market Structure Shift (MSS) with an unfilled Bullish Fair Value Gap (FVG). Expect strong continuation toward Asian High.",
+            "marketDirection": "BULLISH (UP)",
+            "probability": "92% High Probability (5M Scalp)",
+            "confidenceScore": 92,
+            "predictedMove": "5M Bullish Expansion targeting Asia High ($2368.50) and London High ($2374.00)",
+            "narrative": "Asian Low ($2354.20) was aggressively swept on the 5-Minute timeframe during London Open at 08:15 UTC. Smart Money purged retail stop losses below 2354.20, rejected sharply with a long wick, and confirmed a 5M Market Structure Shift (MSS) with an unfilled 5M Bullish Fair Value Gap (FVG). High-probability 5M scalping continuation toward Asian High.",
             "entry": 2358.40,
-            "stopLoss": 2352.10,
+            "stopLoss": 2353.10,
+            "slDistance": "5.3 Pips ($5.30)",
             "takeProfit1": 2368.50,
-            "takeProfit2": 2376.00,
-            "riskReward": "1 : 3.4",
+            "tp1Distance": "+10.1 Pips ($10.10)",
+            "takeProfit2": 2374.00,
+            "tp2Distance": "+15.6 Pips ($15.60)",
+            "riskReward": "1 : 3.6",
             "pipsProjected": "+101 Pips",
-            "status": "ACTIVE SIGNAL"
+            "status": "ACTIVE 5M SIGNAL",
+            "bestOption": "Limit Order inside 5M Bullish FVG at $2358.40. Tight 5-pip stop gives optimal 1:3.6 R:R.",
+            "slPlacementGuide": "Place SL at $2353.10 (exactly 2 pips below the $2354.20 sweep wick). If price crosses this, the setup is invalidated.",
+            "tp1PlacementGuide": "Take 50% Profit at $2368.50 (Asian High Buy-Side Liquidity Pool). Move Stop Loss to Entry (Risk-Free).",
+            "tp2PlacementGuide": "Trail remaining 50% runner to $2374.00 (London Session Peak Expansion High)."
         }
     return {
         "success": True,

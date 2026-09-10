@@ -117,8 +117,17 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
   const [isCapturing, setIsCapturing] = useState(false);
   const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
   const [copiedCmd, setCopiedCmd] = useState(false);
+  const [chartMode, setChartMode] = useState('tradingview_live'); // 'tradingview_live' | 'ai_hud'
+  const [copiedTrade, setCopiedTrade] = useState(false);
   const [currentTimeUTC, setCurrentTimeUTC] = useState('');
   const [currentTimeBST, setCurrentTimeBST] = useState('');
+
+  const handleCopyTrade = () => {
+    const text = `🎯 XAUUSD (Gold) 5M ICT Sniper Signal\nDirection: ${activeSetup.marketDirection || activeSetup.direction}\nEntry (OTE): ${activeSetup.entry}\nStop Loss (SL): ${activeSetup.stopLoss} (${activeSetup.slDistance || '5.3 Pips'})\nTake Profit 1 (TP1): ${activeSetup.takeProfit1} (${activeSetup.tp1Distance || '+10.1 Pips'})\nTake Profit 2 (TP2): ${activeSetup.takeProfit2} (${activeSetup.tp2Distance || '+15.6 Pips'})\nRisk/Reward: ${activeSetup.riskReward}\nTimeframe: ${activeSetup.timeframe}`;
+    navigator.clipboard.writeText(text);
+    setCopiedTrade(true);
+    setTimeout(() => setCopiedTrade(false), 2000);
+  };
 
   // Keep live UTC & BST clocks updated
   useEffect(() => {
@@ -351,208 +360,295 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
               </div>
 
               <div className="flex items-center gap-2">
+                {/* 1-Click Feed Mode Switcher */}
+                <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+                  <button
+                    onClick={() => setChartMode('tradingview_live')}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-mono font-bold flex items-center gap-1.5 transition-all ${
+                      chartMode === 'tradingview_live'
+                        ? 'bg-emerald-500 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.5)]'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    📺 Live TradingView 5M Feed
+                  </button>
+                  <button
+                    onClick={() => setChartMode('ai_hud')}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-mono font-bold flex items-center gap-1.5 transition-all ${
+                      chartMode === 'ai_hud'
+                        ? 'bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.5)]'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🎯 AI Sniper HUD (SL/TP)
+                  </button>
+                </div>
+
                 <button
                   onClick={handleTriggerSimulation}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-medium transition-colors flex items-center gap-1"
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-medium transition-colors flex items-center gap-1"
+                  title="Switch between XAUUSD and EURUSD Asian setups"
                 >
                   <RefreshCw className="w-3 h-3 text-cyan-400" />
-                  Switch Setup
+                  <span className="hidden sm:inline">Switch Setup</span>
                 </button>
               </div>
             </div>
 
             {/* High-Tech Chart Visualizer Box */}
-            <div className="relative w-full h-[360px] sm:h-[420px] rounded-xl overflow-hidden bg-slate-950/90 border border-slate-800 flex flex-col justify-between p-4 shadow-inner">
-              {/* Background Grid Lines (Cyberpunk Chart Style) */}
-              <div
-                className="absolute inset-0 opacity-20 pointer-events-none"
-                style={{
-                  backgroundImage: `
-                    linear-gradient(to right, rgba(56, 189, 248, 0.15) 1px, transparent 1px),
-                    linear-gradient(to bottom, rgba(56, 189, 248, 0.15) 1px, transparent 1px)
-                  `,
-                  backgroundSize: '40px 40px',
-                }}
-              />
-
-              {/* Simulated Candlestick Chart SVG Graphic */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none" viewBox="0 0 800 400">
-                <defs>
-                  <linearGradient id="bullishGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#00ff9d" stopOpacity="0.25" />
-                    <stop offset="100%" stopColor="#00ff9d" stopOpacity="0.0" />
-                  </linearGradient>
-                  <linearGradient id="fvgGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#00f0ff" stopOpacity="0.3" />
-                    <stop offset="100%" stopColor="#00f0ff" stopOpacity="0.1" />
-                  </linearGradient>
-                </defs>
-
-                {/* Asian Range Shaded Box */}
-                <rect x="40" y="100" width="340" height="180" fill="rgba(168, 85, 247, 0.08)" stroke="#a855f7" strokeWidth="1" strokeDasharray="4 4" />
-                <text x="50" y="120" fill="#a855f7" fontSize="12" fontFamily="monospace" fontWeight="bold">ASIAN SESSION RANGE (00:00 - 06:00 UTC)</text>
-
-                {/* Asian Range High Line */}
-                <line x1="40" y1="100" x2="760" y2="100" stroke="#f43f5e" strokeWidth="2" strokeDasharray="5 3" />
-                
-                {/* Asian Range Low Line */}
-                <line x1="40" y1="280" x2="760" y2="280" stroke="#10b981" strokeWidth="2" strokeDasharray="5 3" />
-
-                {/* Candlesticks during Asian Session */}
-                <line x1="70" y1="150" x2="70" y2="210" stroke="#10b981" strokeWidth="1.5" />
-                <rect x="66" y="160" width="8" height="35" fill="#10b981" />
-
-                <line x1="100" y1="140" x2="100" y2="230" stroke="#f43f5e" strokeWidth="1.5" />
-                <rect x="96" y="170" width="8" height="40" fill="#f43f5e" />
-
-                <line x1="130" y1="120" x2="130" y2="190" stroke="#10b981" strokeWidth="1.5" />
-                <rect x="126" y="130" width="8" height="45" fill="#10b981" />
-
-                <line x1="160" y1="105" x2="160" y2="175" stroke="#10b981" strokeWidth="1.5" />
-                <rect x="156" y="110" width="8" height="50" fill="#10b981" />
-
-                <line x1="190" y1="110" x2="190" y2="210" stroke="#f43f5e" strokeWidth="1.5" />
-                <rect x="186" y="125" width="8" height="60" fill="#f43f5e" />
-
-                <line x1="220" y1="180" x2="220" y2="260" stroke="#f43f5e" strokeWidth="1.5" />
-                <rect x="216" y="195" width="8" height="50" fill="#f43f5e" />
-
-                <line x1="250" y1="220" x2="250" y2="275" stroke="#10b981" strokeWidth="1.5" />
-                <rect x="246" y="235" width="8" height="30" fill="#10b981" />
-
-                <line x1="280" y1="190" x2="280" y2="265" stroke="#10b981" strokeWidth="1.5" />
-                <rect x="276" y="200" width="8" height="40" fill="#10b981" />
-
-                <line x1="310" y1="160" x2="310" y2="245" stroke="#f43f5e" strokeWidth="1.5" />
-                <rect x="306" y="180" width="8" height="45" fill="#f43f5e" />
-
-                <line x1="340" y1="200" x2="340" y2="278" stroke="#f43f5e" strokeWidth="1.5" />
-                <rect x="336" y="220" width="8" height="48" fill="#f43f5e" />
-
-                {/* ─── LONDON OPEN: JUDAS SWING SWEEP ─── */}
-                <line x1="410" y1="260" x2="410" y2="345" stroke="#f43f5e" strokeWidth="2.5" />
-                <rect x="405" y="270" width="10" height="40" fill="#f43f5e" />
-
-                {/* Rejection / Liquidity Sweep Circle */}
-                <circle cx="410" cy="345" r="7" fill="none" stroke="#00f0ff" strokeWidth="2" className="animate-ping" />
-                <circle cx="410" cy="345" r="4" fill="#00f0ff" />
-
-                {/* Huge Bullish Rejection Engulfing Candle (MSS) */}
-                <line x1="450" y1="240" x2="450" y2="330" stroke="#00ff9d" strokeWidth="2.5" />
-                <rect x="444" y="250" width="12" height="75" fill="#00ff9d" />
-
-                {/* Bullish FVG Box */}
-                <rect x="465" y="220" width="70" height="45" fill="url(#fvgGrad)" stroke="#00f0ff" strokeWidth="1" strokeDasharray="3 3" />
-                <text x="475" y="245" fill="#00f0ff" fontSize="10" fontFamily="monospace" fontWeight="bold">5M BULLISH FVG</text>
-
-                {/* Strong Bullish Displacement Candle */}
-                <line x1="490" y1="190" x2="490" y2="270" stroke="#00ff9d" strokeWidth="2.5" />
-                <rect x="484" y="200" width="12" height="60" fill="#00ff9d" />
-
-                {/* Current Candle */}
-                <line x1="530" y1="180" x2="530" y2="240" stroke="#00ff9d" strokeWidth="2.5" />
-                <rect x="524" y="190" width="12" height="35" fill="#00ff9d" />
-
-                {/* ─── TRADINGVIEW POSITION TOOL (TP & SL BOX) ─── */}
-                {/* Green Take Profit Zone (Entry Y: 220 to TP1 Y: 100) */}
-                <rect x="540" y="100" width="220" height="120" fill="rgba(16, 185, 129, 0.15)" stroke="#10b981" strokeWidth="1" strokeDasharray="3 3" />
-                
-                {/* Red Stop Loss Zone (Entry Y: 220 to SL Y: 350) */}
-                <rect x="540" y="220" width="220" height="130" fill="rgba(244, 63, 94, 0.15)" stroke="#f43f5e" strokeWidth="1" strokeDasharray="3 3" />
-
-                {/* TP1 Line & Label */}
-                <line x1="530" y1="100" x2="760" y2="100" stroke="#10b981" strokeWidth="2" />
-                <rect x="630" y="86" width="130" height="20" rx="4" fill="#065f46" stroke="#10b981" strokeWidth="1" />
-                <text x="638" y="100" fill="#34d399" fontSize="10" fontFamily="monospace" fontWeight="bold">TP1: {activeSetup.takeProfit1} (+101p)</text>
-
-                {/* TP2 Line & Label */}
-                <line x1="530" y1="60" x2="760" y2="60" stroke="#10b981" strokeWidth="1.5" strokeDasharray="4 2" />
-                <rect x="630" y="46" width="130" height="20" rx="4" fill="#064e3b" stroke="#10b981" strokeWidth="1" />
-                <text x="638" y="60" fill="#6ee7b7" fontSize="10" fontFamily="monospace" fontWeight="bold">TP2: {activeSetup.takeProfit2} (+156p)</text>
-
-                {/* Entry (OTE) Line & Label */}
-                <line x1="500" y1="220" x2="760" y2="220" stroke="#00f0ff" strokeWidth="2.5" />
-                <circle cx="540" cy="220" r="5" fill="#00f0ff" className="animate-ping" />
-                <circle cx="540" cy="220" r="3" fill="#ffffff" />
-                <rect x="610" y="208" width="150" height="22" rx="4" fill="#083344" stroke="#00f0ff" strokeWidth="1.5" />
-                <text x="618" y="223" fill="#67e8f9" fontSize="10" fontFamily="monospace" fontWeight="bold">ENTRY (OTE): {activeSetup.entry}</text>
-
-                {/* Stop Loss (SL) Line & Label */}
-                <line x1="530" y1="350" x2="760" y2="350" stroke="#f43f5e" strokeWidth="2" />
-                <rect x="630" y="340" width="130" height="20" rx="4" fill="#881337" stroke="#f43f5e" strokeWidth="1" />
-                <text x="638" y="354" fill="#fda4af" fontSize="10" fontFamily="monospace" fontWeight="bold">SL: {activeSetup.stopLoss} (-53p)</text>
-
-                {/* Projected Trajectory Vector Arrow */}
-                <path
-                  d="M 545 220 Q 610 160 700 100"
-                  fill="none"
-                  stroke="#00ff9d"
-                  strokeWidth="3.5"
-                  strokeDasharray="6 4"
-                  className="animate-pulse"
-                />
-                <polygon points="705,95 690,95 700,110" fill="#00ff9d" />
-              </svg>
-
-              {/* ─── HUD Overlays (Toggleable) ─── */}
-              {showOverlays && (
-                <div className="relative z-10 flex flex-col justify-between h-full pointer-events-none">
-                  {/* Top HUD Line: Asian High (BSL) */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 pointer-events-auto">
-                      <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[11px] font-mono font-bold shadow-[0_0_10px_rgba(244,63,94,0.4)]">
-                        🔴 ASIA HIGH (BSL): {activeSetup.asianHigh}
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-400">Target 1</span>
-                    </div>
-
-                    <span className="px-2 py-0.5 rounded bg-slate-900/80 text-emerald-400 border border-slate-800 text-[10px] font-mono font-bold">
-                      {activeSetup.timeframe} Scalping
+            {chartMode === 'tradingview_live' ? (
+              <div className="relative w-full h-[460px] sm:h-[540px] rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-2xl flex flex-col">
+                {/* Real-time Floating Sniper HUD Ribbon */}
+                <div className="relative z-10 px-3 py-2 bg-slate-950/95 border-b border-slate-800 backdrop-blur-md flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold flex items-center gap-1 text-[10px] sm:text-[11px]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                      5M LIVE STREAM
+                    </span>
+                    <span className="text-slate-600">|</span>
+                    <span className="text-slate-300">
+                      Entry: <strong className="text-cyan-300 font-mono">${activeSetup.entry}</strong>
+                    </span>
+                    <span className="text-slate-300">
+                      SL: <strong className="text-rose-400 font-mono">${activeSetup.stopLoss}</strong>
+                    </span>
+                    <span className="text-slate-300">
+                      TP1: <strong className="text-emerald-400 font-mono">${activeSetup.takeProfit1}</strong>
+                    </span>
+                    <span className="text-slate-300 hidden md:inline">
+                      TP2: <strong className="text-emerald-300 font-mono">${activeSetup.takeProfit2}</strong>
                     </span>
                   </div>
 
-                  {/* Mid Sweep Notification Box */}
-                  <div className="my-auto self-start max-w-sm pointer-events-auto">
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="p-3 rounded-xl bg-slate-950/85 border border-cyan-400/50 backdrop-blur-md shadow-2xl space-y-1.5"
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleCopyTrade}
+                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 text-[11px] font-bold transition-all flex items-center gap-1"
+                      title="Copy Entry, SL, TP1, TP2 levels"
                     >
-                      <div className="flex items-center gap-2">
-                        <Zap className="w-4 h-4 text-cyan-400 animate-bounce" />
-                        <span className="text-xs font-bold text-cyan-300 font-mono">
-                          {activeSetup.sweepType}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-300 leading-snug">
-                        Liquidity purge detected below Asian Low at London Open. Market Structure Shift (MSS) confirmed with strong displacement.
-                      </p>
-                      <div className="pt-1 flex items-center justify-between text-[10px] font-mono">
-                        <span className="text-emerald-400 font-bold">Prediction: {activeSetup.direction}</span>
-                        <span className="text-slate-400">{activeSetup.pipsProjected}</span>
-                      </div>
-                    </motion.div>
-                  </div>
+                      {copiedTrade ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedTrade ? 'Copied!' : 'Copy SL/TP'}</span>
+                    </button>
 
-                  {/* Bottom HUD Line: Asian Low (SSL) */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 pointer-events-auto">
-                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-mono font-bold shadow-[0_0_10px_rgba(16,185,129,0.4)]">
-                        🟢 ASIA LOW (SSL): {activeSetup.asianLow}
-                      </span>
-                      <span className="text-[10px] font-mono text-emerald-400 font-semibold">
-                        ✓ SWEPT & PURGED
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1 text-[10px] font-mono text-slate-400">
-                      <span>Live Watcher:</span>
-                      <span className="text-emerald-400 font-bold">PC Synced</span>
-                    </div>
+                    <a
+                      href="https://www.tradingview.com/chart/?symbol=OANDA%3AXAUUSD"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-medium transition-all flex items-center gap-1"
+                      title="Open full TradingView in new tab"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span className="hidden md:inline">Full TV</span>
+                    </a>
                   </div>
                 </div>
-              )}
-            </div>
+
+                {/* Real-time TradingView Candlestick Chart 5M */}
+                <div className="relative flex-1 w-full h-full min-h-[380px]">
+                  <iframe
+                    title="Live TradingView XAUUSD 5M Chart"
+                    src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=OANDA%3AXAUUSD&interval=5&hidesidetoolbar=0&symboledit=1&saveimage=1&toolbarbg=0a0f1d&theme=dark&style=1&timezone=Asia%2FDhaka&studies=%5B%5D&locale=en"
+                    className="w-full h-full border-0"
+                    allowTransparency="true"
+                    scrolling="no"
+                    allowFullScreen
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="relative w-full h-[380px] sm:h-[440px] rounded-xl overflow-hidden bg-slate-950/90 border border-slate-800 flex flex-col justify-between p-4 shadow-inner">
+                {/* Background Grid Lines (Cyberpunk Chart Style) */}
+                <div
+                  className="absolute inset-0 opacity-20 pointer-events-none"
+                  style={{
+                    backgroundImage: `
+                      linear-gradient(to right, rgba(56, 189, 248, 0.15) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(56, 189, 248, 0.15) 1px, transparent 1px)
+                    `,
+                    backgroundSize: '40px 40px',
+                  }}
+                />
+
+                {/* Simulated Candlestick Chart SVG Graphic */}
+                <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none" viewBox="0 0 800 400">
+                  <defs>
+                    <linearGradient id="bullishGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#00ff9d" stopOpacity="0.25" />
+                      <stop offset="100%" stopColor="#00ff9d" stopOpacity="0.0" />
+                    </linearGradient>
+                    <linearGradient id="fvgGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#00f0ff" stopOpacity="0.3" />
+                      <stop offset="100%" stopColor="#00f0ff" stopOpacity="0.1" />
+                    </linearGradient>
+                  </defs>
+
+                  {/* Asian Range Shaded Box */}
+                  <rect x="40" y="100" width="340" height="180" fill="rgba(168, 85, 247, 0.08)" stroke="#a855f7" strokeWidth="1" strokeDasharray="4 4" />
+                  <text x="50" y="120" fill="#a855f7" fontSize="12" fontFamily="monospace" fontWeight="bold">ASIAN SESSION RANGE (00:00 - 06:00 UTC)</text>
+
+                  {/* Asian Range High Line */}
+                  <line x1="40" y1="100" x2="760" y2="100" stroke="#f43f5e" strokeWidth="2" strokeDasharray="5 3" />
+                  
+                  {/* Asian Range Low Line */}
+                  <line x1="40" y1="280" x2="760" y2="280" stroke="#10b981" strokeWidth="2" strokeDasharray="5 3" />
+
+                  {/* Candlesticks during Asian Session */}
+                  <line x1="70" y1="150" x2="70" y2="210" stroke="#10b981" strokeWidth="1.5" />
+                  <rect x="66" y="160" width="8" height="35" fill="#10b981" />
+
+                  <line x1="100" y1="140" x2="100" y2="230" stroke="#f43f5e" strokeWidth="1.5" />
+                  <rect x="96" y="170" width="8" height="40" fill="#f43f5e" />
+
+                  <line x1="130" y1="120" x2="130" y2="190" stroke="#10b981" strokeWidth="1.5" />
+                  <rect x="126" y="130" width="8" height="45" fill="#10b981" />
+
+                  <line x1="160" y1="105" x2="160" y2="175" stroke="#10b981" strokeWidth="1.5" />
+                  <rect x="156" y="110" width="8" height="50" fill="#10b981" />
+
+                  <line x1="190" y1="110" x2="190" y2="210" stroke="#f43f5e" strokeWidth="1.5" />
+                  <rect x="186" y="125" width="8" height="60" fill="#f43f5e" />
+
+                  <line x1="220" y1="180" x2="220" y2="260" stroke="#f43f5e" strokeWidth="1.5" />
+                  <rect x="216" y="195" width="8" height="50" fill="#f43f5e" />
+
+                  <line x1="250" y1="220" x2="250" y2="275" stroke="#10b981" strokeWidth="1.5" />
+                  <rect x="246" y="235" width="8" height="30" fill="#10b981" />
+
+                  <line x1="280" y1="190" x2="280" y2="265" stroke="#10b981" strokeWidth="1.5" />
+                  <rect x="276" y="200" width="8" height="40" fill="#10b981" />
+
+                  <line x1="310" y1="160" x2="310" y2="245" stroke="#f43f5e" strokeWidth="1.5" />
+                  <rect x="306" y="180" width="8" height="45" fill="#f43f5e" />
+
+                  <line x1="340" y1="200" x2="340" y2="278" stroke="#f43f5e" strokeWidth="1.5" />
+                  <rect x="336" y="220" width="8" height="48" fill="#f43f5e" />
+
+                  {/* ─── LONDON OPEN: JUDAS SWING SWEEP ─── */}
+                  <line x1="410" y1="260" x2="410" y2="345" stroke="#f43f5e" strokeWidth="2.5" />
+                  <rect x="405" y="270" width="10" height="40" fill="#f43f5e" />
+
+                  {/* Rejection / Liquidity Sweep Circle */}
+                  <circle cx="410" cy="345" r="7" fill="none" stroke="#00f0ff" strokeWidth="2" className="animate-ping" />
+                  <circle cx="410" cy="345" r="4" fill="#00f0ff" />
+
+                  {/* Huge Bullish Rejection Engulfing Candle (MSS) */}
+                  <line x1="450" y1="240" x2="450" y2="330" stroke="#00ff9d" strokeWidth="2.5" />
+                  <rect x="444" y="250" width="12" height="75" fill="#00ff9d" />
+
+                  {/* Bullish FVG Box */}
+                  <rect x="465" y="220" width="70" height="45" fill="url(#fvgGrad)" stroke="#00f0ff" strokeWidth="1" strokeDasharray="3 3" />
+                  <text x="475" y="245" fill="#00f0ff" fontSize="10" fontFamily="monospace" fontWeight="bold">5M BULLISH FVG</text>
+
+                  {/* Strong Bullish Displacement Candle */}
+                  <line x1="490" y1="190" x2="490" y2="270" stroke="#00ff9d" strokeWidth="2.5" />
+                  <rect x="484" y="200" width="12" height="60" fill="#00ff9d" />
+
+                  {/* Current Candle */}
+                  <line x1="530" y1="180" x2="530" y2="240" stroke="#00ff9d" strokeWidth="2.5" />
+                  <rect x="524" y="190" width="12" height="35" fill="#00ff9d" />
+
+                  {/* ─── TRADINGVIEW POSITION TOOL (TP & SL BOX) ─── */}
+                  {/* Green Take Profit Zone (Entry Y: 220 to TP1 Y: 100) */}
+                  <rect x="540" y="100" width="220" height="120" fill="rgba(16, 185, 129, 0.15)" stroke="#10b981" strokeWidth="1" strokeDasharray="3 3" />
+                  
+                  {/* Red Stop Loss Zone (Entry Y: 220 to SL Y: 350) */}
+                  <rect x="540" y="220" width="220" height="130" fill="rgba(244, 63, 94, 0.15)" stroke="#f43f5e" strokeWidth="1" strokeDasharray="3 3" />
+
+                  {/* TP1 Line & Label */}
+                  <line x1="530" y1="100" x2="760" y2="100" stroke="#10b981" strokeWidth="2" />
+                  <rect x="630" y="86" width="130" height="20" rx="4" fill="#065f46" stroke="#10b981" strokeWidth="1" />
+                  <text x="638" y="100" fill="#34d399" fontSize="10" fontFamily="monospace" fontWeight="bold">TP1: {activeSetup.takeProfit1} (+101p)</text>
+
+                  {/* TP2 Line & Label */}
+                  <line x1="530" y1="60" x2="760" y2="60" stroke="#10b981" strokeWidth="1.5" strokeDasharray="4 2" />
+                  <rect x="630" y="46" width="130" height="20" rx="4" fill="#064e3b" stroke="#10b981" strokeWidth="1" />
+                  <text x="638" y="60" fill="#6ee7b7" fontSize="10" fontFamily="monospace" fontWeight="bold">TP2: {activeSetup.takeProfit2} (+156p)</text>
+
+                  {/* Entry (OTE) Line & Label */}
+                  <line x1="500" y1="220" x2="760" y2="220" stroke="#00f0ff" strokeWidth="2.5" />
+                  <circle cx="540" cy="220" r="5" fill="#00f0ff" className="animate-ping" />
+                  <circle cx="540" cy="220" r="3" fill="#ffffff" />
+                  <rect x="610" y="208" width="150" height="22" rx="4" fill="#083344" stroke="#00f0ff" strokeWidth="1.5" />
+                  <text x="618" y="223" fill="#67e8f9" fontSize="10" fontFamily="monospace" fontWeight="bold">ENTRY (OTE): {activeSetup.entry}</text>
+
+                  {/* Stop Loss (SL) Line & Label */}
+                  <line x1="530" y1="350" x2="760" y2="350" stroke="#f43f5e" strokeWidth="2" />
+                  <rect x="630" y="340" width="130" height="20" rx="4" fill="#881337" stroke="#f43f5e" strokeWidth="1" />
+                  <text x="638" y="354" fill="#fda4af" fontSize="10" fontFamily="monospace" fontWeight="bold">SL: {activeSetup.stopLoss} (-53p)</text>
+
+                  {/* Projected Trajectory Vector Arrow */}
+                  <path
+                    d="M 545 220 Q 610 160 700 100"
+                    fill="none"
+                    stroke="#00ff9d"
+                    strokeWidth="3.5"
+                    strokeDasharray="6 4"
+                    className="animate-pulse"
+                  />
+                  <polygon points="705,95 690,95 700,110" fill="#00ff9d" />
+                </svg>
+
+                {/* ─── HUD Overlays (Toggleable) ─── */}
+                {showOverlays && (
+                  <div className="relative z-10 flex flex-col justify-between h-full pointer-events-none">
+                    {/* Top HUD Line: Asian High (BSL) */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 pointer-events-auto">
+                        <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[11px] font-mono font-bold shadow-[0_0_10px_rgba(244,63,94,0.4)]">
+                          🔴 ASIA HIGH (BSL): {activeSetup.asianHigh}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400">Target 1</span>
+                      </div>
+
+                      <span className="px-2 py-0.5 rounded bg-slate-900/80 text-emerald-400 border border-slate-800 text-[10px] font-mono font-bold">
+                        {activeSetup.timeframe} Scalping
+                      </span>
+                    </div>
+
+                    {/* Mid Sweep Notification Box */}
+                    <div className="my-auto self-start max-w-sm pointer-events-auto">
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="p-3 rounded-xl bg-slate-950/85 border border-cyan-400/50 backdrop-blur-md shadow-2xl space-y-1.5"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Zap className="w-4 h-4 text-cyan-400 animate-bounce" />
+                          <span className="text-xs font-bold text-cyan-300 font-mono">
+                            {activeSetup.sweepType}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-300 leading-snug">
+                          Liquidity purge detected below Asian Low at London Open. Market Structure Shift (MSS) confirmed with strong displacement.
+                        </p>
+                        <div className="pt-1 flex items-center justify-between text-[10px] font-mono">
+                          <span className="text-emerald-400 font-bold">Prediction: {activeSetup.direction}</span>
+                          <span className="text-slate-400">{activeSetup.pipsProjected}</span>
+                        </div>
+                      </motion.div>
+                    </div>
+
+                    {/* Bottom HUD Line: Asian Low (SSL) */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 pointer-events-auto">
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-mono font-bold shadow-[0_0_10px_rgba(16,185,129,0.4)]">
+                          🟢 ASIA LOW (SSL): {activeSetup.asianLow}
+                        </span>
+                        <span className="text-[10px] font-mono text-emerald-400 font-semibold">
+                          ✓ SWEPT & PURGED
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1 text-[10px] font-mono text-slate-400">
+                        <span>Live Watcher:</span>
+                        <span className="text-emerald-400 font-bold">PC Synced</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Bottom Quick Controls */}
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
