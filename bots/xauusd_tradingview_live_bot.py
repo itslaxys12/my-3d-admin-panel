@@ -423,10 +423,10 @@ def main():
             # Run analysis & sync to website
             ana = analyze_and_sync()
 
-            # 20-Minute Periodic Auto-Alert & Screenshot Sync
+            # 20-Minute Periodic Auto-Alert & Screenshot Sync (Continuous Looping)
             if time.time() - state["last_20m_scan_time"] >= state["cycle_20m_seconds"]:
                 state["last_20m_scan_time"] = time.time()
-                speak(f"Alert! 20-minute market cycle reached. New XAUUSD Trade Signal ready. Entry at {ana.get('entry', state['current_price'])}, Stop Loss at {ana.get('stopLoss', 2353)}, Take Profit at {ana.get('takeProfit1', 2368)}. Check your website dashboard now.")
+                speak(f"Attention trader! Twenty minute cycle completed. Take trade now! Gold {ana.get('direction', 'BULLISH')} trade ready. Entry at {ana.get('entry', state['current_price'])}, Stop Loss placed at {ana.get('stopLoss', 2353)}, Take Profit at {ana.get('takeProfit1', 2368)}. Starting next twenty minute protection cycle.")
 
             # Refresh display every 2 seconds
             if time.time() - last_print >= 2:

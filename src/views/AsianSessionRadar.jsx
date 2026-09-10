@@ -26,7 +26,10 @@ import {
   Sparkles,
   Info,
   Copy,
-  Check
+  Check,
+  Tv,
+  Power,
+  Signal
 } from 'lucide-react';
 import GlassCard from '../components/UI/GlassCard';
 import AnimatedButton from '../components/UI/AnimatedButton';
@@ -86,6 +89,10 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
   const [currentTimeLocal, setCurrentTimeLocal] = useState('');
   const [scanSecondsRemaining, setScanSecondsRemaining] = useState(20 * 60); // 20 minutes = 1200s
   const [imageTimestamp, setImageTimestamp] = useState(Date.now());
+  const [isTakeTradeNowActive, setIsTakeTradeNowActive] = useState(true);
+  const [isTvPowerOn, setIsTvPowerOn] = useState(true);
+  const [tvChannel, setTvChannel] = useState('5M');
+  const [showTvMarkers, setShowTvMarkers] = useState(true);
 
   const handleCopyTrade = () => {
     const text = `🎯 XAUUSD (Gold) 5M ICT Sniper Signal\nDirection: ${activeSetup.marketDirection || activeSetup.direction}\nOrder Action: BUY LIMIT / MARKET LONG\nOptimal Entry (OTE): ${activeSetup.entry}\nStop Loss (SL): ${activeSetup.stopLoss} (${activeSetup.slDistance || '5.3 Pips'})\nTake Profit 1 (TP1): ${activeSetup.takeProfit1} (${activeSetup.tp1Distance || '+10.1 Pips'})\nTake Profit 2 (TP2): ${activeSetup.takeProfit2} (${activeSetup.tp2Distance || '+15.6 Pips'})\nRisk/Reward: ${activeSetup.riskReward}\nTimeframe: ${activeSetup.timeframe}\nCadence: 20-Minute Automated Interval`;
@@ -107,14 +114,15 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
     return () => clearInterval(interval);
   }, []);
 
-  // 20-Minute Automated Trade Scan & Alert Cadence
+  // 20-Minute Automated Trade Scan & Alert Cadence (Continuous Looping)
   useEffect(() => {
     const cadenceTimer = setInterval(() => {
       setScanSecondsRemaining((prev) => {
         if (prev <= 1) {
           // Automated 20-minute scan trigger!
+          setIsTakeTradeNowActive(true);
           handleInstantCapture(true);
-          return 20 * 60; // reset 20 minutes
+          return 20 * 60; // reset 20 minutes for next protection / projection loop
         }
         return prev - 1;
       });
@@ -142,13 +150,15 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
     } catch (e) {}
   };
 
-  // Voice Synthesizer announcement for new move
+  // Voice Synthesizer announcement for 20-minute trade execution
   const speakSignal = (setup, isPeriodic = false) => {
     if (!isVoiceEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
     try {
       window.speechSynthesis.cancel();
-      const prefix = isPeriodic ? 'Twenty minute market cycle reached. ' : 'Instant Market Scan alert. ';
-      const text = `${prefix} ${setup.pair}. ${setup.sweepType || 'Judas sweep detected'}. Predicted move: ${setup.direction} expansion towards ${setup.takeProfit1}. Entry at ${setup.entry}. Stop Loss placed at ${setup.stopLoss}.`;
+      const prefix = isPeriodic 
+        ? 'Attention trader! Twenty minute cycle completed. Take trade now! ' 
+        : 'Instant Market Scan alert. Take trade now! ';
+      const text = `${prefix} ${setup.pair}. ${setup.sweepType || 'Judas sweep detected'}. Predicted move: ${setup.direction} expansion towards ${setup.takeProfit1}. Entry at ${setup.entry}. Stop Loss placed at ${setup.stopLoss}. Take Profit at ${setup.takeProfit1}. Next twenty minute cycle active.`;
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.02;
       utterance.pitch = 1.0;
@@ -161,6 +171,7 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
   // Instant capture from local TradingView watcher bot
   const handleInstantCapture = async (isPeriodic = false) => {
     setIsCapturing(true);
+    setIsTakeTradeNowActive(true);
     try {
       const res = await fetch('http://localhost:8765/api/trading/asian-session/capture', {
         method: 'POST',
@@ -804,227 +815,402 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
         </div>
       </div>
 
-      {/* ─── ⚡ Dedicated TradingView Vision Capture & Execution HUD ─── */}
-      <GlassCard
-        title="Real-Time TradingView Vision Capture & Trade Execution HUD"
-        subtitle="Live 20-minute chart snapshot with automated Entry, Stop Loss, and Take Profit targets"
-        icon={Eye}
-        glowColor="emerald"
-        className="relative overflow-hidden"
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
-          {/* Left Column (7 cols on lg): Live Screenshot with controls */}
-          <div className="lg:col-span-7 flex flex-col space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  LIVE CAPTURE: {activeSetup.pair}
-                </span>
-                <span className="text-[11px] font-mono text-slate-400">
-                  {activeSetup.timeframe} Candlestick
-                </span>
-              </div>
-
-              <button
-                onClick={() => setIsImageModalOpen(true)}
-                className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 transition-all flex items-center gap-1.5 text-xs font-mono"
-                title="Expand image to fullscreen"
-              >
-                <Maximize2 className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Fullscreen</span>
-              </button>
-            </div>
-
-            {/* Image Container */}
-            <div
-              onClick={() => setIsImageModalOpen(true)}
-              className="group relative w-full aspect-video rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 cursor-pointer shadow-2xl transition-all hover:border-emerald-500/50"
-            >
-              <img
-                src={`http://localhost:8765/api/trading/asian-session/image?t=${imageTimestamp}`}
-                alt="Live TradingView Chart Capture"
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80';
-                }}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-              />
-
-              {/* Gradient Overlay for Readability */}
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-black/30 pointer-events-none" />
-
-              {/* Floating Top Badge */}
-              <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
-                <span className="px-2.5 py-1 rounded-lg bg-slate-950/80 backdrop-blur-md border border-slate-700 text-[11px] font-mono font-bold text-slate-200 shadow-lg flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  Autonomous Bot Feed (Every 20m)
-                </span>
-              </div>
-
-              {/* Floating Bottom Bar */}
-              <div className="absolute bottom-3 inset-x-3 flex items-center justify-between p-2.5 rounded-xl bg-slate-950/90 backdrop-blur-md border border-slate-800 pointer-events-none">
-                <div className="flex items-center gap-3 text-xs font-mono">
-                  <span className="text-slate-400">Sweep Status:</span>
-                  <span className="font-bold text-emerald-400">{activeSetup.sweepType}</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-[11px] font-mono text-cyan-300 group-hover:text-cyan-200">
-                  <span>Click to Zoom</span>
-                  <Maximize2 className="w-3 h-3" />
-                </div>
-              </div>
-            </div>
-
-            <p className="text-[11px] font-mono text-slate-500">
-              Chart screenshot is automatically retrieved from the background TradingView bot and analyzed with Gemini Multi-Modal Vision.
-            </p>
+      {/* ─── 📺 Dedicated TradingView Vision TV Monitor & Execution Deck ─── */}
+      <div className="space-y-3">
+        {/* TV Chassis Outer Frame */}
+        <div className="relative rounded-[32px] border-[5px] border-slate-700 bg-gradient-to-b from-slate-900 via-slate-950 to-black p-4 sm:p-6 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_35px_rgba(16,185,129,0.15)]">
+          {/* Metallic Corner Screws */}
+          <div className="absolute top-3 left-3 w-3 h-3 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center">
+            <div className="w-1 h-1 bg-slate-900 rounded-full" />
+          </div>
+          <div className="absolute top-3 right-3 w-3 h-3 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center">
+            <div className="w-1 h-1 bg-slate-900 rounded-full" />
+          </div>
+          <div className="absolute bottom-3 left-3 w-3 h-3 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center">
+            <div className="w-1 h-1 bg-slate-900 rounded-full" />
+          </div>
+          <div className="absolute bottom-3 right-3 w-3 h-3 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center">
+            <div className="w-1 h-1 bg-slate-900 rounded-full" />
           </div>
 
-          {/* Right Column (5 cols on lg): Formatted SL & TP Blueprint */}
-          <div className="lg:col-span-5 flex flex-col justify-between space-y-4 p-5 rounded-2xl bg-slate-950/80 border border-slate-800/80 shadow-xl">
-            <div>
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                <div>
-                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
-                    ORDER ACTION & RECOMMENDATION
-                  </span>
-                  <h4 className="text-base font-black text-white font-heading tracking-wide flex items-center gap-2 mt-0.5">
-                    {activeSetup.direction === 'BULLISH' ? (
-                      <span className="text-emerald-400 flex items-center gap-1">
-                        <TrendingUp className="w-4 h-4 text-emerald-400" />
-                        BUY / LONG LIMIT
-                      </span>
-                    ) : (
-                      <span className="text-rose-400 flex items-center gap-1">
-                        <TrendingDown className="w-4 h-4 text-rose-400" />
-                        SELL / SHORT LIMIT
-                      </span>
-                    )}
-                  </h4>
-                </div>
-                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold">
-                  R:R {activeSetup.riskReward}
-                </span>
+          {/* Top TV Bezel Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 mb-3 border-b border-slate-800 text-xs font-mono">
+            {/* Brand & Signal Status */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-800/90 border border-slate-700">
+                <Tv className="w-4 h-4 text-emerald-400" />
+                <span className="font-bold text-slate-200 tracking-wider">TRADINGVIEW VISION TV</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">4K HDR</span>
               </div>
 
-              {/* Key Price Levels Grid */}
-              <div className="mt-4 space-y-2.5 font-mono text-xs">
-                {/* Entry Price */}
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-cyan-500/30">
-                  <div>
-                    <div className="text-[10px] text-slate-400">OPTIMAL ENTRY PRICE (OTE)</div>
-                    <div className="text-sm font-bold text-cyan-300">${activeSetup.entry}</div>
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 hidden sm:flex">
+                <Signal className="w-3.5 h-3.5 text-cyan-400" />
+                <span>5G AUTONOMOUS FEED</span>
+              </div>
+            </div>
+
+            {/* Channel & Power Controls */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                <button
+                  onClick={() => setTvChannel('5M')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all ${
+                    tvChannel === '5M' ? 'bg-emerald-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  CH-01: 5M
+                </button>
+                <button
+                  onClick={() => setTvChannel('15M')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all ${
+                    tvChannel === '15M' ? 'bg-emerald-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  CH-02: 15M
+                </button>
+                <button
+                  onClick={() => setTvChannel('1H')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all ${
+                    tvChannel === '1H' ? 'bg-emerald-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  CH-03: 1H
+                </button>
+              </div>
+
+              {/* TV Power Toggle */}
+              <button
+                onClick={() => setIsTvPowerOn(!isTvPowerOn)}
+                className={`p-2 rounded-xl border transition-all ${
+                  isTvPowerOn
+                    ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.4)]'
+                    : 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                }`}
+                title={isTvPowerOn ? 'Turn TV Screen Standby' : 'Turn TV Screen On'}
+              >
+                <Power className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* TV Grid: Screen (7 cols) & Execution Deck (5 cols) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left 7 Cols: The TV Screen Display */}
+            <div className="lg:col-span-7 flex flex-col space-y-3">
+              <div className="relative w-full aspect-video rounded-2xl overflow-hidden border-2 border-slate-700/80 bg-black shadow-2xl">
+                {isTvPowerOn ? (
+                  <>
+                    {/* The Authentic TradingView Screenshot Image */}
+                    <img
+                      src={`http://localhost:8765/api/trading/asian-session/image?t=${imageTimestamp}`}
+                      alt="TradingView TV Live Feed"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80';
+                      }}
+                      className="w-full h-full object-cover"
+                    />
+
+                    {/* CRT Scanline & Screen Glare Effect */}
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-emerald-500/[0.02] to-black/40 pointer-events-none" />
+                    <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px] pointer-events-none opacity-40" />
+
+                    {/* Top TV Screen Ribbon */}
+                    <div className="absolute top-2.5 inset-x-3 flex items-center justify-between pointer-events-none z-10">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-rose-500/40 text-[10px] font-mono font-bold text-rose-400 flex items-center gap-1.5 shadow-lg">
+                          <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                          🔴 REC // LIVE 5M FEED
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-slate-700 text-[10px] font-mono text-cyan-300">
+                          {activeSetup.pair}
+                        </span>
+                      </div>
+
+                      <span className="px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-slate-700 text-[10px] font-mono text-slate-300">
+                        CADENCE: {Math.floor(scanSecondsRemaining / 60)}m {scanSecondsRemaining % 60}s
+                      </span>
+                    </div>
+
+                    {/* ─── DIRECT ON-SCREEN MARKINGS (SL, ENTRY, TP1, TP2) ─── */}
+                    {showTvMarkers && (
+                      <div className="absolute inset-0 pointer-events-none">
+                        {/* TP2 Marker Line (Top) */}
+                        <div className="absolute top-[18%] inset-x-4 flex items-center justify-between border-t-2 border-dashed border-emerald-400/80">
+                          <span className="px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-400 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-lg -translate-y-1/2">
+                            TP2: ${activeSetup.takeProfit2} (+15.6 Pips Runner)
+                          </span>
+                        </div>
+
+                        {/* TP1 Marker Line (Upper Middle) */}
+                        <div className="absolute top-[32%] inset-x-4 flex items-center justify-between border-t-2 border-emerald-400">
+                          <span className="px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-400 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-lg -translate-y-1/2">
+                            TP1: ${activeSetup.takeProfit1} (Asia High 50% Close)
+                          </span>
+                        </div>
+
+                        {/* Optimal Entry Marker Line (Center) */}
+                        <div className="absolute top-[52%] inset-x-4 flex items-center justify-between border-t-2 border-cyan-400 shadow-[0_0_8px_rgba(0,240,255,0.6)]">
+                          <span className="px-2 py-0.5 rounded bg-cyan-950/90 border border-cyan-400 text-cyan-200 font-mono font-bold text-[9px] sm:text-[10px] shadow-lg -translate-y-1/2 flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                            ENTRY: ${activeSetup.entry} (5M FVG Limit)
+                          </span>
+                        </div>
+
+                        {/* Stop Loss Marker Line (Lower) */}
+                        <div className="absolute top-[75%] inset-x-4 flex items-center justify-between border-t-2 border-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]">
+                          <span className="px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500 text-rose-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-lg -translate-y-1/2">
+                            STOP LOSS: ${activeSetup.stopLoss} (-5.3 Pips Invalidation)
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ─── 🚨 20-MINUTE CYCLE COMPLETE: TAKE TRADE NOW! FLASH BANNER ─── */}
+                    {isTakeTradeNowActive && (
+                      <div className="absolute inset-x-3 top-10 z-20 p-2.5 sm:p-3 rounded-xl bg-slate-950/95 border-2 border-emerald-400/90 shadow-[0_0_30px_rgba(16,185,129,0.5)] backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-2.5 animate-in fade-in zoom-in-95 duration-300">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 animate-bounce">
+                            <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs sm:text-sm font-black text-white font-heading tracking-wide uppercase">
+                                🚨 20-MIN CYCLE TRIGGER: TAKE TRADE NOW!
+                              </span>
+                              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[9px] sm:text-[10px] font-bold border border-emerald-500/40">
+                                92% CONFIDENCE
+                              </span>
+                            </div>
+                            <div className="text-[10px] sm:text-[11px] font-mono text-emerald-300 mt-0.5">
+                              <strong>BUY LIMIT @ ${activeSetup.entry}</strong> • SL: ${activeSetup.stopLoss} • TP: ${activeSetup.takeProfit1}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={handleCopyTrade}
+                          className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-400 hover:from-emerald-300 hover:to-cyan-300 text-slate-950 font-black font-mono text-xs shadow-lg shadow-emerald-500/30 transition-all flex items-center justify-center gap-1.5"
+                        >
+                          {copiedTrade ? <Check className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
+                          <span>{copiedTrade ? 'COPIED TO CLIPBOARD!' : '🔥 TAKE TRADE NOW'}</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Bottom TV Screen Bar */}
+                    <div className="absolute bottom-2.5 inset-x-3 flex items-center justify-between p-2 rounded-xl bg-black/85 backdrop-blur-md border border-slate-800 text-[11px] font-mono z-10">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400">Setup:</span>
+                        <span className="font-bold text-emerald-400">{activeSetup.sweepType}</span>
+                      </div>
+
+                      <button
+                        onClick={() => setIsImageModalOpen(true)}
+                        className="flex items-center gap-1 text-cyan-300 hover:text-white transition-colors"
+                      >
+                        <span>Zoom Fullscreen</span>
+                        <Maximize2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  /* TV Standby Screen */
+                  <div className="w-full h-full flex flex-col items-center justify-center space-y-2 bg-slate-950 text-slate-500 font-mono text-xs">
+                    <Tv className="w-10 h-10 text-slate-700" />
+                    <p>TRADINGVIEW TV DISPLAY IS IN STANDBY</p>
+                    <button
+                      onClick={() => setIsTvPowerOn(true)}
+                      className="px-4 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30 font-bold text-xs transition-all flex items-center gap-1.5"
+                    >
+                      <Power className="w-3.5 h-3.5" />
+                      Turn Display On
+                    </button>
                   </div>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(String(activeSetup.entry));
-                      setCopiedTrade(true);
-                      setTimeout(() => setCopiedTrade(false), 2000);
-                    }}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
-                    title="Copy Entry"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                  </button>
+                )}
+              </div>
+
+              {/* TV Bezel Lower Speaker & Control Deck */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-800 text-xs font-mono">
+                {/* Speaker Grille Pattern */}
+                <div className="flex items-center gap-1 text-slate-600 text-[9px] select-none tracking-widest hidden sm:flex">
+                  <span>● ● ● ● ● ● ● ● ● ● ● ●</span>
+                  <span className="text-slate-500 text-[10px] font-bold">HI-FI STEREO</span>
                 </div>
 
-                {/* Stop Loss */}
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-rose-500/40">
-                  <div>
-                    <div className="text-[10px] text-rose-400 font-semibold">STRICT STOP LOSS (SL)</div>
-                    <div className="text-sm font-bold text-rose-300">${activeSetup.stopLoss}</div>
-                    <div className="text-[10px] text-slate-400">{activeSetup.slDistance} Risk Invalidation</div>
-                  </div>
+                {/* Quick Controls */}
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                   <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(String(activeSetup.stopLoss));
-                      setCopiedTrade(true);
-                      setTimeout(() => setCopiedTrade(false), 2000);
-                    }}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
-                    title="Copy Stop Loss"
+                    onClick={() => setShowTvMarkers(!showTvMarkers)}
+                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all ${
+                      showTvMarkers
+                        ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300'
+                        : 'bg-slate-800 border-slate-700 text-slate-400'
+                    }`}
                   >
-                    <Copy className="w-3.5 h-3.5" />
+                    Markers: {showTvMarkers ? 'ON' : 'OFF'}
                   </button>
-                </div>
 
-                {/* Take Profit 1 */}
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-emerald-500/40">
-                  <div>
-                    <div className="text-[10px] text-emerald-400 font-semibold">TAKE PROFIT 1 (TP1 - 50% CLOSE)</div>
-                    <div className="text-sm font-bold text-emerald-300">${activeSetup.takeProfit1}</div>
-                    <div className="text-[10px] text-slate-400">{activeSetup.tp1Distance} Asian High Liquidity</div>
-                  </div>
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(String(activeSetup.takeProfit1));
-                      setCopiedTrade(true);
-                      setTimeout(() => setCopiedTrade(false), 2000);
+                      playAlertChime();
+                      speakSignal(activeSetup, false);
                     }}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
-                    title="Copy TP1"
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-[11px] transition-all flex items-center gap-1"
                   >
-                    <Copy className="w-3.5 h-3.5" />
+                    <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Voice Test</span>
                   </button>
-                </div>
 
-                {/* Take Profit 2 */}
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-emerald-500/30">
-                  <div>
-                    <div className="text-[10px] text-emerald-300 font-semibold">TAKE PROFIT 2 (TP2 - RUNNER)</div>
-                    <div className="text-sm font-bold text-emerald-200">${activeSetup.takeProfit2}</div>
-                    <div className="text-[10px] text-slate-400">{activeSetup.tp2Distance} Peak Session Target</div>
-                  </div>
                   <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(String(activeSetup.takeProfit2));
-                      setCopiedTrade(true);
-                      setTimeout(() => setCopiedTrade(false), 2000);
-                    }}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
-                    title="Copy TP2"
+                    onClick={() => handleInstantCapture(false)}
+                    disabled={isCapturing}
+                    className="px-3 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 text-[11px] font-bold transition-all flex items-center gap-1"
                   >
-                    <Copy className="w-3.5 h-3.5" />
+                    <RefreshCw className={`w-3.5 h-3.5 ${isCapturing ? 'animate-spin' : ''}`} />
+                    <span>{isCapturing ? 'Scanning...' : 'Sync TV'}</span>
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Quick Action Buttons */}
-            <div className="space-y-2 pt-2 border-t border-slate-800">
-              <button
-                onClick={handleCopyTrade}
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold font-mono text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
-              >
-                {copiedTrade ? <Check className="w-4 h-4 text-slate-950" /> : <Copy className="w-4 h-4 text-slate-950" />}
-                <span>{copiedTrade ? 'All Trade Parameters Copied!' : 'Copy Full Order Parameters'}</span>
-              </button>
+            {/* Right 5 Cols: Trade Execution Deck */}
+            <div className="lg:col-span-5 flex flex-col justify-between space-y-4 p-5 rounded-2xl bg-slate-950/80 border border-slate-800/80 shadow-xl">
+              <div>
+                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                  <div>
+                    <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                      20-MIN TRADE EXECUTION DIRECTIVE
+                    </span>
+                    <h4 className="text-base font-black text-white font-heading tracking-wide flex items-center gap-2 mt-0.5">
+                      {activeSetup.direction === 'BULLISH' ? (
+                        <span className="text-emerald-400 flex items-center gap-1">
+                          <TrendingUp className="w-4 h-4 text-emerald-400" />
+                          BUY / LONG LIMIT
+                        </span>
+                      ) : (
+                        <span className="text-rose-400 flex items-center gap-1">
+                          <TrendingDown className="w-4 h-4 text-rose-400" />
+                          SELL / SHORT LIMIT
+                        </span>
+                      )}
+                    </h4>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold">
+                    R:R {activeSetup.riskReward}
+                  </span>
+                </div>
 
-              <div className="flex items-center gap-2">
+                {/* Key Price Levels Grid */}
+                <div className="mt-4 space-y-2.5 font-mono text-xs">
+                  {/* Entry Price */}
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-cyan-500/30">
+                    <div>
+                      <div className="text-[10px] text-slate-400">OPTIMAL ENTRY PRICE (OTE)</div>
+                      <div className="text-sm font-bold text-cyan-300">${activeSetup.entry}</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(String(activeSetup.entry));
+                        setCopiedTrade(true);
+                        setTimeout(() => setCopiedTrade(false), 2000);
+                      }}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                      title="Copy Entry"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Stop Loss */}
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-rose-500/40">
+                    <div>
+                      <div className="text-[10px] text-rose-400 font-semibold">STRICT STOP LOSS (SL)</div>
+                      <div className="text-sm font-bold text-rose-300">${activeSetup.stopLoss}</div>
+                      <div className="text-[10px] text-slate-400">{activeSetup.slDistance} Risk Invalidation</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(String(activeSetup.stopLoss));
+                        setCopiedTrade(true);
+                        setTimeout(() => setCopiedTrade(false), 2000);
+                      }}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                      title="Copy Stop Loss"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Take Profit 1 */}
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-emerald-500/40">
+                    <div>
+                      <div className="text-[10px] text-emerald-400 font-semibold">TAKE PROFIT 1 (TP1 - 50% CLOSE)</div>
+                      <div className="text-sm font-bold text-emerald-300">${activeSetup.takeProfit1}</div>
+                      <div className="text-[10px] text-slate-400">{activeSetup.tp1Distance} Asian High Liquidity</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(String(activeSetup.takeProfit1));
+                        setCopiedTrade(true);
+                        setTimeout(() => setCopiedTrade(false), 2000);
+                      }}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                      title="Copy TP1"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Take Profit 2 */}
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-emerald-500/30">
+                    <div>
+                      <div className="text-[10px] text-emerald-300 font-semibold">TAKE PROFIT 2 (TP2 - RUNNER)</div>
+                      <div className="text-sm font-bold text-emerald-200">${activeSetup.takeProfit2}</div>
+                      <div className="text-[10px] text-slate-400">{activeSetup.tp2Distance} Peak Session Target</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(String(activeSetup.takeProfit2));
+                        setCopiedTrade(true);
+                        setTimeout(() => setCopiedTrade(false), 2000);
+                      }}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                      title="Copy TP2"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-2 border-t border-slate-800">
                 <button
-                  onClick={() => {
-                    playAlertChime();
-                    speakSignal(activeSetup, false);
-                  }}
-                  className="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white font-mono text-xs transition-all flex items-center justify-center gap-1.5"
+                  onClick={handleCopyTrade}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black font-mono text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
                 >
-                  <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Test Audio Alert</span>
+                  {copiedTrade ? <Check className="w-4 h-4 text-slate-950" /> : <Copy className="w-4 h-4 text-slate-950" />}
+                  <span>{copiedTrade ? 'All Trade Parameters Copied!' : 'Copy Full Order Parameters'}</span>
                 </button>
 
-                <button
-                  onClick={() => handleInstantCapture(false)}
-                  disabled={isCapturing}
-                  className="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white font-mono text-xs transition-all flex items-center justify-center gap-1.5"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isCapturing ? 'animate-spin' : ''}`} />
-                  <span>{isCapturing ? 'Scanning...' : 'Force 20M Sync'}</span>
-                </button>
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 px-1">
+                  <span>Continuous 20-min Auto Protection</span>
+                  <span className="text-emerald-400">Next Loop Active</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </GlassCard>
+
+        {/* Realistic TV Monitor Stand Neck & Heavy Base */}
+        <div className="flex flex-col items-center pointer-events-none -mt-1 mb-2">
+          {/* TV Neck */}
+          <div className="w-14 sm:w-20 h-4 bg-gradient-to-b from-slate-700 to-slate-900 shadow-md border-x border-slate-600/40" />
+          {/* TV Desktop Base */}
+          <div className="w-56 sm:w-80 h-3.5 bg-gradient-to-r from-slate-800 via-slate-600 to-slate-800 rounded-b-2xl shadow-2xl border-t border-slate-500/60" />
+        </div>
+      </div>
 
       {/* ─── 🎯 ICT Sniper Execution & Master Trade Blueprint ─── */}
       <GlassCard
