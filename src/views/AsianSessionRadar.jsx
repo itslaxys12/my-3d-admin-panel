@@ -69,85 +69,86 @@ const DEMO_SETUPS = [
       { step: '3. Optimal Retest', title: '5M FVG Tap @ $2358.40', desc: 'Best Entry: Price pulls back into the discount zone of the 5M FVG for high R:R entry.' },
       { step: '4. Target Expansion', title: 'Pump to Asia High $2368.50', desc: 'Heavy buy momentum sweeps resting buy stops at $2368.50 for +101 pips profit.' }
     ]
-  },
-  {
-    id: 'setup-eur-1',
-    pair: 'EURUSD',
-    timeframe: '5M',
-    timestamp: 'Yesterday, 07:45 UTC',
-    asianHigh: 1.0895,
-    asianLow: 1.0840,
-    currentPrice: 1.0888,
-    sweepType: 'Asian High Swept (BSL Taken)',
-    phase: 'London Open Judas Swing (Bearish Trap)',
-    direction: 'BEARISH',
-    marketDirection: 'BEARISH (DOWN)',
-    probability: '87% High Probability (5M Scalp)',
-    confidenceScore: 87,
-    predictedMove: '5M Bearish Reversal targeting Asia Low (1.0840) and Previous Day Low (1.0815)',
-    narrative: 'Asian High (1.0895) was breached on the 5-Minute chart during Frankfurt pre-market, triggering early breakout buyers. Rapid bearish displacement followed with a 5M displacement candle closing below the 5M order block. Expect aggressive move lower towards Asian Low.',
-    entry: 1.0885,
-    stopLoss: 1.0902,
-    slDistance: '1.7 Pips',
-    takeProfit1: 1.0840,
-    tp1Distance: '+4.5 Pips',
-    takeProfit2: 1.0815,
-    tp2Distance: '+7.0 Pips',
-    riskReward: '1 : 2.9',
-    pipsProjected: '+45 Pips',
-    status: 'COMPLETED (+45 PIPS)',
-    bestOption: 'Market execution on 5M candle close or limit sell at 1.0885 order block retest.',
-    slPlacementGuide: 'Place SL at 1.0902 (2 pips above Asian High sweep wick 1.0898). Tight risk of 17 pips.',
-    tp1PlacementGuide: 'Take 50% Profit at 1.0840 (Asian Low Sell-Side Liquidity). Move SL to Breakeven.',
-    tp2PlacementGuide: 'Hold remaining 50% runner to 1.0815 (Previous Day Low liquidity pool).',
-    howItMoves: [
-      { step: '1. Liquidity Sweep', title: 'Fake Spike Above Asia High', desc: 'Price broke 1.0895 triggering retail buy stops before reversing aggressively.' },
-      { step: '2. Bearish Displacement', title: '5M Order Block Formed', desc: 'Heavy selling displacement formed a Bearish FVG on the 5-Minute chart.' },
-      { step: '3. Optimal Retest', title: 'Pullback to 1.0885', desc: 'Best Entry: Tap into premium pricing before the London open drop.' },
-      { step: '4. Target Expansion', title: 'Dump to Asia Low 1.0840', desc: 'Smooth decline into Asian Low Sell-Side Liquidity (+45 pips).' }
-    ]
   }
 ];
 
 export function AsianSessionRadar({ userRole = 'owner' }) {
-  const [activeSetupIndex, setActiveSetupIndex] = useState(0);
   const [activeSetup, setActiveSetup] = useState(DEMO_SETUPS[0]);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [showOverlays, setShowOverlays] = useState(true);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [copiedCmd, setCopiedCmd] = useState(false);
   const [chartMode, setChartMode] = useState('tradingview_live'); // 'tradingview_live' | 'ai_hud'
   const [copiedTrade, setCopiedTrade] = useState(false);
   const [currentTimeUTC, setCurrentTimeUTC] = useState('');
-  const [currentTimeBST, setCurrentTimeBST] = useState('');
+  const [currentTimeLocal, setCurrentTimeLocal] = useState('');
+  const [scanSecondsRemaining, setScanSecondsRemaining] = useState(20 * 60); // 20 minutes = 1200s
+  const [imageTimestamp, setImageTimestamp] = useState(Date.now());
 
   const handleCopyTrade = () => {
-    const text = `🎯 XAUUSD (Gold) 5M ICT Sniper Signal\nDirection: ${activeSetup.marketDirection || activeSetup.direction}\nEntry (OTE): ${activeSetup.entry}\nStop Loss (SL): ${activeSetup.stopLoss} (${activeSetup.slDistance || '5.3 Pips'})\nTake Profit 1 (TP1): ${activeSetup.takeProfit1} (${activeSetup.tp1Distance || '+10.1 Pips'})\nTake Profit 2 (TP2): ${activeSetup.takeProfit2} (${activeSetup.tp2Distance || '+15.6 Pips'})\nRisk/Reward: ${activeSetup.riskReward}\nTimeframe: ${activeSetup.timeframe}`;
+    const text = `🎯 XAUUSD (Gold) 5M ICT Sniper Signal\nDirection: ${activeSetup.marketDirection || activeSetup.direction}\nOrder Action: BUY LIMIT / MARKET LONG\nOptimal Entry (OTE): ${activeSetup.entry}\nStop Loss (SL): ${activeSetup.stopLoss} (${activeSetup.slDistance || '5.3 Pips'})\nTake Profit 1 (TP1): ${activeSetup.takeProfit1} (${activeSetup.tp1Distance || '+10.1 Pips'})\nTake Profit 2 (TP2): ${activeSetup.takeProfit2} (${activeSetup.tp2Distance || '+15.6 Pips'})\nRisk/Reward: ${activeSetup.riskReward}\nTimeframe: ${activeSetup.timeframe}\nCadence: 20-Minute Automated Interval`;
     navigator.clipboard.writeText(text);
     setCopiedTrade(true);
     setTimeout(() => setCopiedTrade(false), 2000);
   };
 
-  // Keep live UTC & BST clocks updated
+  // Keep live clocks updated
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
       setCurrentTimeUTC(now.toISOString().substring(11, 19) + ' UTC');
-      const bst = new Date(now.getTime() + 6 * 3600000);
-      setCurrentTimeBST(bst.toISOString().substring(11, 19) + ' BST');
+      const local = new Date(now.getTime() + 6 * 3600000);
+      setCurrentTimeLocal(local.toISOString().substring(11, 19) + ' LOCAL');
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
 
+  // 20-Minute Automated Trade Scan & Alert Cadence
+  useEffect(() => {
+    const cadenceTimer = setInterval(() => {
+      setScanSecondsRemaining((prev) => {
+        if (prev <= 1) {
+          // Automated 20-minute scan trigger!
+          handleInstantCapture(true);
+          return 20 * 60; // reset 20 minutes
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(cadenceTimer);
+  }, []);
+
+  // Web Audio Synthesizer Chime
+  const playAlertChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.6);
+    } catch (e) {}
+  };
+
   // Voice Synthesizer announcement for new move
-  const speakSignal = (setup) => {
+  const speakSignal = (setup, isPeriodic = false) => {
     if (!isVoiceEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
     try {
       window.speechSynthesis.cancel();
-      const text = `${setup.pair}. ${setup.sweepType}. Next predicted move: ${setup.direction} expansion towards ${setup.takeProfit1}. Entry at ${setup.entry}.`;
+      const prefix = isPeriodic ? 'Twenty minute market cycle reached. ' : 'Instant Market Scan alert. ';
+      const text = `${prefix} ${setup.pair}. ${setup.sweepType || 'Judas sweep detected'}. Predicted move: ${setup.direction} expansion towards ${setup.takeProfit1}. Entry at ${setup.entry}. Stop Loss placed at ${setup.stopLoss}.`;
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.02;
       utterance.pitch = 1.0;
@@ -157,21 +158,8 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
     }
   };
 
-  // Run simulation / switch setups
-  const handleTriggerSimulation = () => {
-    setIsCapturing(true);
-    setTimeout(() => {
-      const nextIndex = (activeSetupIndex + 1) % DEMO_SETUPS.length;
-      setActiveSetupIndex(nextIndex);
-      const nextSetup = DEMO_SETUPS[nextIndex];
-      setActiveSetup(nextSetup);
-      setIsCapturing(false);
-      speakSignal(nextSetup);
-    }, 1000);
-  };
-
   // Instant capture from local TradingView watcher bot
-  const handleInstantCapture = async () => {
+  const handleInstantCapture = async (isPeriodic = false) => {
     setIsCapturing(true);
     try {
       const res = await fetch('http://localhost:8765/api/trading/asian-session/capture', {
@@ -181,13 +169,13 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
         const data = await res.json();
         if (data.setup) {
           setActiveSetup(data.setup);
-          speakSignal(data.setup);
+          setImageTimestamp(Date.now());
+          playAlertChime();
+          speakSignal(data.setup, isPeriodic);
         }
-      } else {
-        handleTriggerSimulation();
       }
     } catch (e) {
-      handleTriggerSimulation();
+      console.warn('Capture error:', e);
     } finally {
       setIsCapturing(false);
     }
@@ -318,19 +306,22 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
           </span>
         </div>
 
-        {/* Current Time Clock */}
+        {/* Current Time Clock & 20-Min Cadence */}
         <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 backdrop-blur-md flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-slate-800 text-slate-300 border border-slate-700">
               <Clock className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-[11px] font-mono text-slate-400">LIVE CLOCK</div>
-              <div className="text-xs font-bold text-slate-200 font-mono">{currentTimeUTC || '08:35:12 UTC'}</div>
+              <div className="text-[11px] font-mono text-slate-400">20-MIN AUTO CADENCE</div>
+              <div className="text-xs font-bold text-cyan-300 font-mono">
+                {Math.floor(scanSecondsRemaining / 60)}m {scanSecondsRemaining % 60}s
+              </div>
             </div>
           </div>
-          <span className="px-2 py-0.5 rounded-md bg-slate-800 text-cyan-300 border border-slate-700 text-[10px] font-mono font-semibold">
-            {currentTimeBST ? currentTimeBST.split(' ')[0] + ' BD' : '14:35 BD'}
+          <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            CYCLE ACTIVE
           </span>
         </div>
       </div>
@@ -386,12 +377,13 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                 </div>
 
                 <button
-                  onClick={handleTriggerSimulation}
-                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-medium transition-colors flex items-center gap-1"
-                  title="Switch between XAUUSD and EURUSD Asian setups"
+                  onClick={() => handleInstantCapture(false)}
+                  disabled={isCapturing}
+                  className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-[11px] font-mono font-bold transition-all flex items-center gap-1.5"
+                  title="Force instant real-time market scan"
                 >
-                  <RefreshCw className="w-3 h-3 text-cyan-400" />
-                  <span className="hidden sm:inline">Switch Setup</span>
+                  <RefreshCw className={`w-3 h-3 text-cyan-400 ${isCapturing ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">{isCapturing ? 'Scanning...' : 'Scan Now'}</span>
                 </button>
               </div>
             </div>
@@ -779,24 +771,260 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
               </div>
             </div>
 
-            {/* Quick Discord Forward / Webhook Dispatch */}
-            <div className="pt-4 border-t border-slate-800/80 space-y-2">
+            {/* 20-Min Automated Cadence Status & Force Scan */}
+            <div className="pt-4 border-t border-slate-800/80 space-y-2.5">
+              <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] font-mono">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                  20-Min Auto-Alert:
+                </span>
+                <span className="font-bold text-cyan-300 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                  {Math.floor(scanSecondsRemaining / 60)}m {scanSecondsRemaining % 60}s remaining
+                </span>
+              </div>
+
               <AnimatedButton
                 variant="primary"
                 size="md"
-                className="w-full justify-center"
+                className="w-full justify-center font-mono text-xs"
                 icon={Zap}
-                onClick={handleTriggerSimulation}
+                disabled={isCapturing}
+                onClick={() => handleInstantCapture(false)}
               >
-                Simulate Next Market Sweep
+                {isCapturing ? 'Scanning Live Market...' : '⚡ Scan Market & Recalculate Now'}
               </AnimatedButton>
-              <p className="text-[10px] text-center text-slate-500 font-mono">
-                Press F9 in TradingView on your PC to update this view instantly.
-              </p>
+
+              <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono px-1">
+                <span>Autonomous Bot Cadence</span>
+                <span className="text-emerald-400">Audio Alerts: {isVoiceEnabled ? 'ON' : 'MUTED'}</span>
+              </div>
             </div>
           </GlassCard>
         </div>
       </div>
+
+      {/* ─── ⚡ Dedicated TradingView Vision Capture & Execution HUD ─── */}
+      <GlassCard
+        title="Real-Time TradingView Vision Capture & Trade Execution HUD"
+        subtitle="Live 20-minute chart snapshot with automated Entry, Stop Loss, and Take Profit targets"
+        icon={Eye}
+        glowColor="emerald"
+        className="relative overflow-hidden"
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
+          {/* Left Column (7 cols on lg): Live Screenshot with controls */}
+          <div className="lg:col-span-7 flex flex-col space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  LIVE CAPTURE: {activeSetup.pair}
+                </span>
+                <span className="text-[11px] font-mono text-slate-400">
+                  {activeSetup.timeframe} Candlestick
+                </span>
+              </div>
+
+              <button
+                onClick={() => setIsImageModalOpen(true)}
+                className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 transition-all flex items-center gap-1.5 text-xs font-mono"
+                title="Expand image to fullscreen"
+              >
+                <Maximize2 className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Fullscreen</span>
+              </button>
+            </div>
+
+            {/* Image Container */}
+            <div
+              onClick={() => setIsImageModalOpen(true)}
+              className="group relative w-full aspect-video rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 cursor-pointer shadow-2xl transition-all hover:border-emerald-500/50"
+            >
+              <img
+                src={`http://localhost:8765/api/trading/asian-session/image?t=${imageTimestamp}`}
+                alt="Live TradingView Chart Capture"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80';
+                }}
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+              />
+
+              {/* Gradient Overlay for Readability */}
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-black/30 pointer-events-none" />
+
+              {/* Floating Top Badge */}
+              <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
+                <span className="px-2.5 py-1 rounded-lg bg-slate-950/80 backdrop-blur-md border border-slate-700 text-[11px] font-mono font-bold text-slate-200 shadow-lg flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  Autonomous Bot Feed (Every 20m)
+                </span>
+              </div>
+
+              {/* Floating Bottom Bar */}
+              <div className="absolute bottom-3 inset-x-3 flex items-center justify-between p-2.5 rounded-xl bg-slate-950/90 backdrop-blur-md border border-slate-800 pointer-events-none">
+                <div className="flex items-center gap-3 text-xs font-mono">
+                  <span className="text-slate-400">Sweep Status:</span>
+                  <span className="font-bold text-emerald-400">{activeSetup.sweepType}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] font-mono text-cyan-300 group-hover:text-cyan-200">
+                  <span>Click to Zoom</span>
+                  <Maximize2 className="w-3 h-3" />
+                </div>
+              </div>
+            </div>
+
+            <p className="text-[11px] font-mono text-slate-500">
+              Chart screenshot is automatically retrieved from the background TradingView bot and analyzed with Gemini Multi-Modal Vision.
+            </p>
+          </div>
+
+          {/* Right Column (5 cols on lg): Formatted SL & TP Blueprint */}
+          <div className="lg:col-span-5 flex flex-col justify-between space-y-4 p-5 rounded-2xl bg-slate-950/80 border border-slate-800/80 shadow-xl">
+            <div>
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div>
+                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                    ORDER ACTION & RECOMMENDATION
+                  </span>
+                  <h4 className="text-base font-black text-white font-heading tracking-wide flex items-center gap-2 mt-0.5">
+                    {activeSetup.direction === 'BULLISH' ? (
+                      <span className="text-emerald-400 flex items-center gap-1">
+                        <TrendingUp className="w-4 h-4 text-emerald-400" />
+                        BUY / LONG LIMIT
+                      </span>
+                    ) : (
+                      <span className="text-rose-400 flex items-center gap-1">
+                        <TrendingDown className="w-4 h-4 text-rose-400" />
+                        SELL / SHORT LIMIT
+                      </span>
+                    )}
+                  </h4>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold">
+                  R:R {activeSetup.riskReward}
+                </span>
+              </div>
+
+              {/* Key Price Levels Grid */}
+              <div className="mt-4 space-y-2.5 font-mono text-xs">
+                {/* Entry Price */}
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-cyan-500/30">
+                  <div>
+                    <div className="text-[10px] text-slate-400">OPTIMAL ENTRY PRICE (OTE)</div>
+                    <div className="text-sm font-bold text-cyan-300">${activeSetup.entry}</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(String(activeSetup.entry));
+                      setCopiedTrade(true);
+                      setTimeout(() => setCopiedTrade(false), 2000);
+                    }}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                    title="Copy Entry"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Stop Loss */}
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-rose-500/40">
+                  <div>
+                    <div className="text-[10px] text-rose-400 font-semibold">STRICT STOP LOSS (SL)</div>
+                    <div className="text-sm font-bold text-rose-300">${activeSetup.stopLoss}</div>
+                    <div className="text-[10px] text-slate-400">{activeSetup.slDistance} Risk Invalidation</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(String(activeSetup.stopLoss));
+                      setCopiedTrade(true);
+                      setTimeout(() => setCopiedTrade(false), 2000);
+                    }}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                    title="Copy Stop Loss"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Take Profit 1 */}
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-emerald-500/40">
+                  <div>
+                    <div className="text-[10px] text-emerald-400 font-semibold">TAKE PROFIT 1 (TP1 - 50% CLOSE)</div>
+                    <div className="text-sm font-bold text-emerald-300">${activeSetup.takeProfit1}</div>
+                    <div className="text-[10px] text-slate-400">{activeSetup.tp1Distance} Asian High Liquidity</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(String(activeSetup.takeProfit1));
+                      setCopiedTrade(true);
+                      setTimeout(() => setCopiedTrade(false), 2000);
+                    }}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                    title="Copy TP1"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Take Profit 2 */}
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-emerald-500/30">
+                  <div>
+                    <div className="text-[10px] text-emerald-300 font-semibold">TAKE PROFIT 2 (TP2 - RUNNER)</div>
+                    <div className="text-sm font-bold text-emerald-200">${activeSetup.takeProfit2}</div>
+                    <div className="text-[10px] text-slate-400">{activeSetup.tp2Distance} Peak Session Target</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(String(activeSetup.takeProfit2));
+                      setCopiedTrade(true);
+                      setTimeout(() => setCopiedTrade(false), 2000);
+                    }}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                    title="Copy TP2"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Action Buttons */}
+            <div className="space-y-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={handleCopyTrade}
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold font-mono text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
+              >
+                {copiedTrade ? <Check className="w-4 h-4 text-slate-950" /> : <Copy className="w-4 h-4 text-slate-950" />}
+                <span>{copiedTrade ? 'All Trade Parameters Copied!' : 'Copy Full Order Parameters'}</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    playAlertChime();
+                    speakSignal(activeSetup, false);
+                  }}
+                  className="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white font-mono text-xs transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Test Audio Alert</span>
+                </button>
+
+                <button
+                  onClick={() => handleInstantCapture(false)}
+                  disabled={isCapturing}
+                  className="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white font-mono text-xs transition-all flex items-center justify-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isCapturing ? 'animate-spin' : ''}`} />
+                  <span>{isCapturing ? 'Scanning...' : 'Force 20M Sync'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </GlassCard>
 
       {/* ─── 🎯 ICT Sniper Execution & Master Trade Blueprint ─── */}
       <GlassCard
@@ -806,12 +1034,12 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
         glowColor="cyan"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 pt-1">
-          {/* 1. Market Direction (বুলিশ নাকি বেয়ারিশ যাবে) */}
+          {/* 1. Market Direction & Bias */}
           <div className="p-4 rounded-2xl bg-slate-900/80 border border-emerald-500/30 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-                  1. DIRECTION (মার্কেট ট্রেন্ড)
+                  1. MARKET DIRECTION & BIAS
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">
                   {activeSetup.confidenceScore}% WIN PROB
@@ -836,12 +1064,12 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
             </p>
           </div>
 
-          {/* 2. Stop Loss Blueprint (কোথা থেকে কি SL নিব) */}
+          {/* 2. Stop Loss Blueprint */}
           <div className="p-4 rounded-2xl bg-slate-900/80 border border-rose-500/30 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-                  2. STOP LOSS (কোথা থেকে SL নিব)
+                  2. STOP LOSS (INVALIDATION)
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-mono font-bold">
                   RISK: {activeSetup.slDistance}
@@ -859,12 +1087,12 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
             </p>
           </div>
 
-          {/* 3. Take Profit Blueprint (কোথা থেকে কি TP নিব) */}
+          {/* 3. Take Profit Blueprint */}
           <div className="p-4 rounded-2xl bg-slate-900/80 border border-cyan-500/30 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-                  3. TAKE PROFIT (কোথা থেকে TP নিব)
+                  3. TAKE PROFIT (PROFIT TARGETS)
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-mono font-bold">
                   R:R {activeSetup.riskReward}
@@ -886,12 +1114,12 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
             </p>
           </div>
 
-          {/* 4. Best Option Recommendation (কোনটা বেস্ট অপশন হবে) */}
+          {/* 4. Best Option Recommendation */}
           <div className="p-4 rounded-2xl bg-slate-900/80 border border-purple-500/30 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-                  4. BEST OPTION (বেস্ট অপশন)
+                  4. OPTIMAL EXECUTION STRATEGY
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-mono font-bold">
                   RECOMMENDED
@@ -908,12 +1136,12 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
           </div>
         </div>
 
-        {/* ─── Trajectory Roadmap (কেমনে কি যাবে - 4-Step Path) ─── */}
+        {/* ─── Trajectory Roadmap (4-Phase Execution) ─── */}
         <div className="mt-5 pt-4 border-t border-slate-800">
           <div className="flex items-center gap-2 mb-3">
             <Layers className="w-4 h-4 text-cyan-400" />
             <h4 className="text-xs font-bold text-white font-mono uppercase tracking-wider">
-              MOVE TRAJECTORY ROADMAP (কেমনে কি যাবে — ৪টি ধাপের মুভমেন্ট)
+              MOVE TRAJECTORY ROADMAP (4-PHASE EXECUTION)
             </h4>
           </div>
 
@@ -1089,6 +1317,63 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
               </AnimatedButton>
             </div>
           </motion.div>
+        </div>
+      )}
+
+      {/* ─── Fullscreen Screenshot Modal ─── */}
+      {isImageModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
+          onClick={() => setIsImageModalOpen(false)}
+        >
+          <div
+            className="relative max-w-5xl w-full bg-slate-950 border border-emerald-500/40 rounded-3xl overflow-hidden shadow-2xl p-4 sm:p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 text-xs font-mono">
+              <div className="flex items-center gap-3">
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                  {activeSetup.pair} • 5M High-Res Vision
+                </span>
+                <span className="text-slate-400">
+                  Timestamp: {new Date(imageTimestamp).toLocaleTimeString()}
+                </span>
+              </div>
+              <button
+                onClick={() => setIsImageModalOpen(false)}
+                className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="w-full aspect-video rounded-2xl overflow-hidden border border-slate-800 bg-slate-900 flex items-center justify-center">
+              <img
+                src={`http://localhost:8765/api/trading/asian-session/image?t=${imageTimestamp}`}
+                alt="Full TradingView Screenshot"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80';
+                }}
+                className="w-full h-full object-contain"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs font-mono text-slate-400">
+              <div className="flex items-center gap-2">
+                <span className="text-emerald-400 font-bold">SL: ${activeSetup.stopLoss}</span>
+                <span>•</span>
+                <span className="text-cyan-300 font-bold">Entry: ${activeSetup.entry}</span>
+                <span>•</span>
+                <span className="text-emerald-300 font-bold">TP1: ${activeSetup.takeProfit1}</span>
+                <span>•</span>
+                <span className="text-emerald-200 font-bold">TP2: ${activeSetup.takeProfit2}</span>
+              </div>
+              <div className="text-slate-500">
+                Press ESC or click outside to dismiss
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

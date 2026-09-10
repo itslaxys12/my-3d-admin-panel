@@ -118,7 +118,7 @@ export function Dashboard({ onNavigate }) {
                 Asian Session AI Radar: Live 5-Minute TradingView Chart & Sniper Signals
               </h2>
               <p className="text-xs sm:text-sm text-slate-300 mt-1 leading-relaxed">
-                রিয়েল-টাইম TradingView ৫-মিনিট চার্ট, এশিয়ান রেঞ্জ লিকুইডিটি সুইপ এবং লাইভ সিগন্যাল—
+                Real-time 5-Minute TradingView candlestick feed, Asian Session liquidity purge detection, and automated 20-minute sniper signals — 
                 Entry: <strong className="text-cyan-300 font-mono font-bold">$2358.40</strong> | 
                 SL: <strong className="text-rose-400 font-mono font-bold">$2353.10</strong> | 
                 TP1: <strong className="text-emerald-400 font-mono font-bold">$2368.50</strong> | 
@@ -132,7 +132,7 @@ export function Dashboard({ onNavigate }) {
               onClick={() => onNavigate && onNavigate('asian_session_ai')}
               className="w-full sm:w-auto px-5 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 hover:from-emerald-400 hover:to-cyan-300 text-slate-950 font-mono text-xs font-black shadow-[0_0_25px_rgba(0,255,157,0.4)] transition-all flex items-center justify-center gap-2 group active:scale-95"
             >
-              <span>🚀 লাইভ চার্ট ও সিগন্যাল দেখুন (Open 5M Radar)</span>
+              <span>🚀 Open Live 5M Radar & Execution HUD</span>
               <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
             </button>
           </div>
