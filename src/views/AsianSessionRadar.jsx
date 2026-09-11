@@ -87,12 +87,54 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
   const [copiedTrade, setCopiedTrade] = useState(false);
   const [currentTimeUTC, setCurrentTimeUTC] = useState('');
   const [currentTimeLocal, setCurrentTimeLocal] = useState('');
-  const [scanSecondsRemaining, setScanSecondsRemaining] = useState(20 * 60); // 20 minutes = 1200s
+  const [isBotRunning, setIsBotRunning] = useState(false);
+  const [cyclePhase, setCyclePhase] = useState('STANDBY'); // 'STANDBY' | 'ANALYZING' | 'SIGNAL_ACTIVE'
+  const [analysisSecondsRemaining, setAnalysisSecondsRemaining] = useState(20 * 60); // 20 minutes = 1200s
+  const [tradeWindowSecondsRemaining, setTradeWindowSecondsRemaining] = useState(2 * 60); // 2 minutes = 120s
   const [imageTimestamp, setImageTimestamp] = useState(Date.now());
-  const [isTakeTradeNowActive, setIsTakeTradeNowActive] = useState(true);
+  const [isTakeTradeNowActive, setIsTakeTradeNowActive] = useState(false);
   const [isTvPowerOn, setIsTvPowerOn] = useState(true);
   const [tvChannel, setTvChannel] = useState('5M');
   const [showTvMarkers, setShowTvMarkers] = useState(true);
+  const warned20sRef = useRef(false);
+
+  const speakText = (text) => {
+    if (!isVoiceEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {}
+  };
+
+  // Toggle Bot Master Switch
+  const toggleBotRunning = () => {
+    if (!isBotRunning) {
+      setIsBotRunning(true);
+      setCyclePhase('ANALYZING');
+      setAnalysisSecondsRemaining(20 * 60);
+      setTradeWindowSecondsRemaining(2 * 60);
+      warned20sRef.current = false;
+      speakText('20-minute Asian Session Scanner activated. Analyzing 5-minute liquidity.');
+    } else {
+      setIsBotRunning(false);
+      setCyclePhase('STANDBY');
+      setIsTakeTradeNowActive(false);
+      speakText('Bot paused and placed in standby.');
+    }
+  };
+
+  // Fast 20s Demo Cycle (to test immediately without waiting 20 minutes)
+  const triggerFastDemo = () => {
+    setIsBotRunning(true);
+    setCyclePhase('ANALYZING');
+    setAnalysisSecondsRemaining(20);
+    setTradeWindowSecondsRemaining(2 * 60);
+    warned20sRef.current = false;
+    speakText('Fast 20-second demo cycle started.');
+  };
 
   const handleCopyTrade = () => {
     const text = `🎯 XAUUSD (Gold) 5M ICT Sniper Signal\nDirection: ${activeSetup.marketDirection || activeSetup.direction}\nOrder Action: BUY LIMIT / MARKET LONG\nOptimal Entry (OTE): ${activeSetup.entry}\nStop Loss (SL): ${activeSetup.stopLoss} (${activeSetup.slDistance || '5.3 Pips'})\nTake Profit 1 (TP1): ${activeSetup.takeProfit1} (${activeSetup.tp1Distance || '+10.1 Pips'})\nTake Profit 2 (TP2): ${activeSetup.takeProfit2} (${activeSetup.tp2Distance || '+15.6 Pips'})\nRisk/Reward: ${activeSetup.riskReward}\nTimeframe: ${activeSetup.timeframe}\nCadence: 20-Minute Automated Interval`;
@@ -114,21 +156,49 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
     return () => clearInterval(interval);
   }, []);
 
-  // 20-Minute Automated Trade Scan & Alert Cadence (Continuous Looping)
+  // Continuous 20-Minute Analysis & 2-Minute Trade Window State Machine
   useEffect(() => {
+    if (!isBotRunning) return;
+
     const cadenceTimer = setInterval(() => {
-      setScanSecondsRemaining((prev) => {
-        if (prev <= 1) {
-          // Automated 20-minute scan trigger!
-          setIsTakeTradeNowActive(true);
-          handleInstantCapture(true);
-          return 20 * 60; // reset 20 minutes for next protection / projection loop
-        }
-        return prev - 1;
-      });
+      if (cyclePhase === 'ANALYZING') {
+        setAnalysisSecondsRemaining((prev) => {
+          if (prev === 20 && !warned20sRef.current) {
+            warned20sRef.current = true;
+            speakText('Analysis finalizing in 20 seconds. Preparing 5-minute Gold signal.');
+          }
+
+          if (prev <= 1) {
+            // 20 minutes completed! Transition to 2-Minute Trade Window!
+            setCyclePhase('SIGNAL_ACTIVE');
+            setIsTakeTradeNowActive(true);
+            setTradeWindowSecondsRemaining(2 * 60);
+            warned20sRef.current = false;
+            playAlertChime();
+            handleInstantCapture(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      } else if (cyclePhase === 'SIGNAL_ACTIVE') {
+        setTradeWindowSecondsRemaining((prev) => {
+          if (prev <= 1) {
+            // 2-minute trade window expired! Loop back to 20-minute ANALYZING!
+            setCyclePhase('ANALYZING');
+            setIsTakeTradeNowActive(false);
+            setAnalysisSecondsRemaining(20 * 60);
+            warned20sRef.current = false;
+            playAlertChime();
+            speakText('2-minute trade window closed. Starting next 20-minute analysis cycle.');
+            return 20 * 60;
+          }
+          return prev - 1;
+        });
+      }
     }, 1000);
+
     return () => clearInterval(cadenceTimer);
-  }, []);
+  }, [isBotRunning, cyclePhase, activeSetup]);
 
   // Web Audio Synthesizer Chime
   const playAlertChime = () => {
@@ -267,6 +337,150 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
         </div>
       </div>
 
+      {/* ─── MASTER BOT CONTROLLER & CADENCE DECK ─── */}
+      <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900/95 via-slate-900/80 to-slate-950/95 border-2 border-slate-700/80 shadow-2xl backdrop-blur-md">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className={`p-3 rounded-xl border transition-all ${
+              !isBotRunning
+                ? 'bg-slate-800/80 border-slate-700 text-slate-400'
+                : cyclePhase === 'SIGNAL_ACTIVE'
+                ? 'bg-emerald-500/20 border-emerald-400/80 text-emerald-400 animate-bounce'
+                : 'bg-amber-500/20 border-amber-400/80 text-amber-400 animate-pulse'
+            }`}>
+              <Zap className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex items-center gap-2.5">
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-bold border flex items-center gap-1.5 ${
+                  !isBotRunning
+                    ? 'bg-slate-800 text-slate-400 border-slate-700'
+                    : cyclePhase === 'SIGNAL_ACTIVE'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400 animate-pulse'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-400'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${
+                    !isBotRunning ? 'bg-slate-500' : cyclePhase === 'SIGNAL_ACTIVE' ? 'bg-emerald-400 animate-ping' : 'bg-amber-400 animate-ping'
+                  }`} />
+                  {!isBotRunning
+                    ? 'BOT STATUS: STANDBY'
+                    : cyclePhase === 'SIGNAL_ACTIVE'
+                    ? 'PHASE 2: 🚨 TAKE TRADE NOW (2-MIN WINDOW)'
+                    : 'PHASE 1: 🟡 ANALYZING 5M LIQUIDITY (20-MIN)'}
+                </span>
+
+                {isBotRunning && (
+                  <span className="text-[11px] font-mono text-cyan-300 hidden sm:inline">
+                    XAUUSD 5M LIVE CYCLE
+                  </span>
+                )}
+              </div>
+
+              <h2 className="text-lg font-black text-white tracking-wide font-heading">
+                {!isBotRunning
+                  ? '20-Minute AI Scanner Bot is in Standby'
+                  : cyclePhase === 'SIGNAL_ACTIVE'
+                  ? '🚨 20-Minute Signal Confirmed! Take Trade Now'
+                  : 'Analyzing Market Structure & Liquidity Imbalances'}
+              </h2>
+
+              <p className="text-xs text-slate-400 max-w-2xl font-mono">
+                {!isBotRunning
+                  ? 'Click "Start 20-Min AI Scanner Bot" to initiate the autonomous cycle. The bot analyzes 5M liquidity for 20 minutes, gives voice warnings, locks in the trade prediction, and opens a 2-minute execution window.'
+                  : cyclePhase === 'SIGNAL_ACTIVE'
+                  ? `Execution window active for ${Math.floor(tradeWindowSecondsRemaining / 60)}m ${tradeWindowSecondsRemaining % 60}s! Place order before window closes and auto-loop resets to next 20-min analysis.`
+                  : `Real-time 20-minute scan running. Countdown to signal lock: ${Math.floor(analysisSecondsRemaining / 60)}m ${analysisSecondsRemaining % 60}s. Pre-signal warning will speak at 00:20.`}
+              </p>
+            </div>
+          </div>
+
+          {/* Right Action Controls */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {!isBotRunning ? (
+              <button
+                onClick={toggleBotRunning}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black font-mono text-xs shadow-lg shadow-emerald-500/30 transition-all flex items-center gap-2 transform active:scale-95"
+              >
+                <Play className="w-4 h-4 fill-current" />
+                <span>START 20-MIN AI SCANNER BOT</span>
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={toggleBotRunning}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-rose-950/80 border border-slate-700 hover:border-rose-500 text-slate-200 hover:text-rose-300 font-mono text-xs font-bold transition-all flex items-center gap-1.5"
+                >
+                  <Power className="w-3.5 h-3.5" />
+                  <span>STOP BOT</span>
+                </button>
+
+                <button
+                  onClick={triggerFastDemo}
+                  title="Test a 20-second analysis cycle and hear the voice alert immediately without waiting 20 real minutes"
+                  className="px-3 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 font-mono text-xs font-bold transition-all flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>⚡ 20s FAST DEMO</span>
+                </button>
+              </>
+            )}
+
+            {/* Countdown Display Pill */}
+            {isBotRunning && (
+              <div className={`px-4 py-2 rounded-xl font-mono text-center border shadow-lg ${
+                cyclePhase === 'SIGNAL_ACTIVE'
+                  ? 'bg-emerald-950/80 border-emerald-400 text-emerald-300 animate-pulse'
+                  : 'bg-slate-950 border-slate-700 text-cyan-300'
+              }`}>
+                <div className="text-[9px] uppercase tracking-wider opacity-75">
+                  {cyclePhase === 'SIGNAL_ACTIVE' ? 'TRADE WINDOW' : 'ANALYSIS TIMER'}
+                </div>
+                <div className="text-base font-black">
+                  {cyclePhase === 'SIGNAL_ACTIVE'
+                    ? `${Math.floor(tradeWindowSecondsRemaining / 60)}m ${tradeWindowSecondsRemaining % 60}s`
+                    : `${Math.floor(analysisSecondsRemaining / 60)}m ${analysisSecondsRemaining % 60}s`}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Progress Bar (0% to 100% of 20 minutes) */}
+        {isBotRunning && (
+          <div className="mt-4 pt-3 border-t border-slate-800/80">
+            <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 mb-1">
+              <span>
+                {cyclePhase === 'SIGNAL_ACTIVE'
+                  ? '2-Minute Trade Execution Window Active'
+                  : '20-Minute Liquidity Analysis Progress'}
+              </span>
+              <span className="font-bold text-white">
+                {cyclePhase === 'SIGNAL_ACTIVE'
+                  ? `${Math.round(((120 - tradeWindowSecondsRemaining) / 120) * 100)}% Elapsed`
+                  : `${Math.round(((1200 - analysisSecondsRemaining) / 1200) * 100)}% Elapsed`}
+              </span>
+            </div>
+            <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
+              <div
+                className={`h-full transition-all duration-1000 ${
+                  cyclePhase === 'SIGNAL_ACTIVE'
+                    ? 'bg-gradient-to-r from-emerald-400 to-cyan-400'
+                    : 'bg-gradient-to-r from-amber-500 to-cyan-400'
+                }`}
+                style={{
+                  width: `${
+                    cyclePhase === 'SIGNAL_ACTIVE'
+                      ? ((120 - tradeWindowSecondsRemaining) / 120) * 100
+                      : ((1200 - analysisSecondsRemaining) / 1200) * 100
+                  }%`
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ─── Session Clocks & Market Phase Bar ─── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Asian Session Clock */}
@@ -326,13 +540,25 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
             <div>
               <div className="text-[11px] font-mono text-slate-400">20-MIN AUTO CADENCE</div>
               <div className="text-xs font-bold text-cyan-300 font-mono">
-                {Math.floor(scanSecondsRemaining / 60)}m {scanSecondsRemaining % 60}s
+                {!isBotRunning
+                  ? 'STANDBY'
+                  : cyclePhase === 'SIGNAL_ACTIVE'
+                  ? `${Math.floor(tradeWindowSecondsRemaining / 60)}m ${tradeWindowSecondsRemaining % 60}s (TRADE)`
+                  : `${Math.floor(analysisSecondsRemaining / 60)}m ${analysisSecondsRemaining % 60}s (SCAN)`}
               </div>
             </div>
           </div>
-          <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            CYCLE ACTIVE
+          <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold flex items-center gap-1 ${
+            !isBotRunning
+              ? 'bg-slate-800 text-slate-400 border border-slate-700'
+              : cyclePhase === 'SIGNAL_ACTIVE'
+              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse'
+              : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              !isBotRunning ? 'bg-slate-500' : cyclePhase === 'SIGNAL_ACTIVE' ? 'bg-emerald-400 animate-ping' : 'bg-amber-400 animate-ping'
+            }`} />
+            {!isBotRunning ? 'STANDBY' : cyclePhase === 'SIGNAL_ACTIVE' ? '2M WINDOW' : 'ANALYZING'}
           </span>
         </div>
       </div>
@@ -688,17 +914,36 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
             className="flex flex-col justify-between"
           >
             <div className="space-y-4 pt-1">
-              {/* Direction Indicator Pill - Dynamic 20-Min Detecting vs Locked State */}
-              {scanSecondsRemaining > 10 ? (
+              {/* Direction Indicator Pill - Dynamic 20-Min Analyzing vs 2-Min Locked State */}
+              {!isBotRunning ? (
+                <div className="p-4 rounded-2xl border border-slate-700 bg-slate-900/70 text-slate-300 flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] font-mono tracking-wider opacity-75 uppercase flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-slate-500" />
+                      BOT STATUS: STANDBY
+                    </div>
+                    <div className="text-base sm:text-lg font-black font-heading text-slate-200 mt-0.5">
+                      STANDBY // CLICK START
+                    </div>
+                  </div>
+                  <button
+                    onClick={toggleBotRunning}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-mono font-black shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-1.5"
+                  >
+                    <Play className="w-3 h-3 fill-current" />
+                    <span>START BOT</span>
+                  </button>
+                </div>
+              ) : cyclePhase === 'ANALYZING' ? (
                 <div className="p-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 text-amber-300 shadow-[0_0_25px_rgba(245,158,11,0.15)] flex items-center justify-between">
                   <div>
                     <div className="text-[10px] font-mono tracking-wider opacity-90 uppercase flex items-center gap-1.5 text-amber-400 font-bold">
                       <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                      RADAR: DETECTING 5M LIQUIDITY...
+                      RADAR: ANALYZING 5M LIQUIDITY...
                     </div>
                     <div className="text-lg sm:text-xl font-black font-heading tracking-wide flex items-center gap-2 mt-0.5 text-white">
                       <RefreshCw className="w-5 h-5 text-amber-400 animate-spin" />
-                      <span>DETECTING NEXT MOVE...</span>
+                      <span>ANALYZING NEXT MOVE...</span>
                     </div>
                   </div>
 
@@ -707,7 +952,7 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                       98.4% ACCURACY
                     </div>
                     <div className="text-[10px] font-mono text-slate-400 font-semibold">
-                      {Math.floor(scanSecondsRemaining / 60)}m {scanSecondsRemaining % 60}s to Lock
+                      {Math.floor(analysisSecondsRemaining / 60)}m {analysisSecondsRemaining % 60}s to Lock
                     </div>
                   </div>
                 </div>
@@ -715,8 +960,8 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                 <div
                   className={`p-4 rounded-2xl border flex items-center justify-between ${
                     activeSetup.direction === 'BULLISH'
-                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-[0_0_25px_rgba(0,255,157,0.2)]'
-                      : 'bg-rose-500/15 border-rose-500/40 text-rose-300 shadow-[0_0_25px_rgba(244,63,94,0.2)]'
+                      ? 'bg-emerald-500/15 border-emerald-400/60 text-emerald-300 shadow-[0_0_25px_rgba(0,255,157,0.25)]'
+                      : 'bg-rose-500/15 border-rose-400/60 text-rose-300 shadow-[0_0_25px_rgba(244,63,94,0.25)]'
                   }`}
                 >
                   <div>
@@ -744,7 +989,7 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                       {activeSetup.confidenceScore || 98}% WIN PROB
                     </div>
                     <div className="text-[10px] font-mono text-emerald-400 font-semibold">
-                      {activeSetup.pipsProjected}
+                      Window: {Math.floor(tradeWindowSecondsRemaining / 60)}m {tradeWindowSecondsRemaining % 60}s
                     </div>
                   </div>
                 </div>
@@ -755,14 +1000,22 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                 <div className="flex items-center gap-1.5 text-cyan-300 font-mono font-bold text-[11px]">
                   <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
                   <span>
-                    {scanSecondsRemaining > 10 ? 'ACTIVE MULTI-INDICATOR SCANNER' : 'AI MARKET STRUCTURE NARRATIVE'}
+                    {!isBotRunning
+                      ? 'AI LIQUIDITY RADAR (STANDBY)'
+                      : cyclePhase === 'ANALYZING'
+                      ? 'ACTIVE MULTI-INDICATOR SCANNER'
+                      : 'AI MARKET STRUCTURE NARRATIVE'}
                   </span>
                 </div>
-                {scanSecondsRemaining > 10 ? (
+                {!isBotRunning ? (
+                  <p className="text-slate-400 leading-relaxed text-[11px] font-mono">
+                    Bot is currently in standby. Start the 20-min AI Scanner Bot to begin scanning Asian Range liquidity, Fair Value Gaps, and Market Structure Shifts.
+                  </p>
+                ) : cyclePhase === 'ANALYZING' ? (
                   <div className="space-y-1.5 text-[11px] font-mono text-slate-300">
                     <div className="flex items-center justify-between text-slate-400">
                       <span>• Asian High/Low Judas Sweep:</span>
-                      <span className="text-amber-400 font-bold">DETECTING...</span>
+                      <span className="text-amber-400 font-bold">ANALYZING...</span>
                     </div>
                     <div className="flex items-center justify-between text-slate-400">
                       <span>• 5M Displacement & Fair Value Gap:</span>
@@ -835,11 +1088,15 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
               <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] font-mono">
                 <span className="text-slate-400 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                  20-Min Auto-Alert:
+                  Bot Cycle Status:
                 </span>
                 <span className="font-bold text-cyan-300 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                  {Math.floor(scanSecondsRemaining / 60)}m {scanSecondsRemaining % 60}s remaining
+                  <span className={`w-1.5 h-1.5 rounded-full ${!isBotRunning ? 'bg-slate-500' : cyclePhase === 'SIGNAL_ACTIVE' ? 'bg-emerald-400 animate-ping' : 'bg-amber-400 animate-pulse'}`} />
+                  {!isBotRunning
+                    ? 'STANDBY'
+                    : cyclePhase === 'SIGNAL_ACTIVE'
+                    ? `${Math.floor(tradeWindowSecondsRemaining / 60)}m ${tradeWindowSecondsRemaining % 60}s (TRADE)`
+                    : `${Math.floor(analysisSecondsRemaining / 60)}m ${analysisSecondsRemaining % 60}s (SCAN)`}
                 </span>
               </div>
 
@@ -976,7 +1233,11 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                       </div>
 
                       <span className="px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-slate-700 text-[10px] font-mono text-slate-300">
-                        CADENCE: {Math.floor(scanSecondsRemaining / 60)}m {scanSecondsRemaining % 60}s
+                        {!isBotRunning
+                          ? 'STATUS: STANDBY'
+                          : cyclePhase === 'SIGNAL_ACTIVE'
+                          ? `WINDOW: ${Math.floor(tradeWindowSecondsRemaining / 60)}m ${tradeWindowSecondsRemaining % 60}s`
+                          : `ANALYSIS: ${Math.floor(analysisSecondsRemaining / 60)}m ${analysisSecondsRemaining % 60}s`}
                       </span>
                     </div>
 
@@ -1056,8 +1317,24 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                       </div>
                     )}
 
-                    {/* ─── 20-MINUTE DYNAMIC STATE: DETECTING VS 🚨 TAKE TRADE NOW! FLASH BANNER ─── */}
-                    {scanSecondsRemaining > 10 ? (
+                    {/* ─── 20-MINUTE DYNAMIC STATE: STANDBY VS ANALYZING VS 🚨 TAKE TRADE NOW! FLASH BANNER ─── */}
+                    {!isBotRunning ? (
+                      <div className="absolute inset-x-3 top-10 z-20 p-2 sm:p-2.5 rounded-xl bg-slate-950/90 border border-slate-700 shadow-xl backdrop-blur-md flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Tv className="w-4 h-4 text-slate-400" />
+                          <span className="text-[11px] font-mono text-slate-300">
+                            20-Minute Scanner in Standby. Click "START 20-MIN AI SCANNER BOT" above to begin.
+                          </span>
+                        </div>
+                        <button
+                          onClick={toggleBotRunning}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] font-bold transition-all flex items-center gap-1"
+                        >
+                          <Play className="w-3 h-3 fill-current" />
+                          <span>START</span>
+                        </button>
+                      </div>
+                    ) : cyclePhase === 'ANALYZING' ? (
                       <div className="absolute inset-x-3 top-10 z-20 p-2 sm:p-2.5 rounded-xl bg-slate-950/90 border border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.25)] backdrop-blur-md flex items-center justify-between gap-2 animate-in fade-in duration-300">
                         <div className="flex items-center gap-2">
                           <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-spin">
@@ -1065,18 +1342,18 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                           </div>
                           <div>
                             <div className="text-[11px] font-black text-amber-300 font-heading tracking-wide uppercase flex items-center gap-1.5">
-                              <span>🟡 20-MIN CADENCE: DETECTING 5M LIQUIDITY...</span>
+                              <span>🟡 20-MIN CADENCE: ANALYZING 5M LIQUIDITY...</span>
                               <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono text-[9px] font-bold border border-amber-500/40">
-                                SCANNING
+                                ANALYZING
                               </span>
                             </div>
                             <div className="text-[10px] font-mono text-slate-300">
-                              Asian Range (${activeSetup.asianHigh} - ${activeSetup.asianLow}) & Judas Sweeps • Next Signal in {Math.floor(scanSecondsRemaining / 60)}m {scanSecondsRemaining % 60}s
+                              Asian Range (${activeSetup.asianHigh} - ${activeSetup.asianLow}) & Judas Sweeps • Next Signal in {Math.floor(analysisSecondsRemaining / 60)}m {analysisSecondsRemaining % 60}s
                             </div>
                           </div>
                         </div>
                         <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-xs font-bold text-right shrink-0">
-                          {Math.floor(scanSecondsRemaining / 60)}m {scanSecondsRemaining % 60}s
+                          {Math.floor(analysisSecondsRemaining / 60)}m {analysisSecondsRemaining % 60}s
                         </span>
                       </div>
                     ) : (
@@ -1088,10 +1365,10 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="text-xs sm:text-sm font-black text-white font-heading tracking-wide uppercase">
-                                🚨 20-MIN CYCLE TRIGGER: TAKE TRADE NOW!
+                                🚨 20-MIN CYCLE COMPLETE: TAKE TRADE NOW!
                               </span>
                               <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[9px] sm:text-[10px] font-bold border border-emerald-500/40">
-                                92% CONFIDENCE
+                                2-MIN WINDOW ({Math.floor(tradeWindowSecondsRemaining / 60)}m {tradeWindowSecondsRemaining % 60}s)
                               </span>
                             </div>
                             <div className="text-[10px] sm:text-[11px] font-mono text-emerald-300 mt-0.5">

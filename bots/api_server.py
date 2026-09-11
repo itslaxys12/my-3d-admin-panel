@@ -3670,6 +3670,19 @@ async def get_asian_session_chart_image():
         return FileResponse(img_path, media_type="image/jpeg")
     return JSONResponse(status_code=404, content={"detail": "No screenshot uploaded yet from desktop bot"})
 
+@app.post("/api/trading/asian-session/toggle-bot")
+async def toggle_asian_session_bot(payload: Optional[Dict[str, Any]] = None):
+    """Toggles or updates bot status (running, phase, etc.) on the backend."""
+    global CURRENT_ASIAN_SESSION
+    if payload:
+        if "botRunning" in payload:
+            CURRENT_ASIAN_SESSION["botRunning"] = bool(payload["botRunning"])
+        if "phase" in payload:
+            CURRENT_ASIAN_SESSION["phase"] = payload["phase"]
+        if "analysis" in payload and isinstance(payload["analysis"], dict):
+            CURRENT_ASIAN_SESSION.update(payload["analysis"])
+    return {"success": True, "setup": CURRENT_ASIAN_SESSION}
+
 
 # ─── Entry Point ─────────────────────────────────────────────────────────────
 
