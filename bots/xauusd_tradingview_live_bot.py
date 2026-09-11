@@ -20,6 +20,14 @@
 
 import sys
 import os
+
+# Force UTF-8 encoding on Windows to prevent charmap / cp1252 UnicodeEncodeError
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import time
 import json
 import base64
@@ -30,11 +38,18 @@ import subprocess
 import webbrowser
 from datetime import datetime, timezone
 
-# Windows API for window detection (Built-in standard library)
+# Windows API for window detection and ANSI console colors (Built-in standard library)
 if sys.platform == "win32":
     import ctypes
     from ctypes import wintypes
     user32 = ctypes.windll.user32
+    try:
+        kernel32 = ctypes.windll.kernel32
+        # Enable ENABLE_VIRTUAL_TERMINAL_PROCESSING (0x0004)
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+    except Exception:
+        pass
+    os.system("")
 else:
     user32 = None
 
@@ -138,7 +153,10 @@ def find_tradingview_window():
                 user32.GetWindowTextW(hwnd, buff, length + 1)
                 title = buff.value
                 t_lower = title.lower()
-                # Check for TradingView or XAUUSD or Gold
+                # Ignore self console, CMD, terminal, and python windows
+                if any(k in t_lower for k in ["glitch matrix", "cmd.exe", "powershell", "windows terminal", "xauusd live sniper"]):
+                    return True
+                # Check for genuine TradingView or Gold browser tabs or desktop app
                 if "tradingview" in t_lower or "xauusd" in t_lower or "gold" in t_lower:
                     found["title"] = title
                     found["hwnd"] = hwnd
@@ -234,6 +252,15 @@ def generate_authentic_chart_bytes(curr, asia_high, asia_low, pdl, entry, sl, tp
         y = 630 - int(norm * 500)
         return max(90, min(640, y))
 
+    def draw_box(x0, y0, x1, y1, **kwargs):
+        x_min, x_max = min(x0, x1), max(x0, x1)
+        y_min, y_max = min(y0, y1), max(y0, y1)
+        if y_min == y_max:
+            y_max += 1
+        if x_min == x_max:
+            x_max += 1
+        draw.rectangle([x_min, y_min, x_max, y_max], **kwargs)
+
     # 1. Subtle TradingView Dark Grid (Dotted lines) & Price scale on right
     for x in range(60, 1140, 50):
         for y in range(90, 650, 10):
@@ -259,19 +286,19 @@ def generate_authentic_chart_bytes(curr, asia_high, asia_low, pdl, entry, sl, tp
     al_y = to_y(asia_low)
     box_top = min(ah_y, al_y)
     box_bot = max(ah_y, al_y)
-    draw.rectangle([60, box_top, 500, box_bot], outline="#a855f7", fill="#18122c", width=2)
+    draw_box(60, box_top, 500, box_bot, outline="#a855f7", fill="#18122c", width=2)
     draw.text((75, box_top + 8), f"ASIAN ACCUMULATION RANGE (${asia_low:.2f} - ${asia_high:.2f})", fill="#c084fc")
 
     # Dotted Blue Asian High (BSL)
     for x in range(60, 1140, 8):
         draw.line([(x, ah_y), (min(x + 4, 1140), ah_y)], fill="#38bdf8", width=2)
-    draw.rectangle([1050, ah_y - 12, 1240, ah_y + 12], fill="#083344", outline="#38bdf8")
+    draw_box(1050, ah_y - 12, 1240, ah_y + 12, fill="#083344", outline="#38bdf8")
     draw.text((1060, ah_y - 6), f"ASIA HIGH: ${asia_high:.2f}", fill="#7dd3fc")
 
     # Dotted Green Asian Low (SSL)
     for x in range(60, 1140, 8):
         draw.line([(x, al_y), (min(x + 4, 1140), al_y)], fill="#10b981", width=2)
-    draw.rectangle([1050, al_y - 12, 1240, al_y + 12], fill="#064e3b", outline="#10b981")
+    draw_box(1050, al_y - 12, 1240, al_y + 12, fill="#064e3b", outline="#10b981")
     draw.text((1060, al_y - 6), f"ASIA LOW: ${asia_low:.2f}", fill="#6ee7b7")
 
     # Dotted Yellow Previous Day Low (PDL)
@@ -280,7 +307,7 @@ def generate_authentic_chart_bytes(curr, asia_high, asia_low, pdl, entry, sl, tp
         for x in range(60, 1140, 12):
             draw.line([(x, pdl_y), (min(x + 6, 1140), pdl_y)], fill="#eab308", width=1)
         draw.text((800, pdl_y - 14), "PDL", fill="#fde047")
-        draw.rectangle([1050, pdl_y - 12, 1240, pdl_y + 12], fill="#422006", outline="#eab308")
+        draw_box(1050, pdl_y - 12, 1240, pdl_y + 12, fill="#422006", outline="#eab308")
         draw.text((1060, pdl_y - 6), f"PDL: ${pdl:.2f}", fill="#fef08a")
 
     # Purple Equilibrium Box (50% of Asian Range)
@@ -288,7 +315,7 @@ def generate_authentic_chart_bytes(curr, asia_high, asia_low, pdl, entry, sl, tp
     eq_y = to_y(eq_p)
     for x in range(60, 500, 10):
         draw.line([(x, eq_y), (min(x + 5, 500), eq_y)], fill="#d946ef", width=1)
-    draw.rectangle([210, eq_y - 12, 390, eq_y + 12], outline="#d946ef", fill="#3b0764", width=1)
+    draw_box(210, eq_y - 12, 390, eq_y + 12, outline="#d946ef", fill="#3b0764", width=1)
     draw.text((220, eq_y - 6), f"Equilibrium (50%): ${eq_p:.2f}", fill="#f5d0fe")
 
     # 4. Candlesticks (From real 5M market candles)
@@ -307,11 +334,7 @@ def generate_authentic_chart_bytes(curr, asia_high, asia_low, pdl, entry, sl, tp
             is_up = c.get("close", curr) >= c.get("open", curr)
             col = "#10b981" if is_up else "#f43f5e"
             draw.line([(cx, ch), (cx, cl)], fill=col, width=2)
-            b_top = min(co, cc)
-            b_bot = max(co, cc)
-            if b_bot == b_top:
-                b_bot += 2
-            draw.rectangle([cx - 5, b_top, cx + 5, b_bot], fill=col)
+            draw_box(cx - 5, co, cx + 5, cc, fill=col)
 
     # Judas Swing Liquidity Sweep Marker
     sweep_y = al_y if direction == "BULLISH" else ah_y
@@ -320,7 +343,7 @@ def generate_authentic_chart_bytes(curr, asia_high, asia_low, pdl, entry, sl, tp
 
     # 5M Fair Value Gap (FVG) Box
     fvg_y = to_y(entry)
-    draw.rectangle([540, fvg_y - 20, 680, fvg_y + 20], outline="#00f0ff", fill="#082f49", width=2)
+    draw_box(540, fvg_y - 20, 680, fvg_y + 20, outline="#00f0ff", fill="#082f49", width=2)
     draw.text((550, fvg_y - 6), f"5M {direction} FVG", fill="#38bdf8")
 
     # 5. ─── EXACT TRADINGVIEW POSITION TOOL (Long or Short) ───
@@ -332,16 +355,16 @@ def generate_authentic_chart_bytes(curr, asia_high, asia_low, pdl, entry, sl, tp
 
     if direction == "BULLISH":
         # Profit zone on top, Risk zone on bottom
-        draw.rectangle([tool_x1, tp_y, tool_x2, entry_y], fill="#0a2e23", outline="#10b981", width=1)
-        draw.rectangle([tool_x1, entry_y, tool_x2, sl_y], fill="#451a24", outline="#f43f5e", width=1)
+        draw_box(tool_x1, tp_y, tool_x2, entry_y, fill="#0a2e23", outline="#10b981", width=1)
+        draw_box(tool_x1, entry_y, tool_x2, sl_y, fill="#451a24", outline="#f43f5e", width=1)
         # Reference dashed lines inside boxes
         for x in range(tool_x1, tool_x2, 10):
             draw.line([(x, (entry_y + sl_y) // 2), (min(x + 5, tool_x2), (entry_y + sl_y) // 2)], fill="#38bdf8", width=2)
             draw.line([(x, (entry_y + tp_y) // 2), (min(x + 5, tool_x2), (entry_y + tp_y) // 2)], fill="#eab308", width=2)
     else:  # BEARISH
         # Risk zone on top, Profit zone on bottom
-        draw.rectangle([tool_x1, sl_y, tool_x2, entry_y], fill="#451a24", outline="#f43f5e", width=1)
-        draw.rectangle([tool_x1, entry_y, tool_x2, tp_y], fill="#0a2e23", outline="#10b981", width=1)
+        draw_box(tool_x1, sl_y, tool_x2, entry_y, fill="#451a24", outline="#f43f5e", width=1)
+        draw_box(tool_x1, entry_y, tool_x2, tp_y, fill="#0a2e23", outline="#10b981", width=1)
         # Reference dashed lines inside boxes
         for x in range(tool_x1, tool_x2, 10):
             draw.line([(x, (entry_y + sl_y) // 2), (min(x + 5, tool_x2), (entry_y + sl_y) // 2)], fill="#f43f5e", width=2)
@@ -354,7 +377,7 @@ def generate_authentic_chart_bytes(curr, asia_high, asia_low, pdl, entry, sl, tp
         (tool_x1, tp_y), (tool_x2, tp_y)
     ]
     for hx, hy in handles:
-        draw.rectangle([hx - 4, hy - 4, hx + 4, hy + 4], fill="#0284c7", outline="#ffffff", width=1)
+        draw_box(hx - 4, hy - 4, hx + 4, hy + 4, fill="#0284c7", outline="#ffffff", width=1)
 
     # Entry Dividing Line
     draw.line([(tool_x1, entry_y), (tool_x2, entry_y)], fill="#00f0ff", width=2)
@@ -364,18 +387,18 @@ def generate_authentic_chart_bytes(curr, asia_high, asia_low, pdl, entry, sl, tp
     pill_h = 52
     pill_x = tool_x1 + 30
     pill_y = entry_y - 26
-    draw.rectangle([pill_x, pill_y, pill_x + pill_w, pill_y + pill_h], fill="#e11d48", outline="#ffffff", width=2)
+    draw_box(pill_x, pill_y, pill_x + pill_w, pill_y + pill_h, fill="#e11d48", outline="#ffffff", width=2)
     draw.text((pill_x + 14, pill_y + 8), "Open PnL: +$0.00, Qty: 20 oz", fill="#ffffff")
     draw.text((pill_x + 14, pill_y + 28), f"Risk/reward ratio: {risk_reward}", fill="#ffffff")
 
     # Right Axis Badges for Entry, SL, TP
-    draw.rectangle([1050, entry_y - 12, 1260, entry_y + 12], fill="#083344", outline="#00f0ff")
+    draw_box(1050, entry_y - 12, 1260, entry_y + 12, fill="#083344", outline="#00f0ff")
     draw.text((1060, entry_y - 6), f"ENTRY (OTE): ${entry:.2f}", fill="#67e8f9")
 
-    draw.rectangle([1050, sl_y - 12, 1260, sl_y + 12], fill="#881337", outline="#f43f5e")
+    draw_box(1050, sl_y - 12, 1260, sl_y + 12, fill="#881337", outline="#f43f5e")
     draw.text((1060, sl_y - 6), f"STOP LOSS: ${sl:.2f}", fill="#fda4af")
 
-    draw.rectangle([1050, tp_y - 12, 1260, tp_y + 12], fill="#064e3b", outline="#10b981")
+    draw_box(1050, tp_y - 12, 1260, tp_y + 12, fill="#064e3b", outline="#10b981")
     draw.text((1060, tp_y - 6), f"TARGET 1: ${tp1:.2f}", fill="#6ee7b7")
 
     # Trajectory Arrow
@@ -485,10 +508,10 @@ def analyze_and_sync():
 
     is_analyzing = (state["phase"] == "ANALYZING")
     direction = state["locked_direction"] if not is_analyzing else "ANALYZING"
-    entry = state["locked_entry"] if not is_analyzing else curr
-    sl = state["locked_sl"] if not is_analyzing else curr - 5.3
-    tp1 = state["locked_tp1"] if not is_analyzing else asia_high
-    tp2 = state["locked_tp2"] if not is_analyzing else asia_high + 5.5
+    entry = state["locked_entry"]
+    sl = state["locked_sl"]
+    tp1 = state["locked_tp1"]
+    tp2 = state["locked_tp2"]
     sweep_type = state["locked_sweep_type"]
 
     state["direction"] = direction
@@ -671,6 +694,7 @@ def main():
             print("\nShutting down XAUUSD Live Watcher.")
             break
         except Exception as err:
+            print(f"{RED}[Notice] {err}{RESET}")
             time.sleep(2)
 
 if __name__ == "__main__":

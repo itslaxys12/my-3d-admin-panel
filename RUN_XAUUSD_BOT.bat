@@ -1,10 +1,11 @@
 @echo off
+chcp 65001 >nul
 title GLITCH MATRIX - XAUUSD 5M LIVE TRADINGVIEW SNIPER BOT
 color 0A
 cd /d "D:\my-3d-admin-panel"
 
 echo =============================================================================
-echo    🏆 GLITCH MATRIX // XAUUSD (GOLD) 5M LIVE TRADINGVIEW SNIPER BOT
+echo    👑 GLITCH MATRIX // XAUUSD (GOLD) 5M LIVE TRADINGVIEW SNIPER BOT
 echo =============================================================================
 echo.
 echo  [1/2] Checking Python environment...

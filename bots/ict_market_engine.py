@@ -20,6 +20,16 @@
 =============================================================================
 """
 
+import sys
+import os
+
+# Force UTF-8 encoding on Windows to prevent charmap / cp1252 UnicodeEncodeError
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import urllib.request
 import urllib.error
 import json
