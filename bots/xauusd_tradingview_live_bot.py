@@ -27,6 +27,7 @@ import urllib.request
 import urllib.error
 import threading
 import subprocess
+import webbrowser
 from datetime import datetime, timezone
 
 # Windows API for window detection (Built-in standard library)
@@ -128,6 +129,35 @@ def find_tradingview_window():
     ENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
     user32.EnumWindows(ENUMPROC(enum_windows_proc), 0)
     return found["title"], found["hwnd"]
+
+def focus_or_open_tradingview():
+    """
+    Direct TradingView Integration:
+    Brings existing TradingView or Gold chart window to foreground,
+    or immediately launches TradingView in default browser if not currently running.
+    """
+    title, hwnd = find_tradingview_window()
+    if hwnd and user32:
+        try:
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE = 9
+            user32.SetForegroundWindow(hwnd)
+            print(f"{GREEN}Connected and focused active TradingView window: {title[:50]}{RESET}")
+            return title, hwnd
+        except Exception:
+            pass
+
+    # If no window is detected, automatically launch TradingView XAUUSD 5M chart
+    try:
+        url = "https://www.tradingview.com/chart/?symbol=OANDA%3AXAUUSD"
+        print(f"{CYAN}Opening TradingView Gold chart in browser: {url}{RESET}")
+        webbrowser.open(url)
+        time.sleep(2)
+        # Re-scan to grab the newly opened window
+        title, hwnd = find_tradingview_window()
+        return title, hwnd
+    except Exception as e:
+        print(f"{YELLOW}Browser auto-launch notice: {e}{RESET}")
+    return None, None
 
 def fetch_live_gold_price():
     """
@@ -497,13 +527,13 @@ def print_dashboard():
 def main():
     print(f"{GREEN}Starting XAUUSD TradingView Live Sniper Bot...{RESET}")
 
-    # Initial window scan
-    title, hwnd = find_tradingview_window()
+    # Connect directly to TradingView on PC (focus window or open in browser)
+    title, hwnd = focus_or_open_tradingview()
     state["tv_window_title"] = title
     state["tv_window_hwnd"] = hwnd
 
     # Initial announcement
-    speak("XAUUSD TradingView Live Watcher activated. Twenty minute analysis cycle started.")
+    speak("XAUUSD TradingView Live Watcher activated. Directing to TradingView chart. Twenty minute analysis cycle started.")
 
     last_print = 0
 

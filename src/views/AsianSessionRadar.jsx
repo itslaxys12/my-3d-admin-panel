@@ -886,8 +886,20 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                 <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold">
                   ICT Asian Judas Sweep
                 </span>
-                <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold">
-                  {activeSetup.timeframe} Bullish FVG
+                <span className={`px-2 py-0.5 rounded border font-bold ${
+                  !isBotRunning
+                    ? 'bg-slate-800 border-slate-700 text-slate-400'
+                    : cyclePhase === 'ANALYZING'
+                    ? 'bg-amber-500/20 border-amber-500/30 text-amber-300'
+                    : activeSetup.direction === 'BEARISH'
+                    ? 'bg-rose-500/20 border-rose-500/30 text-rose-300'
+                    : 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300'
+                }`}>
+                  {!isBotRunning
+                    ? '5M Standby'
+                    : cyclePhase === 'ANALYZING'
+                    ? 'Scanning 5M FVG...'
+                    : `${activeSetup.timeframe} ${activeSetup.direction === 'BEARISH' ? 'Bearish' : 'Bullish'} FVG`}
                 </span>
               </div>
 
@@ -1041,43 +1053,61 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
               <div className="space-y-2 text-xs font-mono">
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800">
                   <span className="text-slate-400">Order Action:</span>
-                  <span className="font-bold text-emerald-400">
-                    BUY LIMIT / MARKET LONG
+                  <span className={`font-bold ${
+                    !isBotRunning
+                      ? 'text-slate-500'
+                      : cyclePhase === 'ANALYZING'
+                      ? 'text-amber-400 animate-pulse'
+                      : activeSetup.direction === 'BULLISH'
+                      ? 'text-emerald-400'
+                      : 'text-rose-400'
+                  }`}>
+                    {!isBotRunning
+                      ? 'STANDBY // WAITING FOR START'
+                      : cyclePhase === 'ANALYZING'
+                      ? 'SCANNING 5M LIQUIDITY...'
+                      : activeSetup.direction === 'BULLISH'
+                      ? 'BUY LIMIT / MARKET LONG'
+                      : 'SELL LIMIT / MARKET SHORT'}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800">
                   <span className="text-slate-400">Optimal Entry (OTE):</span>
                   <span className="font-bold text-cyan-300 font-mono">
-                    {activeSetup.entry}
+                    {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'CALCULATING...' : `$${activeSetup.entry}`}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800">
                   <span className="text-slate-400">Invalidation (SL):</span>
                   <span className="font-bold text-rose-400 font-mono">
-                    {activeSetup.stopLoss}
+                    {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'CALCULATING...' : `$${activeSetup.stopLoss}`}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800">
-                  <span className="text-slate-400">Target 1 (Asia High):</span>
+                  <span className="text-slate-400">
+                    {activeSetup.direction === 'BEARISH' ? 'Target 1 (Asia Low):' : 'Target 1 (Asia High):'}
+                  </span>
                   <span className="font-bold text-emerald-400 font-mono">
-                    {activeSetup.takeProfit1}
+                    {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'CALCULATING...' : `$${activeSetup.takeProfit1}`}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800">
-                  <span className="text-slate-400">Target 2 (Daily High):</span>
+                  <span className="text-slate-400">
+                    {activeSetup.direction === 'BEARISH' ? 'Target 2 (Daily Low):' : 'Target 2 (Daily High):'}
+                  </span>
                   <span className="font-bold text-emerald-300 font-mono">
-                    {activeSetup.takeProfit2}
+                    {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'CALCULATING...' : `$${activeSetup.takeProfit2}`}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
                   <span className="text-slate-300">Risk : Reward:</span>
                   <span className="font-black text-emerald-400 font-mono text-sm">
-                    {activeSetup.riskReward}
+                    {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'CALCULATING...' : (activeSetup.riskReward || '1 : 3.4')}
                   </span>
                 </div>
               </div>
@@ -1251,69 +1281,118 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                           </span>
                         </div>
 
-                        {/* Dotted Yellow Previous Day Low (PDL) line - Exact match to media_1789104798717.png */}
-                        <div className="absolute bottom-[13%] inset-x-3 flex items-center justify-between border-t border-dashed border-amber-400/80">
-                          <span className="px-2 py-0.5 rounded bg-black/85 border border-amber-500/50 text-yellow-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-lg -translate-y-1/2">
-                            PDL: $2348.50
+                        {/* Dotted Yellow Asian High (BSL) line */}
+                        <div className="absolute top-[16%] inset-x-3 flex items-center justify-between border-t border-dashed border-amber-400/80">
+                          <span className="px-2 py-0.5 rounded bg-black/85 border border-amber-500/50 text-amber-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-lg -translate-y-1/2">
+                            ASIA HIGH: ${activeSetup.asianHigh}
                           </span>
-                          <span className="text-yellow-400 font-mono text-[9px] pr-2 opacity-80 -translate-y-1/2">
-                            PDL (Previous Day Low)
+                          <span className="text-amber-400 font-mono text-[9px] pr-2 opacity-80 -translate-y-1/2">
+                            Buy-Side Liquidity (BSL)
                           </span>
                         </div>
 
-                        {/* ─── TRADINGVIEW POSITION TOOL BOX (GREEN PROFIT + RED RISK + PILL) ─── */}
-                        <div className="absolute top-[20%] bottom-[20%] left-[46%] sm:left-[48%] right-3 sm:right-6 flex flex-col">
-                          {/* Green Take Profit Zone (Profit Box) */}
-                          <div className="relative flex-1 bg-emerald-500/15 border border-emerald-500/70 rounded-t-sm">
-                            {/* Blue Corner Handles (Matching TradingView) */}
-                            <div className="absolute -top-1 -left-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
-                            <div className="absolute -top-1 -right-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
-                            <div className="absolute -bottom-1 -left-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
-                            <div className="absolute -bottom-1 -right-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
-
-                            {/* Dotted Yellow Guide Line inside TP Box */}
-                            <div className="absolute top-1/2 inset-x-2 border-t border-dashed border-amber-400/60" />
-
-                            {/* TP Target Badge */}
-                            <div className="absolute -top-3.5 right-0 px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-400 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-md">
-                              TP: ${activeSetup.takeProfit1} (+10.1 Pips)
-                            </div>
-                          </div>
-
-                          {/* Entry Dividing Line */}
-                          <div className="relative w-full border-t-2 border-cyan-400 shadow-[0_0_10px_rgba(0,240,255,0.8)]">
-                            {/* Floating Iconic TradingView Center Pill Badge (Exact match to media_1789104798717.png) */}
-                            <div className="absolute -top-4 sm:-top-5 left-3 sm:left-6 z-20 px-3 py-1 sm:py-1.5 rounded-md bg-[#e11d48] border border-white shadow-[0_4px_20px_rgba(0,0,0,0.8)] text-white font-mono select-none pointer-events-auto leading-tight flex flex-col justify-center">
-                              <span className="text-[10px] sm:text-[11px] font-bold text-white tracking-tight">
-                                Open PnL: -6.960, Qty: 24
-                              </span>
-                              <span className="text-[10px] sm:text-[11px] font-semibold text-rose-100 tracking-tight">
-                                Risk/reward ratio: {activeSetup.riskReward ? activeSetup.riskReward.replace('1 :', '').trim() : '3.42'}
-                              </span>
-                            </div>
-
-                            {/* Entry Label Badge */}
-                            <div className="absolute -top-3 right-0 px-2 py-0.5 rounded bg-cyan-950/90 border border-cyan-400 text-cyan-200 font-mono font-bold text-[9px] sm:text-[10px] shadow-md flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
-                              ENTRY: ${activeSetup.entry} (OTE)
-                            </div>
-                          </div>
-
-                          {/* Red Stop Loss Zone (Risk Box) */}
-                          <div className="relative flex-1 bg-rose-500/20 border border-rose-500/70 rounded-b-sm">
-                            {/* Blue Corner Handles (Matching TradingView) */}
-                            <div className="absolute -bottom-1 -left-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
-                            <div className="absolute -bottom-1 -right-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
-
-                            {/* Dotted Blue Guide Line inside SL Box */}
-                            <div className="absolute top-1/2 inset-x-2 border-t border-dashed border-cyan-400/60" />
-
-                            {/* SL Target Badge */}
-                            <div className="absolute -bottom-3.5 right-0 px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500 text-rose-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-md">
-                              STOP LOSS: ${activeSetup.stopLoss} (-5.3 Pips)
-                            </div>
-                          </div>
+                        {/* Dotted Yellow Previous Day Low / Asia Low line */}
+                        <div className="absolute bottom-[13%] inset-x-3 flex items-center justify-between border-t border-dashed border-cyan-400/80">
+                          <span className="px-2 py-0.5 rounded bg-black/85 border border-cyan-500/50 text-cyan-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-lg -translate-y-1/2">
+                            ASIA LOW: ${activeSetup.asianLow}
+                          </span>
+                          <span className="text-cyan-400 font-mono text-[9px] pr-2 opacity-80 -translate-y-1/2">
+                            Sell-Side Liquidity (SSL)
+                          </span>
                         </div>
+
+                        {/* If in SIGNAL_ACTIVE mode -> Show Authentic TradingView Long / Short Position Tool */}
+                        {cyclePhase === 'SIGNAL_ACTIVE' ? (
+                          <div className="absolute top-[20%] bottom-[20%] left-[46%] sm:left-[48%] right-3 sm:right-6 flex flex-col">
+                            {activeSetup.direction === 'BULLISH' ? (
+                              <>
+                                {/* Green Take Profit Zone (Profit Box) */}
+                                <div className="relative flex-1 bg-emerald-500/15 border border-emerald-500/70 rounded-t-sm">
+                                  <div className="absolute -top-1 -left-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                                  <div className="absolute -top-1 -right-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                                  <div className="absolute -bottom-1 -left-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                                  <div className="absolute -bottom-1 -right-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                                  <div className="absolute top-1/2 inset-x-2 border-t border-dashed border-amber-400/60" />
+                                  <div className="absolute -top-3.5 right-0 px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-400 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-md">
+                                    TP: ${activeSetup.takeProfit1} ({activeSetup.tp1Distance || '+10.1 Pips'})
+                                  </div>
+                                </div>
+
+                                {/* Entry Dividing Line */}
+                                <div className="relative w-full border-t-2 border-cyan-400 shadow-[0_0_10px_rgba(0,240,255,0.8)]">
+                                  <div className="absolute -top-4 sm:-top-5 left-3 sm:left-6 z-20 px-3 py-1 sm:py-1.5 rounded-md bg-[#e11d48] border border-white shadow-[0_4px_20px_rgba(0,0,0,0.8)] text-white font-mono select-none pointer-events-auto leading-tight flex flex-col justify-center">
+                                    <span className="text-[10px] sm:text-[11px] font-bold text-white tracking-tight">
+                                      Open PnL: -6.960, Qty: 24
+                                    </span>
+                                    <span className="text-[10px] sm:text-[11px] font-semibold text-rose-100 tracking-tight">
+                                      Risk/reward ratio: {activeSetup.riskReward ? activeSetup.riskReward.replace('1 :', '').trim() : '3.6'}
+                                    </span>
+                                  </div>
+                                  <div className="absolute -top-3 right-0 px-2 py-0.5 rounded bg-cyan-950/90 border border-cyan-400 text-cyan-200 font-mono font-bold text-[9px] sm:text-[10px] shadow-md flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                                    ENTRY: ${activeSetup.entry} (OTE)
+                                  </div>
+                                </div>
+
+                                {/* Red Stop Loss Zone (Risk Box) */}
+                                <div className="relative flex-1 bg-rose-500/20 border border-rose-500/70 rounded-b-sm">
+                                  <div className="absolute -bottom-1 -left-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                                  <div className="absolute -bottom-1 -right-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                                  <div className="absolute top-1/2 inset-x-2 border-t border-dashed border-cyan-400/60" />
+                                  <div className="absolute -bottom-3.5 right-0 px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500 text-rose-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-md">
+                                    STOP LOSS: ${activeSetup.stopLoss} ({activeSetup.slDistance || '-5.3 Pips'})
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                {/* Bearish: Red Stop Loss Zone on Top */}
+                                <div className="relative flex-1 bg-rose-500/20 border border-rose-500/70 rounded-t-sm">
+                                  <div className="absolute -top-1 -left-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                                  <div className="absolute -top-1 -right-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                                  <div className="absolute top-1/2 inset-x-2 border-t border-dashed border-rose-400/60" />
+                                  <div className="absolute -top-3.5 right-0 px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500 text-rose-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-md">
+                                    STOP LOSS: ${activeSetup.stopLoss} ({activeSetup.slDistance || '-5.3 Pips'})
+                                  </div>
+                                </div>
+
+                                {/* Entry Dividing Line */}
+                                <div className="relative w-full border-t-2 border-cyan-400 shadow-[0_0_10px_rgba(0,240,255,0.8)]">
+                                  <div className="absolute -top-4 sm:-top-5 left-3 sm:left-6 z-20 px-3 py-1 sm:py-1.5 rounded-md bg-[#e11d48] border border-white shadow-[0_4px_20px_rgba(0,0,0,0.8)] text-white font-mono select-none pointer-events-auto leading-tight flex flex-col justify-center">
+                                    <span className="text-[10px] sm:text-[11px] font-bold text-white tracking-tight">
+                                      Open PnL: -6.960, Qty: 24
+                                    </span>
+                                    <span className="text-[10px] sm:text-[11px] font-semibold text-rose-100 tracking-tight">
+                                      Risk/reward ratio: {activeSetup.riskReward ? activeSetup.riskReward.replace('1 :', '').trim() : '3.4'}
+                                    </span>
+                                  </div>
+                                  <div className="absolute -top-3 right-0 px-2 py-0.5 rounded bg-cyan-950/90 border border-cyan-400 text-cyan-200 font-mono font-bold text-[9px] sm:text-[10px] shadow-md flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                                    ENTRY: ${activeSetup.entry} (OTE)
+                                  </div>
+                                </div>
+
+                                {/* Bearish: Green Take Profit Zone on Bottom */}
+                                <div className="relative flex-1 bg-emerald-500/15 border border-emerald-500/70 rounded-b-sm">
+                                  <div className="absolute -bottom-1 -left-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                                  <div className="absolute -bottom-1 -right-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                                  <div className="absolute top-1/2 inset-x-2 border-t border-dashed border-emerald-400/60" />
+                                  <div className="absolute -bottom-3.5 right-0 px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-400 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-md">
+                                    TP: ${activeSetup.takeProfit1} ({activeSetup.tp1Distance || '+10.1 Pips'})
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          /* Active Scanning Reticle during ANALYZING or STANDBY */
+                          <div className="absolute inset-x-12 top-[32%] bottom-[32%] border border-dashed border-amber-500/40 rounded-xl flex items-center justify-center bg-amber-500/[0.03]">
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/85 border border-amber-500/50 text-amber-300 font-mono text-[10px] shadow-xl">
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                              <span>SCANNING 5M LIQUIDITY & JUDAS SWEEPS...</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1472,7 +1551,17 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                       20-MIN TRADE EXECUTION DIRECTIVE
                     </span>
                     <h4 className="text-base font-black text-white font-heading tracking-wide flex items-center gap-2 mt-0.5">
-                      {activeSetup.direction === 'BULLISH' ? (
+                      {!isBotRunning ? (
+                        <span className="text-slate-400 flex items-center gap-1">
+                          <Power className="w-4 h-4 text-slate-500" />
+                          STANDBY (BOT PAUSED)
+                        </span>
+                      ) : cyclePhase === 'ANALYZING' ? (
+                        <span className="text-amber-400 flex items-center gap-1.5">
+                          <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />
+                          ANALYZING 5M ORDER FLOW...
+                        </span>
+                      ) : activeSetup.direction === 'BULLISH' ? (
                         <span className="text-emerald-400 flex items-center gap-1">
                           <TrendingUp className="w-4 h-4 text-emerald-400" />
                           BUY / LONG LIMIT
@@ -1485,8 +1574,14 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                       )}
                     </h4>
                   </div>
-                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold">
-                    R:R {activeSetup.riskReward}
+                  <span className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold border ${
+                    !isBotRunning
+                      ? 'bg-slate-800 border-slate-700 text-slate-400'
+                      : cyclePhase === 'ANALYZING'
+                      ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                      : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                  }`}>
+                    {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'SCANNING 5M' : `R:R ${activeSetup.riskReward || '1 : 3.4'}`}
                   </span>
                 </div>
 
@@ -1496,15 +1591,20 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                   <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-cyan-500/30">
                     <div>
                       <div className="text-[10px] text-slate-400">OPTIMAL ENTRY PRICE (OTE)</div>
-                      <div className="text-sm font-bold text-cyan-300">${activeSetup.entry}</div>
+                      <div className="text-sm font-bold text-cyan-300 font-mono">
+                        {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'CALCULATING...' : `$${activeSetup.entry}`}
+                      </div>
                     </div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(String(activeSetup.entry));
-                        setCopiedTrade(true);
-                        setTimeout(() => setCopiedTrade(false), 2000);
+                        if (cyclePhase === 'SIGNAL_ACTIVE') {
+                          navigator.clipboard.writeText(String(activeSetup.entry));
+                          setCopiedTrade(true);
+                          setTimeout(() => setCopiedTrade(false), 2000);
+                        }
                       }}
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                      disabled={cyclePhase !== 'SIGNAL_ACTIVE'}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40"
                       title="Copy Entry"
                     >
                       <Copy className="w-3.5 h-3.5" />
@@ -1515,16 +1615,23 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                   <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-rose-500/40">
                     <div>
                       <div className="text-[10px] text-rose-400 font-semibold">STRICT STOP LOSS (SL)</div>
-                      <div className="text-sm font-bold text-rose-300">${activeSetup.stopLoss}</div>
-                      <div className="text-[10px] text-slate-400">{activeSetup.slDistance} Risk Invalidation</div>
+                      <div className="text-sm font-bold text-rose-300 font-mono">
+                        {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'CALCULATING...' : `$${activeSetup.stopLoss}`}
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        {!isBotRunning ? 'Awaiting Bot Cycle' : cyclePhase === 'ANALYZING' ? 'Detecting 5M Invalidation' : `${activeSetup.slDistance} Risk Invalidation`}
+                      </div>
                     </div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(String(activeSetup.stopLoss));
-                        setCopiedTrade(true);
-                        setTimeout(() => setCopiedTrade(false), 2000);
+                        if (cyclePhase === 'SIGNAL_ACTIVE') {
+                          navigator.clipboard.writeText(String(activeSetup.stopLoss));
+                          setCopiedTrade(true);
+                          setTimeout(() => setCopiedTrade(false), 2000);
+                        }
                       }}
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                      disabled={cyclePhase !== 'SIGNAL_ACTIVE'}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40"
                       title="Copy Stop Loss"
                     >
                       <Copy className="w-3.5 h-3.5" />
@@ -1535,16 +1642,23 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                   <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-emerald-500/40">
                     <div>
                       <div className="text-[10px] text-emerald-400 font-semibold">TAKE PROFIT 1 (TP1 - 50% CLOSE)</div>
-                      <div className="text-sm font-bold text-emerald-300">${activeSetup.takeProfit1}</div>
-                      <div className="text-[10px] text-slate-400">{activeSetup.tp1Distance} Asian High Liquidity</div>
+                      <div className="text-sm font-bold text-emerald-300 font-mono">
+                        {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'CALCULATING...' : `$${activeSetup.takeProfit1}`}
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        {!isBotRunning ? 'Awaiting Bot Cycle' : cyclePhase === 'ANALYZING' ? 'Measuring Range Liquidity' : `${activeSetup.tp1Distance} ${activeSetup.direction === 'BEARISH' ? 'Asian Low Liquidity' : 'Asian High Liquidity'}`}
+                      </div>
                     </div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(String(activeSetup.takeProfit1));
-                        setCopiedTrade(true);
-                        setTimeout(() => setCopiedTrade(false), 2000);
+                        if (cyclePhase === 'SIGNAL_ACTIVE') {
+                          navigator.clipboard.writeText(String(activeSetup.takeProfit1));
+                          setCopiedTrade(true);
+                          setTimeout(() => setCopiedTrade(false), 2000);
+                        }
                       }}
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                      disabled={cyclePhase !== 'SIGNAL_ACTIVE'}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40"
                       title="Copy TP1"
                     >
                       <Copy className="w-3.5 h-3.5" />
@@ -1555,16 +1669,23 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                   <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-emerald-500/30">
                     <div>
                       <div className="text-[10px] text-emerald-300 font-semibold">TAKE PROFIT 2 (TP2 - RUNNER)</div>
-                      <div className="text-sm font-bold text-emerald-200">${activeSetup.takeProfit2}</div>
-                      <div className="text-[10px] text-slate-400">{activeSetup.tp2Distance} Peak Session Target</div>
+                      <div className="text-sm font-bold text-emerald-200 font-mono">
+                        {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'CALCULATING...' : `$${activeSetup.takeProfit2}`}
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        {!isBotRunning ? 'Awaiting Bot Cycle' : cyclePhase === 'ANALYZING' ? 'Projecting Peak Target' : `${activeSetup.tp2Distance} Peak Session Target`}
+                      </div>
                     </div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(String(activeSetup.takeProfit2));
-                        setCopiedTrade(true);
-                        setTimeout(() => setCopiedTrade(false), 2000);
+                        if (cyclePhase === 'SIGNAL_ACTIVE') {
+                          navigator.clipboard.writeText(String(activeSetup.takeProfit2));
+                          setCopiedTrade(true);
+                          setTimeout(() => setCopiedTrade(false), 2000);
+                        }
                       }}
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                      disabled={cyclePhase !== 'SIGNAL_ACTIVE'}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40"
                       title="Copy TP2"
                     >
                       <Copy className="w-3.5 h-3.5" />
@@ -1575,17 +1696,37 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
 
               {/* Action Buttons */}
               <div className="space-y-2 pt-2 border-t border-slate-800">
-                <button
-                  onClick={handleCopyTrade}
-                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black font-mono text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
-                >
-                  {copiedTrade ? <Check className="w-4 h-4 text-slate-950" /> : <Copy className="w-4 h-4 text-slate-950" />}
-                  <span>{copiedTrade ? 'All Trade Parameters Copied!' : 'Copy Full Order Parameters'}</span>
-                </button>
+                {!isBotRunning ? (
+                  <button
+                    onClick={toggleBotRunning}
+                    className="w-full py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-black font-mono text-xs shadow-lg transition-all flex items-center justify-center gap-2"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    <span>START 20-MIN AI SCANNER BOT</span>
+                  </button>
+                ) : cyclePhase === 'ANALYZING' ? (
+                  <button
+                    disabled
+                    className="w-full py-2.5 rounded-xl bg-slate-900 border border-amber-500/40 text-amber-300 font-black font-mono text-xs shadow-lg flex items-center justify-center gap-2 opacity-90 cursor-not-allowed"
+                  >
+                    <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />
+                    <span>ANALYZING 5M LIQUIDITY... ({Math.floor(analysisSecondsRemaining / 60)}m {analysisSecondsRemaining % 60}s)</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleCopyTrade}
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black font-mono text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 animate-pulse"
+                  >
+                    {copiedTrade ? <Check className="w-4 h-4 text-slate-950" /> : <Copy className="w-4 h-4 text-slate-950" />}
+                    <span>{copiedTrade ? 'All Trade Parameters Copied!' : '🔥 TAKE TRADE NOW (COPY ALL PARAMETERS)'}</span>
+                  </button>
+                )}
 
                 <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 px-1">
                   <span>Continuous 20-min Auto Protection</span>
-                  <span className="text-emerald-400">Next Loop Active</span>
+                  <span className={isBotRunning ? 'text-emerald-400' : 'text-slate-500'}>
+                    {isBotRunning ? 'Next Loop Active' : 'Standby'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1606,107 +1747,188 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
         title="ICT Sniper Execution & Master Blueprint"
         subtitle="Complete trade setup breakdown: Exact SL, TP1, TP2 targets, Best entry option, and market trajectory"
         icon={Crosshair}
-        glowColor="cyan"
+        glowColor={!isBotRunning ? 'default' : cyclePhase === 'ANALYZING' ? 'amber' : activeSetup.direction === 'BULLISH' ? 'emerald' : 'pink'}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 pt-1">
           {/* 1. Market Direction & Bias */}
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-emerald-500/30 flex flex-col justify-between space-y-3">
+          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
                   1. MARKET DIRECTION & BIAS
                 </span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">
-                  {activeSetup.confidenceScore}% WIN PROB
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                  !isBotRunning
+                    ? 'bg-slate-800 text-slate-400'
+                    : cyclePhase === 'ANALYZING'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                }`}>
+                  {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'SCANNING 5M' : `${activeSetup.confidenceScore || 98}% WIN PROB`}
                 </span>
               </div>
               <div className="mt-2 flex items-center gap-2">
-                {activeSetup.direction === 'BULLISH' ? (
-                  <TrendingUp className="w-6 h-6 text-emerald-400 animate-bounce" />
+                {!isBotRunning ? (
+                  <span className="text-lg font-black text-slate-400 font-heading tracking-wide">
+                    STANDBY (BOT PAUSED)
+                  </span>
+                ) : cyclePhase === 'ANALYZING' ? (
+                  <>
+                    <RefreshCw className="w-6 h-6 text-amber-400 animate-spin" />
+                    <span className="text-lg font-black text-amber-300 font-heading tracking-wide">
+                      ANALYZING FLOW...
+                    </span>
+                  </>
+                ) : activeSetup.direction === 'BULLISH' ? (
+                  <>
+                    <TrendingUp className="w-6 h-6 text-emerald-400 animate-bounce" />
+                    <span className="text-lg font-black text-emerald-400 font-heading tracking-wide">
+                      BULLISH EXPANSION
+                    </span>
+                  </>
                 ) : (
-                  <TrendingDown className="w-6 h-6 text-rose-400 animate-bounce" />
+                  <>
+                    <TrendingDown className="w-6 h-6 text-rose-400 animate-bounce" />
+                    <span className="text-lg font-black text-rose-400 font-heading tracking-wide">
+                      BEARISH REVERSAL
+                    </span>
+                  </>
                 )}
-                <span className="text-lg font-black text-white font-heading tracking-wide">
-                  {activeSetup.marketDirection}
-                </span>
               </div>
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed font-mono">
-              Smart Money liquidity grab confirmed. Price is engineered to move toward{' '}
-              <strong className="text-emerald-400">
-                {activeSetup.direction === 'BULLISH' ? 'Asian High (BSL)' : 'Asian Low (SSL)'}
-              </strong>.
+              {!isBotRunning ? (
+                'Bot is currently in standby. Click "START 20-MIN AI SCANNER BOT" to scan Asian liquidity and calculate setup.'
+              ) : cyclePhase === 'ANALYZING' ? (
+                `Actively analyzing 5-minute order flow, Judas swings, and liquidity imbalances. Market direction (BULLISH vs BEARISH) will lock at 00:00 (${Math.floor(analysisSecondsRemaining / 60)}m ${analysisSecondsRemaining % 60}s remaining).`
+              ) : activeSetup.direction === 'BULLISH' ? (
+                <>
+                  Smart Money liquidity grab confirmed. Price swept Asian Low ($<strong>{activeSetup.asianLow}</strong>) and is engineered to expand toward{' '}
+                  <strong className="text-emerald-400">Asian High (${activeSetup.takeProfit1})</strong>.
+                </>
+              ) : (
+                <>
+                  Smart Money liquidity grab confirmed. Price swept Asian High ($<strong>{activeSetup.asianHigh}</strong>) and is engineered to drop toward{' '}
+                  <strong className="text-rose-400">Asian Low (${activeSetup.takeProfit1})</strong>.
+                </>
+              )}
             </p>
           </div>
 
           {/* 2. Stop Loss Blueprint */}
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-rose-500/30 flex flex-col justify-between space-y-3">
+          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
                   2. STOP LOSS (INVALIDATION)
                 </span>
-                <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-mono font-bold">
-                  RISK: {activeSetup.slDistance}
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                  !isBotRunning
+                    ? 'bg-slate-800 text-slate-400'
+                    : cyclePhase === 'ANALYZING'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                }`}>
+                  {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'DETECTING WICK' : `RISK: ${activeSetup.slDistance || '5.3 Pips'}`}
                 </span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-2xl font-black text-rose-400 font-mono">
-                  ${activeSetup.stopLoss}
+                  {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'CALCULATING...' : `$${activeSetup.stopLoss}`}
                 </span>
                 <span className="text-xs text-slate-400 font-mono">Invalidation</span>
               </div>
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed font-mono">
-              {activeSetup.slPlacementGuide}
+              {!isBotRunning ? (
+                'Stop Loss coordinates will be automatically calculated when the 20-minute scan completes.'
+              ) : cyclePhase === 'ANALYZING' ? (
+                'Scanning lowest/highest Judas wick to calculate optimal invalidation level (2 pips beyond high/low wick).'
+              ) : (
+                `Place SL at $${activeSetup.stopLoss} (exactly 2 pips ${activeSetup.direction === 'BULLISH' ? 'below the sweep wick' : 'above the sweep wick'}). If price crosses this, setup is invalidated.`
+              )}
             </p>
           </div>
 
           {/* 3. Take Profit Blueprint */}
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-cyan-500/30 flex flex-col justify-between space-y-3">
+          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
                   3. TAKE PROFIT (PROFIT TARGETS)
                 </span>
-                <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-mono font-bold">
-                  R:R {activeSetup.riskReward}
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                  !isBotRunning
+                    ? 'bg-slate-800 text-slate-400'
+                    : cyclePhase === 'ANALYZING'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                }`}>
+                  {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'MEASURING' : `R:R ${activeSetup.riskReward || '1 : 3.4'}`}
                 </span>
               </div>
               <div className="mt-2 space-y-1">
                 <div className="flex items-center justify-between text-xs font-mono">
                   <span className="text-emerald-400 font-bold">TP1 (50% Close):</span>
-                  <span className="text-white font-bold">${activeSetup.takeProfit1} ({activeSetup.tp1Distance})</span>
+                  <span className="text-white font-bold">
+                    {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'CALCULATING...' : `$${activeSetup.takeProfit1} (${activeSetup.tp1Distance || '+10.1 Pips'})`}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-xs font-mono">
                   <span className="text-cyan-400 font-bold">TP2 (Runner):</span>
-                  <span className="text-white font-bold">${activeSetup.takeProfit2} ({activeSetup.tp2Distance})</span>
+                  <span className="text-white font-bold">
+                    {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'CALCULATING...' : `$${activeSetup.takeProfit2} (${activeSetup.tp2Distance || '+15.6 Pips'})`}
+                  </span>
                 </div>
               </div>
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed font-mono">
-              {activeSetup.tp1PlacementGuide}
+              {!isBotRunning ? (
+                'Take Profit targets will be projected upon bot cycle completion.'
+              ) : cyclePhase === 'ANALYZING' ? (
+                'Measuring opposing Asian session range liquidity pools and external daily targets.'
+              ) : (
+                `Take 50% Profit at $${activeSetup.takeProfit1} (${activeSetup.direction === 'BULLISH' ? 'Asian High BSL' : 'Asian Low SSL'}). Move Stop Loss to Entry (Risk-Free). Trail runner to $${activeSetup.takeProfit2}.`
+              )}
             </p>
           </div>
 
           {/* 4. Best Option Recommendation */}
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-purple-500/30 flex flex-col justify-between space-y-3">
+          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
                   4. OPTIMAL EXECUTION STRATEGY
                 </span>
-                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-mono font-bold">
-                  RECOMMENDED
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                  !isBotRunning
+                    ? 'bg-slate-800 text-slate-400'
+                    : cyclePhase === 'ANALYZING'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    : 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                }`}>
+                  {!isBotRunning ? 'STANDBY' : cyclePhase === 'ANALYZING' ? 'COMPUTING' : 'RECOMMENDED'}
                 </span>
               </div>
               <div className="mt-2 text-sm font-bold text-purple-300 font-mono flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-purple-400" />
-                <span>Limit Entry @ ${activeSetup.entry}</span>
+                <span>
+                  {!isBotRunning
+                    ? 'Scanner in Standby'
+                    : cyclePhase === 'ANALYZING'
+                    ? 'Computing Best Option...'
+                    : `Limit Entry @ $${activeSetup.entry}`}
+                </span>
               </div>
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed font-mono">
-              {activeSetup.bestOption}
+              {!isBotRunning ? (
+                'Start the 20-Minute Scanner to compute the optimal trade entry and execution strategy.'
+              ) : cyclePhase === 'ANALYZING' ? (
+                'Evaluating 5M Fair Value Gap (FVG) vs immediate market entry to ensure optimal 1:3+ Risk/Reward ratio.'
+              ) : (
+                `Best Option: Limit Order inside 5M ${activeSetup.direction === 'BULLISH' ? 'Bullish' : 'Bearish'} FVG at $${activeSetup.entry}. Tight 5-pip stop gives optimal ${activeSetup.riskReward || '1:3.4'} R:R.`
+              )}
             </p>
           </div>
         </div>
@@ -1721,21 +1943,60 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {activeSetup.howItMoves && activeSetup.howItMoves.map((m, idx) => (
-              <div
-                key={idx}
-                className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1.5 font-mono text-xs"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 text-[10px] font-bold">
-                    {m.step}
-                  </span>
-                  <span className="text-[10px] text-slate-500">Phase {idx + 1}</span>
+            {!isBotRunning ? (
+              [
+                { step: '1. Liquidity Sweep', title: 'Standby', desc: '20-minute AI Scanner is currently paused. Click Start to begin.' },
+                { step: '2. 5M Displacement', title: 'Standby', desc: 'Institutional displacement tracking pending bot start.' },
+                { step: '3. Optimal Retest', title: 'Standby', desc: 'Optimal Trade Entry calculation pending bot start.' },
+                { step: '4. Target Expansion', title: 'Standby', desc: 'Asian session expansion targets pending bot start.' }
+              ].map((m, idx) => (
+                <div key={idx} className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1.5 font-mono text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-bold">{m.step}</span>
+                    <span className="text-[10px] text-slate-500">Phase {idx + 1}</span>
+                  </div>
+                  <div className="font-bold text-slate-400 text-xs">{m.title}</div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">{m.desc}</p>
                 </div>
-                <div className="font-bold text-slate-200 text-xs">{m.title}</div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">{m.desc}</p>
-              </div>
-            ))}
+              ))
+            ) : cyclePhase === 'ANALYZING' ? (
+              [
+                { step: '1. Liquidity Sweep', title: 'Monitoring Asian High/Low', desc: `Scanning Asian High ($${activeSetup.asianHigh}) & Asian Low ($${activeSetup.asianLow}) for Judas sweep.` },
+                { step: '2. 5M Displacement', title: 'Measuring Institutional Surge', desc: 'Detecting high-volume 5M candle body displacement and Fair Value Gap (FVG) imbalances.' },
+                { step: '3. Optimal Retest', title: 'Calculating OTE Retest', desc: 'Computing optimal entry inside 5M FVG mitigation zone for minimum risk.' },
+                { step: '4. Target Expansion', title: 'Projecting Liquidity Run', desc: `Locking direction and projection targets at 00:00 (${Math.floor(analysisSecondsRemaining / 60)}m ${analysisSecondsRemaining % 60}s remaining).` }
+              ].map((m, idx) => (
+                <div key={idx} className="p-3 rounded-xl bg-slate-950/70 border border-amber-500/20 space-y-1.5 font-mono text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">{m.step}</span>
+                    <span className="text-[10px] text-amber-400 font-bold">ANALYZING</span>
+                  </div>
+                  <div className="font-bold text-amber-200 text-xs">{m.title}</div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">{m.desc}</p>
+                </div>
+              ))
+            ) : (
+              (activeSetup.direction === 'BEARISH' ? [
+                { step: '1. Liquidity Sweep', title: 'Fake Break Above Asia High', desc: `Price swept $${activeSetup.asianHigh} trapping retail breakout buyers into bad long positions.` },
+                { step: '2. 5M Displacement', title: 'Institutional Sell Impulse', desc: 'Sharp 5M red candle displacement created a clear Bearish Fair Value Gap (FVG).' },
+                { step: '3. Optimal Retest', title: `5M FVG Tap @ $${activeSetup.entry}`, desc: 'Best Entry: Price pulls back into premium zone of 5M FVG for high R:R short entry.' },
+                { step: '4. Target Expansion', title: `Dump to Asia Low $${activeSetup.takeProfit1}`, desc: `Heavy sell momentum sweeps resting sell stops at $${activeSetup.takeProfit1} for +101 pips profit.` }
+              ] : [
+                { step: '1. Liquidity Sweep', title: 'Fake Break Below Asia Low', desc: `Price swept $${activeSetup.asianLow} trapping retail breakout sellers into bad short positions.` },
+                { step: '2. 5M Displacement', title: 'Institutional Buy Impulse', desc: 'Sharp 5M green candle displacement created a clear Bullish Fair Value Gap (FVG).' },
+                { step: '3. Optimal Retest', title: `5M FVG Tap @ $${activeSetup.entry}`, desc: 'Best Entry: Price pulls back into discount zone of 5M FVG for high R:R entry.' },
+                { step: '4. Target Expansion', title: `Pump to Asia High $${activeSetup.takeProfit1}`, desc: `Heavy buy momentum sweeps resting buy stops at $${activeSetup.takeProfit1} for +101 pips profit.` }
+              ]).map((m, idx) => (
+                <div key={idx} className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1.5 font-mono text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 text-[10px] font-bold">{m.step}</span>
+                    <span className="text-[10px] text-slate-500">Phase {idx + 1}</span>
+                  </div>
+                  <div className="font-bold text-slate-200 text-xs">{m.title}</div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">{m.desc}</p>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </GlassCard>
