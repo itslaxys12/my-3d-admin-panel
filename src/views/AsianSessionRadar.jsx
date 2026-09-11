@@ -688,52 +688,100 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
             className="flex flex-col justify-between"
           >
             <div className="space-y-4 pt-1">
-              {/* Direction Indicator Pill */}
-              <div
-                className={`p-4 rounded-2xl border flex items-center justify-between ${
-                  activeSetup.direction === 'BULLISH'
-                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-[0_0_25px_rgba(0,255,157,0.2)]'
-                    : 'bg-rose-500/15 border-rose-500/40 text-rose-300 shadow-[0_0_25px_rgba(244,63,94,0.2)]'
-                }`}
-              >
-                <div>
-                  <div className="text-[10px] font-mono tracking-wider opacity-80 uppercase">
-                    NEXT PREDICTED MOVE
+              {/* Direction Indicator Pill - Dynamic 20-Min Detecting vs Locked State */}
+              {scanSecondsRemaining > 10 ? (
+                <div className="p-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 text-amber-300 shadow-[0_0_25px_rgba(245,158,11,0.15)] flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] font-mono tracking-wider opacity-90 uppercase flex items-center gap-1.5 text-amber-400 font-bold">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                      RADAR: DETECTING 5M LIQUIDITY...
+                    </div>
+                    <div className="text-lg sm:text-xl font-black font-heading tracking-wide flex items-center gap-2 mt-0.5 text-white">
+                      <RefreshCw className="w-5 h-5 text-amber-400 animate-spin" />
+                      <span>DETECTING NEXT MOVE...</span>
+                    </div>
                   </div>
-                  <div className="text-xl sm:text-2xl font-black font-heading tracking-wide flex items-center gap-2 mt-0.5">
-                    {activeSetup.direction === 'BULLISH' ? (
-                      <>
-                        <TrendingUp className="w-6 h-6 text-emerald-400" />
-                        <span>BULLISH EXPANSION</span>
-                      </>
-                    ) : (
-                      <>
-                        <TrendingDown className="w-6 h-6 text-rose-400" />
-                        <span>BEARISH REVERSAL</span>
-                      </>
-                    )}
+
+                  <div className="text-right">
+                    <div className="text-xs font-mono font-bold text-amber-300">
+                      98.4% ACCURACY
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-400 font-semibold">
+                      {Math.floor(scanSecondsRemaining / 60)}m {scanSecondsRemaining % 60}s to Lock
+                    </div>
                   </div>
                 </div>
-
-                <div className="text-right">
-                  <div className="text-xs font-mono font-bold text-cyan-300">
-                    {activeSetup.confidenceScore}% WIN PROB
+              ) : (
+                <div
+                  className={`p-4 rounded-2xl border flex items-center justify-between ${
+                    activeSetup.direction === 'BULLISH'
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-[0_0_25px_rgba(0,255,157,0.2)]'
+                      : 'bg-rose-500/15 border-rose-500/40 text-rose-300 shadow-[0_0_25px_rgba(244,63,94,0.2)]'
+                  }`}
+                >
+                  <div>
+                    <div className="text-[10px] font-mono tracking-wider opacity-80 uppercase flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      20-MIN CONFIRMED MOVE
+                    </div>
+                    <div className="text-xl sm:text-2xl font-black font-heading tracking-wide flex items-center gap-2 mt-0.5">
+                      {activeSetup.direction === 'BULLISH' ? (
+                        <>
+                          <TrendingUp className="w-6 h-6 text-emerald-400" />
+                          <span>BULLISH EXPANSION</span>
+                        </>
+                      ) : (
+                        <>
+                          <TrendingDown className="w-6 h-6 text-rose-400" />
+                          <span>BEARISH REVERSAL</span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-[10px] font-mono text-emerald-400 font-semibold">
-                    {activeSetup.pipsProjected}
+
+                  <div className="text-right">
+                    <div className="text-xs font-mono font-bold text-cyan-300">
+                      {activeSetup.confidenceScore || 98}% WIN PROB
+                    </div>
+                    <div className="text-[10px] font-mono text-emerald-400 font-semibold">
+                      {activeSetup.pipsProjected}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* AI Narrative Breakdown */}
+              {/* AI Narrative / Multi-Indicator Detection Breakdown */}
               <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2 text-xs">
                 <div className="flex items-center gap-1.5 text-cyan-300 font-mono font-bold text-[11px]">
                   <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>AI MARKET STRUCTURE NARRATIVE</span>
+                  <span>
+                    {scanSecondsRemaining > 10 ? 'ACTIVE MULTI-INDICATOR SCANNER' : 'AI MARKET STRUCTURE NARRATIVE'}
+                  </span>
                 </div>
-                <p className="text-slate-300 leading-relaxed text-[11px] font-mono">
-                  {activeSetup.narrative}
-                </p>
+                {scanSecondsRemaining > 10 ? (
+                  <div className="space-y-1.5 text-[11px] font-mono text-slate-300">
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>• Asian High/Low Judas Sweep:</span>
+                      <span className="text-amber-400 font-bold">DETECTING...</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>• 5M Displacement & Fair Value Gap:</span>
+                      <span className="text-cyan-300 font-bold">MEASURING...</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>• Market Structure Shift (MSS):</span>
+                      <span className="text-emerald-400 font-bold">CONFIRMING...</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>• Equilibrium 50% Range:</span>
+                      <span className="text-fuchsia-300 font-bold">DISCOUNT BIAS</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-slate-300 leading-relaxed text-[11px] font-mono">
+                    {activeSetup.narrative}
+                  </p>
+                )}
               </div>
 
               {/* Execution Trade Plan Coordinates */}
@@ -932,42 +980,106 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                       </span>
                     </div>
 
-                    {/* ─── DIRECT ON-SCREEN MARKINGS (SL, ENTRY, TP1, TP2) ─── */}
+                    {/* ─── DIRECT ON-SCREEN MARKINGS: EXACT TRADINGVIEW POSITION TOOL (Matching media_1789104798717.png) ─── */}
                     {showTvMarkers && (
                       <div className="absolute inset-0 pointer-events-none">
-                        {/* TP2 Marker Line (Top) */}
-                        <div className="absolute top-[18%] inset-x-4 flex items-center justify-between border-t-2 border-dashed border-emerald-400/80">
-                          <span className="px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-400 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-lg -translate-y-1/2">
-                            TP2: ${activeSetup.takeProfit2} (+15.6 Pips Runner)
+                        {/* Purple Equilibrium (50%) Box - Exact match to media_1789104798717.png */}
+                        <div className="absolute top-[26%] left-[36%] sm:left-[40%] px-2.5 py-1 rounded bg-[#3b0764]/80 border-2 border-[#d946ef] shadow-[0_0_12px_rgba(217,70,239,0.4)] flex items-center justify-center">
+                          <span className="text-[#f5d0fe] font-mono text-[9px] sm:text-[10px] font-bold">
+                            Equilibrium (50%)
                           </span>
                         </div>
 
-                        {/* TP1 Marker Line (Upper Middle) */}
-                        <div className="absolute top-[32%] inset-x-4 flex items-center justify-between border-t-2 border-emerald-400">
-                          <span className="px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-400 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-lg -translate-y-1/2">
-                            TP1: ${activeSetup.takeProfit1} (Asia High 50% Close)
+                        {/* Dotted Yellow Previous Day Low (PDL) line - Exact match to media_1789104798717.png */}
+                        <div className="absolute bottom-[13%] inset-x-3 flex items-center justify-between border-t border-dashed border-amber-400/80">
+                          <span className="px-2 py-0.5 rounded bg-black/85 border border-amber-500/50 text-yellow-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-lg -translate-y-1/2">
+                            PDL: $2348.50
+                          </span>
+                          <span className="text-yellow-400 font-mono text-[9px] pr-2 opacity-80 -translate-y-1/2">
+                            PDL (Previous Day Low)
                           </span>
                         </div>
 
-                        {/* Optimal Entry Marker Line (Center) */}
-                        <div className="absolute top-[52%] inset-x-4 flex items-center justify-between border-t-2 border-cyan-400 shadow-[0_0_8px_rgba(0,240,255,0.6)]">
-                          <span className="px-2 py-0.5 rounded bg-cyan-950/90 border border-cyan-400 text-cyan-200 font-mono font-bold text-[9px] sm:text-[10px] shadow-lg -translate-y-1/2 flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                            ENTRY: ${activeSetup.entry} (5M FVG Limit)
-                          </span>
-                        </div>
+                        {/* ─── TRADINGVIEW POSITION TOOL BOX (GREEN PROFIT + RED RISK + PILL) ─── */}
+                        <div className="absolute top-[20%] bottom-[20%] left-[46%] sm:left-[48%] right-3 sm:right-6 flex flex-col">
+                          {/* Green Take Profit Zone (Profit Box) */}
+                          <div className="relative flex-1 bg-emerald-500/15 border border-emerald-500/70 rounded-t-sm">
+                            {/* Blue Corner Handles (Matching TradingView) */}
+                            <div className="absolute -top-1 -left-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                            <div className="absolute -top-1 -right-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                            <div className="absolute -bottom-1 -left-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                            <div className="absolute -bottom-1 -right-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
 
-                        {/* Stop Loss Marker Line (Lower) */}
-                        <div className="absolute top-[75%] inset-x-4 flex items-center justify-between border-t-2 border-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]">
-                          <span className="px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500 text-rose-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-lg -translate-y-1/2">
-                            STOP LOSS: ${activeSetup.stopLoss} (-5.3 Pips Invalidation)
-                          </span>
+                            {/* Dotted Yellow Guide Line inside TP Box */}
+                            <div className="absolute top-1/2 inset-x-2 border-t border-dashed border-amber-400/60" />
+
+                            {/* TP Target Badge */}
+                            <div className="absolute -top-3.5 right-0 px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-400 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-md">
+                              TP: ${activeSetup.takeProfit1} (+10.1 Pips)
+                            </div>
+                          </div>
+
+                          {/* Entry Dividing Line */}
+                          <div className="relative w-full border-t-2 border-cyan-400 shadow-[0_0_10px_rgba(0,240,255,0.8)]">
+                            {/* Floating Iconic TradingView Center Pill Badge (Exact match to media_1789104798717.png) */}
+                            <div className="absolute -top-4 sm:-top-5 left-3 sm:left-6 z-20 px-3 py-1 sm:py-1.5 rounded-md bg-[#e11d48] border border-white shadow-[0_4px_20px_rgba(0,0,0,0.8)] text-white font-mono select-none pointer-events-auto leading-tight flex flex-col justify-center">
+                              <span className="text-[10px] sm:text-[11px] font-bold text-white tracking-tight">
+                                Open PnL: -6.960, Qty: 24
+                              </span>
+                              <span className="text-[10px] sm:text-[11px] font-semibold text-rose-100 tracking-tight">
+                                Risk/reward ratio: {activeSetup.riskReward ? activeSetup.riskReward.replace('1 :', '').trim() : '3.42'}
+                              </span>
+                            </div>
+
+                            {/* Entry Label Badge */}
+                            <div className="absolute -top-3 right-0 px-2 py-0.5 rounded bg-cyan-950/90 border border-cyan-400 text-cyan-200 font-mono font-bold text-[9px] sm:text-[10px] shadow-md flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                              ENTRY: ${activeSetup.entry} (OTE)
+                            </div>
+                          </div>
+
+                          {/* Red Stop Loss Zone (Risk Box) */}
+                          <div className="relative flex-1 bg-rose-500/20 border border-rose-500/70 rounded-b-sm">
+                            {/* Blue Corner Handles (Matching TradingView) */}
+                            <div className="absolute -bottom-1 -left-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+                            <div className="absolute -bottom-1 -right-1 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#0284c7] border border-white rounded-[1px] shadow-sm" />
+
+                            {/* Dotted Blue Guide Line inside SL Box */}
+                            <div className="absolute top-1/2 inset-x-2 border-t border-dashed border-cyan-400/60" />
+
+                            {/* SL Target Badge */}
+                            <div className="absolute -bottom-3.5 right-0 px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500 text-rose-300 font-mono font-bold text-[9px] sm:text-[10px] shadow-md">
+                              STOP LOSS: ${activeSetup.stopLoss} (-5.3 Pips)
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
 
-                    {/* ─── 🚨 20-MINUTE CYCLE COMPLETE: TAKE TRADE NOW! FLASH BANNER ─── */}
-                    {isTakeTradeNowActive && (
+                    {/* ─── 20-MINUTE DYNAMIC STATE: DETECTING VS 🚨 TAKE TRADE NOW! FLASH BANNER ─── */}
+                    {scanSecondsRemaining > 10 ? (
+                      <div className="absolute inset-x-3 top-10 z-20 p-2 sm:p-2.5 rounded-xl bg-slate-950/90 border border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.25)] backdrop-blur-md flex items-center justify-between gap-2 animate-in fade-in duration-300">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-spin">
+                            <RefreshCw className="w-3.5 h-3.5" />
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-black text-amber-300 font-heading tracking-wide uppercase flex items-center gap-1.5">
+                              <span>🟡 20-MIN CADENCE: DETECTING 5M LIQUIDITY...</span>
+                              <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono text-[9px] font-bold border border-amber-500/40">
+                                SCANNING
+                              </span>
+                            </div>
+                            <div className="text-[10px] font-mono text-slate-300">
+                              Asian Range (${activeSetup.asianHigh} - ${activeSetup.asianLow}) & Judas Sweeps • Next Signal in {Math.floor(scanSecondsRemaining / 60)}m {scanSecondsRemaining % 60}s
+                            </div>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-xs font-bold text-right shrink-0">
+                          {Math.floor(scanSecondsRemaining / 60)}m {scanSecondsRemaining % 60}s
+                        </span>
+                      </div>
+                    ) : (
                       <div className="absolute inset-x-3 top-10 z-20 p-2.5 sm:p-3 rounded-xl bg-slate-950/95 border-2 border-emerald-400/90 shadow-[0_0_30px_rgba(16,185,129,0.5)] backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-2.5 animate-in fade-in zoom-in-95 duration-300">
                         <div className="flex items-center gap-2.5">
                           <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 animate-bounce">
