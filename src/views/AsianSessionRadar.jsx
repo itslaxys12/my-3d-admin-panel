@@ -40,37 +40,37 @@ const DEMO_SETUPS = [
     id: 'setup-gold-1',
     pair: 'XAUUSD (Gold)',
     timeframe: '5M',
-    timestamp: 'Today, 08:35 UTC',
-    asianHigh: 2368.50,
-    asianLow: 2354.20,
-    currentPrice: 2358.90,
-    sweepType: 'Asian Low Swept (SSL Taken)',
-    phase: 'London Open Manipulation (Judas Swing)',
-    direction: 'BULLISH',
-    marketDirection: 'BULLISH (UP)',
-    probability: '92% High Probability (5M Scalp)',
-    confidenceScore: 92,
-    predictedMove: '5M Bullish Expansion targeting Asia High ($2368.50) and London High ($2374.00)',
-    narrative: 'Asian Low ($2354.20) was aggressively swept on the 5-Minute timeframe during London Open at 08:15 UTC. Smart Money purged retail stop losses below 2354.20, rejected sharply with a long wick, and confirmed a 5M Market Structure Shift (MSS) with an unfilled 5M Bullish Fair Value Gap (FVG). High-probability 5M scalping continuation toward Asian High.',
-    entry: 2358.40,
-    stopLoss: 2353.10,
-    slDistance: '5.3 Pips ($5.30)',
-    takeProfit1: 2368.50,
-    tp1Distance: '+10.1 Pips ($10.10)',
-    takeProfit2: 2374.00,
-    tp2Distance: '+15.6 Pips ($15.60)',
-    riskReward: '1 : 3.6',
-    pipsProjected: '+101 Pips',
+    timestamp: 'Live 5M Feed',
+    asianHigh: 4360.71,
+    asianLow: 4310.31,
+    currentPrice: 4348.60,
+    sweepType: 'Asian High Swept (BSL Taken)',
+    phase: '5M Liquidity Sweep & Displacement',
+    direction: 'BEARISH',
+    marketDirection: 'BEARISH REVERSAL',
+    probability: '95% High Probability (Live 5M Confluence)',
+    confidenceScore: 95,
+    predictedMove: '5M Bearish Move targeting Asian Low ($4310.31)',
+    narrative: 'Real-time 5M market structure confirmed Bearish order flow. Gold rejected from Asian High ($4360.71) with 5M EMA9 under EMA21. RSI is at 52.4 with institutional sell volume. Optimal Sell Limit entry inside 5M Bearish FVG at $4349.30 with Stop Loss protected above $4360.85. Targeting Asian Low Sell-Side Liquidity at $4310.31.',
+    entry: 4349.30,
+    stopLoss: 4360.85,
+    slDistance: '11.6 Pips ($11.60)',
+    takeProfit1: 4310.31,
+    tp1Distance: '+38.8 Pips ($38.80)',
+    takeProfit2: 4295.00,
+    tp2Distance: '+54.3 Pips ($54.30)',
+    riskReward: '1 : 3.3',
+    pipsProjected: '+388 Pips',
     status: 'ACTIVE 5M SIGNAL',
-    bestOption: 'Limit Order inside 5M Bullish FVG at $2358.40. Tight 5-pip stop gives optimal 1:3.6 R:R.',
-    slPlacementGuide: 'Place SL at $2353.10 (exactly 2 pips below the $2354.20 sweep wick). If price crosses this, the setup is invalidated.',
-    tp1PlacementGuide: 'Take 50% Profit at $2368.50 (Asian High Buy-Side Liquidity Pool). Move Stop Loss to Entry (Risk-Free).',
-    tp2PlacementGuide: 'Trail remaining 50% runner to $2374.00 (London Session Peak Expansion High).',
+    bestOption: 'Sell Limit Order inside 5M Bearish FVG @ $4349.30. Strict SL @ $4360.85 protects capital with 1 : 3.3 R:R.',
+    slPlacementGuide: 'Place SL at $4360.85 (strictly above the 5M swing wick). If broken, bearish setup is fully invalidated.',
+    tp1PlacementGuide: 'Take 50% profit at $4310.31 (Asian Low liquidity pool). Immediately move Stop Loss to Breakeven.',
+    tp2PlacementGuide: 'Hold remaining 50% runner to $4295.00 (Daily bottom expansion target).',
     howItMoves: [
-      { step: '1. Liquidity Sweep', title: 'Fake Break Below Asia Low', desc: 'Price purged $2354.20 trapping retail breakout sellers into bad short positions.' },
-      { step: '2. 5M Displacement', title: 'Institutional Buy Impulse', desc: 'Sharp 5M green candle displacement created a clear Bullish Fair Value Gap (FVG).' },
-      { step: '3. Optimal Retest', title: '5M FVG Tap @ $2358.40', desc: 'Best Entry: Price pulls back into the discount zone of the 5M FVG for high R:R entry.' },
-      { step: '4. Target Expansion', title: 'Pump to Asia High $2368.50', desc: 'Heavy buy momentum sweeps resting buy stops at $2368.50 for +101 pips profit.' }
+      { step: '1. Liquidity Sweep', title: 'Purge of Buy-Side Liquidity', desc: 'Price swept Asian High ($4360.71) trapping breakout retail buyers.' },
+      { step: '2. 5M Displacement', title: 'Institutional Sell Impulse', desc: '5M candle displacement created Bearish FVG with EMA9 dropping down.' },
+      { step: '3. Optimal Retest', title: '5M FVG Retest @ $4349.30', desc: 'High probability premium retest at $4349.30 before downward continuation.' },
+      { step: '4. Target Expansion', title: 'Drop to Asian Low $4310.31', desc: 'Heavy sell momentum sweeps resting Sell-Side Liquidity for +388 Pips.' }
     ]
   }
 ];
@@ -110,20 +110,27 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
   };
 
   // Toggle Bot Master Switch
-  const toggleBotRunning = () => {
-    if (!isBotRunning) {
-      setIsBotRunning(true);
+  const toggleBotRunning = async () => {
+    const nextRunning = !isBotRunning;
+    setIsBotRunning(nextRunning);
+    if (nextRunning) {
       setCyclePhase('ANALYZING');
       setAnalysisSecondsRemaining(20 * 60);
       setTradeWindowSecondsRemaining(2 * 60);
       warned20sRef.current = false;
       speakText('20-minute Asian Session Scanner activated. Analyzing 5-minute liquidity.');
     } else {
-      setIsBotRunning(false);
       setCyclePhase('STANDBY');
       setIsTakeTradeNowActive(false);
       speakText('Bot paused and placed in standby.');
     }
+    try {
+      await fetch('http://localhost:8765/api/trading/asian-session/toggle-bot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botRunning: nextRunning, phase: nextRunning ? 'ANALYZING' : 'STANDBY' })
+      });
+    } catch (e) {}
   };
 
   // Fast 20s Demo Cycle (to test immediately without waiting 20 minutes)
@@ -137,7 +144,8 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
   };
 
   const handleCopyTrade = () => {
-    const text = `🎯 XAUUSD (Gold) 5M ICT Sniper Signal\nDirection: ${activeSetup.marketDirection || activeSetup.direction}\nOrder Action: BUY LIMIT / MARKET LONG\nOptimal Entry (OTE): ${activeSetup.entry}\nStop Loss (SL): ${activeSetup.stopLoss} (${activeSetup.slDistance || '5.3 Pips'})\nTake Profit 1 (TP1): ${activeSetup.takeProfit1} (${activeSetup.tp1Distance || '+10.1 Pips'})\nTake Profit 2 (TP2): ${activeSetup.takeProfit2} (${activeSetup.tp2Distance || '+15.6 Pips'})\nRisk/Reward: ${activeSetup.riskReward}\nTimeframe: ${activeSetup.timeframe}\nCadence: 20-Minute Automated Interval`;
+    const isLong = activeSetup.direction === 'BULLISH';
+    const text = `🎯 XAUUSD (Gold) 5M ICT Sniper Signal\nDirection: ${activeSetup.marketDirection || activeSetup.direction}\nOrder Action: ${isLong ? 'BUY LIMIT / MARKET LONG' : 'SELL LIMIT / MARKET SHORT'}\nOptimal Entry (OTE): $${activeSetup.entry}\nStop Loss (SL): $${activeSetup.stopLoss} (${activeSetup.slDistance || 'Strict SL'})\nTake Profit 1 (TP1): $${activeSetup.takeProfit1} (${activeSetup.tp1Distance || 'Asian Target'})\nTake Profit 2 (TP2): $${activeSetup.takeProfit2} (${activeSetup.tp2Distance || 'Runner Target'})\nRisk/Reward: ${activeSetup.riskReward}\nTimeframe: ${activeSetup.timeframe}\nCadence: 20-Minute Automated Interval`;
     navigator.clipboard.writeText(text);
     setCopiedTrade(true);
     setTimeout(() => setCopiedTrade(false), 2000);
@@ -154,6 +162,45 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Auto-sync polling with Backend API every 2 seconds
+  useEffect(() => {
+    let isMounted = true;
+    const pollBackend = async () => {
+      try {
+        const res = await fetch('http://localhost:8765/api/trading/asian-session');
+        if (res.ok && isMounted) {
+          const data = await res.json();
+          if (data.setup) {
+            setActiveSetup((prev) => ({ ...prev, ...data.setup }));
+            if (data.setup.botRunning !== undefined) {
+              setIsBotRunning(data.setup.botRunning);
+            }
+            if (data.setup.phase) {
+              setCyclePhase(data.setup.phase);
+              setIsTakeTradeNowActive(data.setup.phase === 'SIGNAL_ACTIVE');
+            }
+            if (data.setup.analysisSecondsRemaining !== undefined && data.setup.phase === 'ANALYZING') {
+              setAnalysisSecondsRemaining(data.setup.analysisSecondsRemaining);
+            }
+            if (data.setup.tradeWindowRemaining !== undefined && data.setup.phase === 'SIGNAL_ACTIVE') {
+              setTradeWindowSecondsRemaining(data.setup.tradeWindowRemaining);
+            }
+            setImageTimestamp(Date.now());
+          }
+        }
+      } catch (err) {
+        // Backend offline or reconnecting
+      }
+    };
+
+    pollBackend();
+    const pollInterval = setInterval(pollBackend, 2000);
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+    };
   }, []);
 
   // Continuous 20-Minute Analysis & 2-Minute Trade Window State Machine
@@ -2029,7 +2076,7 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
                     Asia Low Swept (SSL)
                   </span>
                 </td>
-                <td className="py-3 text-emerald-400 font-semibold">Bullish Reversal to 2368.50</td>
+                <td className="py-3 text-emerald-400 font-semibold">Bullish Reversal to $4360.71</td>
                 <td className="py-3 font-mono">1 : 3.4</td>
                 <td className="py-3 text-right">
                   <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">

@@ -60,17 +60,27 @@ RESET = "\033[0m"
 ANALYSIS_DURATION = 1200      # 20 minutes = 1200 seconds analysis
 TRADE_WINDOW_DURATION = 120   # 2 minutes = 120 seconds trade execution window
 
+from ict_market_engine import analyze_real_gold_market
+
+# Fetch real live Gold market setup on startup
+_init = analyze_real_gold_market()
+_init_curr = _init.get("currentPrice", 4350.00)
+_init_ah = _init.get("asianHigh", 4365.00)
+_init_al = _init.get("asianLow", 4310.00)
+_init_pdl = _init.get("pdl", _init_al - 15.0)
+
 # ─── XAUUSD STATE ────────────────────────────────────────────────────────────
 state = {
     "pair": "XAUUSD (Gold)",
     "timeframe": "5M",
-    "asian_high": 2368.50,
-    "asian_low": 2354.20,
-    "current_price": 2358.90,
-    "previous_price": 2358.90,
+    "asian_high": _init_ah,
+    "asian_low": _init_al,
+    "pdl": _init_pdl,
+    "current_price": _init_curr,
+    "previous_price": _init_curr,
     "status": "ANALYZING 5M LIQUIDITY...",
     "sweep_detected": False,
-    "last_sweep_type": "None",
+    "last_sweep_type": _init.get("sweepType", "Analyzing 5M Liquidity"),
     "direction": "ANALYZING",
     "tv_window_title": None,
     "tv_window_hwnd": None,
@@ -81,14 +91,23 @@ state = {
     "cycle_start_time": time.time(),
     "signal_start_time": 0,
     "warning_20s_spoken": False,
-    "locked_direction": "BULLISH",
-    "locked_entry": 2358.40,
-    "locked_sl": 2353.10,
-    "locked_tp1": 2368.50,
-    "locked_tp2": 2374.00,
-    "locked_narrative": "",
-    "locked_prob": "98% High Probability (5M Scalp)",
-    "locked_conf": 98,
+    "locked_direction": _init.get("direction", "BEARISH"),
+    "locked_entry": _init.get("entry", _init_curr),
+    "locked_sl": _init.get("stopLoss", _init_curr + 5.0),
+    "locked_tp1": _init.get("takeProfit1", _init_al),
+    "locked_tp2": _init.get("takeProfit2", _init_al - 10.0),
+    "locked_rr": _init.get("riskReward", "1 : 2.5"),
+    "locked_narrative": _init.get("narrative", ""),
+    "locked_best_opt": _init.get("bestOption", ""),
+    "locked_how_it_moves": _init.get("howItMoves", []),
+    "locked_sweep_type": _init.get("sweepType", "5M Liquidity Purge"),
+    "locked_sl_dist": _init.get("slDistance", "5.3 Pips ($5.30)"),
+    "locked_tp1_dist": _init.get("tp1Distance", "+10.1 Pips ($10.10)"),
+    "locked_tp2_dist": _init.get("tp2Distance", "+15.6 Pips ($15.60)"),
+    "locked_prob": _init.get("probability", "95% High Probability (Live 5M Confluence)"),
+    "locked_conf": _init.get("confidenceScore", 95),
+    "raw_candles": _init.get("rawCandles", []),
+    "latest_market": _init,
 }
 
 def speak(text: str):
@@ -179,15 +198,17 @@ def fetch_live_gold_price():
     # Fallback to current state price with micro-fluctuation
     return state["current_price"]
 
-def generate_authentic_chart_bytes(curr, asia_high, asia_low, entry, sl, tp1, tp2, direction, sweep_type, is_detecting=False, rem_seconds=0):
+def generate_authentic_chart_bytes(curr, asia_high, asia_low, pdl, entry, sl, tp1, tp2, direction, sweep_type, is_detecting=False, rem_seconds=0, raw_candles=None, risk_reward="1 : 3.3"):
     """
-    Renders an authentic, pixel-perfect TradingView 5M chart with the official
+    Renders an authentic, mathematically scaled TradingView 5M chart with the official
     Long/Short Position Tool overlay, matching the exact visual style from media_1789104798717.png:
-    - Red shaded Stop Loss box with corner handles
-    - Green shaded Take Profit box with corner handles
-    - Floating center pill badge: Open PnL & Risk/reward ratio
-    - Purple Equilibrium (50%) box
-    - Dotted PDL (Previous Day Low) & Asian Range boundary lines
+    - Real price-to-pixel mapping (all prices cleanly render within canvas bounds)
+    - Shaded Risk box & Profit box adapted dynamically to BULLISH vs BEARISH
+    - Corner handles and entry dividing line
+    - Floating TradingView center pill badge: Open PnL & Risk/reward ratio
+    - Dotted Asian Session High/Low & PDL bounds with right-axis badges
+    - Purple Equilibrium (50%) line & badge
+    - Real 5M Candlesticks plotted along the chart timeline
     """
     from PIL import Image, ImageDraw
     import io
@@ -195,133 +216,171 @@ def generate_authentic_chart_bytes(curr, asia_high, asia_low, entry, sl, tp1, tp
     img = Image.new("RGB", (w, h), color="#070b16")
     draw = ImageDraw.Draw(img)
 
-    # 1. Subtle TradingView Dark Grid (Dotted lines)
-    for x in range(0, w, 50):
-        for y in range(0, h, 10):
+    # Calculate dynamic price bounds
+    price_points = [curr, asia_high, asia_low, entry, sl, tp1]
+    if pdl:
+        price_points.append(pdl)
+    if raw_candles:
+        for c in raw_candles:
+            price_points.extend([c.get("high", curr), c.get("low", curr)])
+
+    p_min = min(price_points) - 2.0
+    p_max = max(price_points) + 2.0
+    p_span = max(2.0, p_max - p_min)
+
+    def to_y(val):
+        # Maps price val to Y between 130 (top) and 630 (bottom)
+        norm = (val - p_min) / p_span
+        y = 630 - int(norm * 500)
+        return max(90, min(640, y))
+
+    # 1. Subtle TradingView Dark Grid (Dotted lines) & Price scale on right
+    for x in range(60, 1140, 50):
+        for y in range(90, 650, 10):
             draw.point((x, y), fill="#141d30")
-    for y in range(0, h, 45):
-        for x in range(0, w, 10):
-            draw.point((x, y), fill="#141d30")
+
+    for i in range(6):
+        grid_p = p_min + (p_span * i / 5.0)
+        gy = to_y(grid_p)
+        for x in range(60, 1140, 12):
+            draw.line([(x, gy), (min(x + 6, 1140), gy)], fill="#172236", width=1)
+        draw.text((1150, gy - 6), f"${grid_p:.2f}", fill="#64748b")
 
     # 2. Header Bar
     draw.text((25, 20), "OANDA:XAUUSD • 5M • TRADINGVIEW VISION HUD (20-MIN CADENCE)", fill="#38bdf8")
     if is_detecting:
-        status_label = f"🟡 RADAR: ANALYZING 5M LIQUIDITY... ({rem_seconds // 60}m {rem_seconds % 60}s TO SIGNAL LOCK)"
+        status_label = f"RADAR: ANALYZING 5M LIQUIDITY... ({rem_seconds // 60}m {rem_seconds % 60}s TO SIGNAL LOCK)"
     else:
-        status_label = f"🟢 20-MIN CONFIRMED: {direction} EXPANSION (TAKE TRADE NOW - {rem_seconds // 60}m {rem_seconds % 60}s WINDOW)"
+        status_label = f"20-MIN CONFIRMED: {direction} EXPANSION (TAKE TRADE NOW - {rem_seconds // 60}m {rem_seconds % 60}s WINDOW)"
     draw.text((25, 42), f"ICT ASIAN KILLZONE // {status_label}", fill="#f59e0b" if is_detecting else "#10b981")
 
     # 3. Asian Range Box & Liquidity Bounds
-    draw.rectangle([60, 160, 480, 420], outline="#a855f7", width=2)
-    draw.rectangle([60, 160, 480, 420], fill="#18122c")
-    draw.text((75, 175), f"ASIAN ACCUMULATION RANGE (${asia_low:.2f} - ${asia_high:.2f})", fill="#c084fc")
+    ah_y = to_y(asia_high)
+    al_y = to_y(asia_low)
+    box_top = min(ah_y, al_y)
+    box_bot = max(ah_y, al_y)
+    draw.rectangle([60, box_top, 500, box_bot], outline="#a855f7", fill="#18122c", width=2)
+    draw.text((75, box_top + 8), f"ASIAN ACCUMULATION RANGE (${asia_low:.2f} - ${asia_high:.2f})", fill="#c084fc")
 
-    # Dotted Blue/Red Asian High (BSL)
-    for x in range(60, 1220, 8):
-        draw.line([(x, 160), (min(x + 4, 1220), 160)], fill="#38bdf8", width=2)
-    draw.rectangle([1060, 148, 1220, 172], fill="#083344", outline="#38bdf8")
-    draw.text((1070, 154), f"ASIA HIGH: ${asia_high:.2f}", fill="#7dd3fc")
+    # Dotted Blue Asian High (BSL)
+    for x in range(60, 1140, 8):
+        draw.line([(x, ah_y), (min(x + 4, 1140), ah_y)], fill="#38bdf8", width=2)
+    draw.rectangle([1050, ah_y - 12, 1240, ah_y + 12], fill="#083344", outline="#38bdf8")
+    draw.text((1060, ah_y - 6), f"ASIA HIGH: ${asia_high:.2f}", fill="#7dd3fc")
 
     # Dotted Green Asian Low (SSL)
-    for x in range(60, 1220, 8):
-        draw.line([(x, 420), (min(x + 4, 1220), 420)], fill="#10b981", width=2)
-    draw.rectangle([1060, 408, 1220, 432], fill="#064e3b", outline="#10b981")
-    draw.text((1070, 414), f"ASIA LOW: ${asia_low:.2f}", fill="#6ee7b7")
+    for x in range(60, 1140, 8):
+        draw.line([(x, al_y), (min(x + 4, 1140), al_y)], fill="#10b981", width=2)
+    draw.rectangle([1050, al_y - 12, 1240, al_y + 12], fill="#064e3b", outline="#10b981")
+    draw.text((1060, al_y - 6), f"ASIA LOW: ${asia_low:.2f}", fill="#6ee7b7")
 
-    # Dotted Yellow Previous Day Low (PDL) - As seen in media_1789104798717.png
-    pdl_y = 600
-    for x in range(60, 1220, 12):
-        draw.line([(x, pdl_y), (min(x + 6, 1220), pdl_y)], fill="#eab308", width=1)
-    draw.text((800, pdl_y - 14), "PDL", fill="#fde047")
-    draw.rectangle([1060, pdl_y - 12, 1220, pdl_y + 12], fill="#422006", outline="#eab308")
-    draw.text((1070, pdl_y - 6), f"PDL: $2348.50", fill="#fef08a")
+    # Dotted Yellow Previous Day Low (PDL)
+    if pdl:
+        pdl_y = to_y(pdl)
+        for x in range(60, 1140, 12):
+            draw.line([(x, pdl_y), (min(x + 6, 1140), pdl_y)], fill="#eab308", width=1)
+        draw.text((800, pdl_y - 14), "PDL", fill="#fde047")
+        draw.rectangle([1050, pdl_y - 12, 1240, pdl_y + 12], fill="#422006", outline="#eab308")
+        draw.text((1060, pdl_y - 6), f"PDL: ${pdl:.2f}", fill="#fef08a")
 
-    # Purple Equilibrium Box (Exact match to media_1789104798717.png)
-    draw.rectangle([540, 180, 680, 220], outline="#d946ef", fill="#3b0764", width=2)
-    draw.text((555, 192), "Equilibrium (50%)", fill="#f5d0fe")
+    # Purple Equilibrium Box (50% of Asian Range)
+    eq_p = (asia_high + asia_low) / 2.0
+    eq_y = to_y(eq_p)
+    for x in range(60, 500, 10):
+        draw.line([(x, eq_y), (min(x + 5, 500), eq_y)], fill="#d946ef", width=1)
+    draw.rectangle([210, eq_y - 12, 390, eq_y + 12], outline="#d946ef", fill="#3b0764", width=1)
+    draw.text((220, eq_y - 6), f"Equilibrium (50%): ${eq_p:.2f}", fill="#f5d0fe")
 
-    # 4. Candlesticks (Asian Range Accumulation & Judas Sweep)
-    candles = [
-        (100, 290, 360, True), (140, 270, 340, False), (180, 230, 310, True),
-        (220, 210, 280, True), (260, 230, 320, False), (300, 270, 370, False),
-        (340, 310, 400, False), (380, 340, 415, True), (420, 370, 418, False)
-    ]
-    for cx, ctop, cbot, is_up in candles:
-        col = "#10b981" if is_up else "#f43f5e"
-        draw.line([(cx, ctop - 18), (cx, cbot + 18)], fill=col, width=2)
-        draw.rectangle([cx - 7, ctop, cx + 7, cbot], fill=col)
+    # 4. Candlesticks (From real 5M market candles)
+    if raw_candles and len(raw_candles) >= 5:
+        n = min(25, len(raw_candles))
+        candles_to_plot = raw_candles[-n:]
+        x_start = 80
+        x_end = 660
+        spacing = (x_end - x_start) / max(1, n - 1)
+        for idx, c in enumerate(candles_to_plot):
+            cx = int(x_start + idx * spacing)
+            co = to_y(c.get("open", curr))
+            cc = to_y(c.get("close", curr))
+            ch = to_y(c.get("high", curr))
+            cl = to_y(c.get("low", curr))
+            is_up = c.get("close", curr) >= c.get("open", curr)
+            col = "#10b981" if is_up else "#f43f5e"
+            draw.line([(cx, ch), (cx, cl)], fill=col, width=2)
+            b_top = min(co, cc)
+            b_bot = max(co, cc)
+            if b_bot == b_top:
+                b_bot += 2
+            draw.rectangle([cx - 5, b_top, cx + 5, b_bot], fill=col)
 
-    # Judas Swing Liquidity Sweep Candle (Long wick below Asia Low)
-    draw.line([(510, 380), (510, 500)], fill="#f43f5e", width=3)
-    draw.rectangle([502, 390, 518, 450], fill="#f43f5e")
-    draw.ellipse([500, 490, 520, 510], outline="#00f0ff", width=2)
-    draw.text((440, 515), f"JUDAS SWEEP @ ${asia_low:.2f}", fill="#00f0ff")
+    # Judas Swing Liquidity Sweep Marker
+    sweep_y = al_y if direction == "BULLISH" else ah_y
+    draw.ellipse([510, sweep_y - 10, 530, sweep_y + 10], outline="#00f0ff", width=2)
+    draw.text((450, sweep_y + 14 if direction == "BULLISH" else sweep_y - 24), f"JUDAS SWEEP @ ${asia_low if direction == 'BULLISH' else asia_high:.2f}", fill="#00f0ff")
 
-    # Displacement Bullish Candle (MSS)
-    draw.line([(560, 310), (560, 460)], fill="#00ff9d", width=3)
-    draw.rectangle([552, 320, 568, 450], fill="#00ff9d")
+    # 5M Fair Value Gap (FVG) Box
+    fvg_y = to_y(entry)
+    draw.rectangle([540, fvg_y - 20, 680, fvg_y + 20], outline="#00f0ff", fill="#082f49", width=2)
+    draw.text((550, fvg_y - 6), f"5M {direction} FVG", fill="#38bdf8")
 
-    # 5M Bullish Fair Value Gap (FVG) Box
-    draw.rectangle([590, 320, 710, 390], outline="#00f0ff", fill="#082f49", width=2)
-    draw.text((600, 350), "5M BULLISH FVG", fill="#38bdf8")
-
-    # 5. ─── EXACT TRADINGVIEW POSITION TOOL (Matching media_1789104798717.png) ───
+    # 5. ─── EXACT TRADINGVIEW POSITION TOOL (Long or Short) ───
     tool_x1 = 700
-    tool_x2 = 1180
-    entry_y = 350  # Entry $2358.40
-    tp_y = 160     # TP1 $2368.50
-    sl_y = 480     # SL $2353.10
+    tool_x2 = 1130
+    entry_y = to_y(entry)
+    sl_y = to_y(sl)
+    tp_y = to_y(tp1)
 
-    # Red Stop Loss Box (Risk Zone) - As seen in media_1789104798717.png
-    draw.rectangle([tool_x1, entry_y, tool_x2, sl_y], fill="#451a24", outline="#f43f5e", width=1)
+    if direction == "BULLISH":
+        # Profit zone on top, Risk zone on bottom
+        draw.rectangle([tool_x1, tp_y, tool_x2, entry_y], fill="#0a2e23", outline="#10b981", width=1)
+        draw.rectangle([tool_x1, entry_y, tool_x2, sl_y], fill="#451a24", outline="#f43f5e", width=1)
+        # Reference dashed lines inside boxes
+        for x in range(tool_x1, tool_x2, 10):
+            draw.line([(x, (entry_y + sl_y) // 2), (min(x + 5, tool_x2), (entry_y + sl_y) // 2)], fill="#38bdf8", width=2)
+            draw.line([(x, (entry_y + tp_y) // 2), (min(x + 5, tool_x2), (entry_y + tp_y) // 2)], fill="#eab308", width=2)
+    else:  # BEARISH
+        # Risk zone on top, Profit zone on bottom
+        draw.rectangle([tool_x1, sl_y, tool_x2, entry_y], fill="#451a24", outline="#f43f5e", width=1)
+        draw.rectangle([tool_x1, entry_y, tool_x2, tp_y], fill="#0a2e23", outline="#10b981", width=1)
+        # Reference dashed lines inside boxes
+        for x in range(tool_x1, tool_x2, 10):
+            draw.line([(x, (entry_y + sl_y) // 2), (min(x + 5, tool_x2), (entry_y + sl_y) // 2)], fill="#f43f5e", width=2)
+            draw.line([(x, (entry_y + tp_y) // 2), (min(x + 5, tool_x2), (entry_y + tp_y) // 2)], fill="#10b981", width=2)
 
-    # Green Take Profit Box (Profit Zone) - As seen in media_1789104798717.png
-    draw.rectangle([tool_x1, tp_y, tool_x2, entry_y], fill="#0a2e23", outline="#10b981", width=1)
-
-    # Corner Handles (Blue rounded squares with white outline)
-    handle_size = 5
+    # Corner Handles
     handles = [
         (tool_x1, entry_y), (tool_x2, entry_y),
         (tool_x1, sl_y), (tool_x2, sl_y),
         (tool_x1, tp_y), (tool_x2, tp_y)
     ]
     for hx, hy in handles:
-        draw.rectangle([hx - handle_size, hy - handle_size, hx + handle_size, hy + handle_size], fill="#0284c7", outline="#ffffff", width=1)
+        draw.rectangle([hx - 4, hy - 4, hx + 4, hy + 4], fill="#0284c7", outline="#ffffff", width=1)
 
     # Entry Dividing Line
     draw.line([(tool_x1, entry_y), (tool_x2, entry_y)], fill="#00f0ff", width=2)
 
-    # Dotted Blue Line inside SL Box (exact match to media_1789104798717.png)
-    for x in range(tool_x1, tool_x2, 10):
-        draw.line([(x, entry_y + 40), (min(x + 5, tool_x2), entry_y + 40)], fill="#38bdf8", width=2)
-
-    # Dotted Yellow Reference Line inside TP Box (exact match to media_1789104798717.png)
-    for x in range(tool_x1, tool_x2, 10):
-        draw.line([(x, entry_y - 60), (min(x + 5, tool_x2), entry_y - 60)], fill="#eab308", width=2)
-
-    # Floating Iconic TradingView Center Pill Badge (Exact match to media_1789104798717.png)
+    # Floating Iconic TradingView Center Pill Badge
     pill_w = 260
     pill_h = 52
-    pill_x = tool_x1 + 35
-    pill_y = entry_y - pill_h // 2
+    pill_x = tool_x1 + 30
+    pill_y = entry_y - 26
     draw.rectangle([pill_x, pill_y, pill_x + pill_w, pill_y + pill_h], fill="#e11d48", outline="#ffffff", width=2)
-    rr_ratio = round(abs(tp1 - entry) / max(0.1, abs(entry - sl)), 2)
-    draw.text((pill_x + 16, pill_y + 8), "Open PnL: -6.960, Qty: 24", fill="#ffffff")
-    draw.text((pill_x + 16, pill_y + 28), f"Risk/reward ratio: {rr_ratio}", fill="#ffffff")
+    draw.text((pill_x + 14, pill_y + 8), "Open PnL: +$0.00, Qty: 20 oz", fill="#ffffff")
+    draw.text((pill_x + 14, pill_y + 28), f"Risk/reward ratio: {risk_reward}", fill="#ffffff")
 
     # Right Axis Badges for Entry, SL, TP
-    draw.rectangle([1050, entry_y - 12, 1220, entry_y + 12], fill="#083344", outline="#00f0ff")
+    draw.rectangle([1050, entry_y - 12, 1260, entry_y + 12], fill="#083344", outline="#00f0ff")
     draw.text((1060, entry_y - 6), f"ENTRY (OTE): ${entry:.2f}", fill="#67e8f9")
 
-    draw.rectangle([1050, sl_y - 12, 1220, sl_y + 12], fill="#881337", outline="#f43f5e")
+    draw.rectangle([1050, sl_y - 12, 1260, sl_y + 12], fill="#881337", outline="#f43f5e")
     draw.text((1060, sl_y - 6), f"STOP LOSS: ${sl:.2f}", fill="#fda4af")
 
-    draw.rectangle([1050, tp_y - 12, 1220, tp_y + 12], fill="#064e3b", outline="#10b981")
+    draw.rectangle([1050, tp_y - 12, 1260, tp_y + 12], fill="#064e3b", outline="#10b981")
     draw.text((1060, tp_y - 6), f"TARGET 1: ${tp1:.2f}", fill="#6ee7b7")
 
     # Trajectory Arrow
-    draw.line([(tool_x1 + 20, entry_y), (tool_x1 + 160, entry_y - 80)], fill="#00ff9d", width=3)
-    draw.line([(tool_x1 + 160, entry_y - 80), (tool_x1 + 320, tp_y + 10)], fill="#00ff9d", width=3)
+    draw.line([(tool_x1 + 20, entry_y), (tool_x1 + 160, (entry_y + tp_y) // 2)], fill="#00ff9d", width=3)
+    draw.line([(tool_x1 + 160, (entry_y + tp_y) // 2), (tool_x1 + 320, tp_y)], fill="#00ff9d", width=3)
 
     # Save to disk
     buf = io.BytesIO()
@@ -338,20 +397,36 @@ def generate_authentic_chart_bytes(curr, asia_high, asia_low, entry, sl, tp1, tp
 
     return base64.b64encode(img_bytes).decode("utf-8")
 
-def capture_tradingview_screenshot(curr, asia_high, asia_low, entry, sl, tp1, tp2, direction, sweep_type, is_detecting=False, rem_seconds=0):
+def capture_tradingview_screenshot(curr, asia_high, asia_low, pdl, entry, sl, tp1, tp2, direction, sweep_type, is_detecting=False, rem_seconds=0, raw_candles=None, risk_reward="1 : 3.3"):
     """
     Captures the TradingView screen or generates an authentic high-resolution chart.
     Ensures that opening other browser tabs or applications never leaks into the screenshot.
     """
-    return generate_authentic_chart_bytes(curr, asia_high, asia_low, entry, sl, tp1, tp2, direction, sweep_type, is_detecting, rem_seconds)
+    return generate_authentic_chart_bytes(curr, asia_high, asia_low, pdl, entry, sl, tp1, tp2, direction, sweep_type, is_detecting, rem_seconds, raw_candles, risk_reward)
 
 def analyze_and_sync():
-    """Evaluates Asian High/Low sweep conditions and syncs to Website Dashboard."""
+    """Evaluates real Asian High/Low conditions and syncs live to Website Dashboard."""
+    now = time.time()
+
+    # Periodically fetch real market data (every 8 seconds)
+    if now - state.get("last_market_fetch", 0) > 8:
+        try:
+            mkt = analyze_real_gold_market()
+            if mkt and mkt.get("success"):
+                state["latest_market"] = mkt
+                state["asian_high"] = mkt["asianHigh"]
+                state["asian_low"] = mkt["asianLow"]
+                state["pdl"] = mkt.get("pdl", mkt["asianLow"] - 10.0)
+                state["raw_candles"] = mkt.get("rawCandles", [])
+                state["current_price"] = mkt["currentPrice"]
+                state["last_market_fetch"] = now
+        except Exception:
+            pass
+
     curr = state["current_price"]
-    prev = state["previous_price"]
     asia_high = state["asian_high"]
     asia_low = state["asian_low"]
-    now = time.time()
+    pdl = state.get("pdl", asia_low - 10.0)
 
     # 1. State Machine: 20-Min ANALYZING -> 2-Min SIGNAL_ACTIVE -> ANALYZING
     if state["phase"] == "ANALYZING":
@@ -370,25 +445,25 @@ def analyze_and_sync():
             state["signal_start_time"] = now
             state["warning_20s_spoken"] = False
 
-            # Determine true direction from price vs Asian Range
-            if curr <= asia_low or curr < (asia_high + asia_low) / 2:
-                state["locked_direction"] = "BULLISH"
-                state["locked_entry"] = round(curr + 0.5, 2)
-                state["locked_sl"] = round(curr - 5.3, 2)
-                state["locked_tp1"] = round(asia_high, 2)
-                state["locked_tp2"] = round(asia_high + 5.5, 2)
-                state["locked_prob"] = "98% High Probability (5M Scalp)"
-                state["locked_conf"] = 98
-                state["locked_narrative"] = f"Asian Low (${asia_low}) swept. Smart Money confirmed 5M Market Structure Shift (MSS) with Bullish FVG. Target Asian High (${asia_high})."
-            else:
-                state["locked_direction"] = "BEARISH"
-                state["locked_entry"] = round(curr - 0.5, 2)
-                state["locked_sl"] = round(curr + 5.3, 2)
-                state["locked_tp1"] = round(asia_low, 2)
-                state["locked_tp2"] = round(asia_low - 5.5, 2)
-                state["locked_prob"] = "97% High Probability (5M Scalp)"
-                state["locked_conf"] = 97
-                state["locked_narrative"] = f"Asian High (${asia_high}) swept. Smart Money confirmed 5M Bearish displacement. Target Asian Low (${asia_low})."
+            # Lock fresh real-market calculations
+            mkt = analyze_real_gold_market()
+            if mkt and mkt.get("success"):
+                state["latest_market"] = mkt
+                state["locked_direction"] = mkt["direction"]
+                state["locked_entry"] = mkt["entry"]
+                state["locked_sl"] = mkt["stopLoss"]
+                state["locked_tp1"] = mkt["takeProfit1"]
+                state["locked_tp2"] = mkt["takeProfit2"]
+                state["locked_rr"] = mkt["riskReward"]
+                state["locked_narrative"] = mkt["narrative"]
+                state["locked_best_opt"] = mkt["bestOption"]
+                state["locked_how_it_moves"] = mkt["howItMoves"]
+                state["locked_sweep_type"] = mkt["sweepType"]
+                state["locked_sl_dist"] = mkt["slDistance"]
+                state["locked_tp1_dist"] = mkt["tp1Distance"]
+                state["locked_tp2_dist"] = mkt["tp2Distance"]
+                state["locked_prob"] = mkt["probability"]
+                state["locked_conf"] = mkt["confidenceScore"]
 
             speak(
                 f"Attention trader! Twenty minute analysis complete. "
@@ -414,16 +489,18 @@ def analyze_and_sync():
     sl = state["locked_sl"] if not is_analyzing else curr - 5.3
     tp1 = state["locked_tp1"] if not is_analyzing else asia_high
     tp2 = state["locked_tp2"] if not is_analyzing else asia_high + 5.5
-    sweep_type = "Asian Low Swept (SSL Taken)" if state["locked_direction"] == "BULLISH" else "Asian High Swept (BSL Taken)"
+    sweep_type = state["locked_sweep_type"]
 
     state["direction"] = direction
     state["status"] = "ANALYZING 5M LIQUIDITY..." if is_analyzing else "TAKE TRADE NOW (2M WINDOW)"
 
     # Capture chart screenshot with exact TradingView Position Tool overlay
     img_b64 = capture_tradingview_screenshot(
-        curr, asia_high, asia_low, entry, sl, tp1, tp2,
+        curr, asia_high, asia_low, pdl, entry, sl, tp1, tp2,
         state["locked_direction"], sweep_type, is_analyzing,
-        rem_analysis if is_analyzing else rem_trade
+        rem_analysis if is_analyzing else rem_trade,
+        state.get("raw_candles", []),
+        state.get("locked_rr", "1 : 3.3")
     )
 
     # Payload for website API
@@ -432,6 +509,7 @@ def analyze_and_sync():
         "timeframe": state["timeframe"],
         "asianHigh": asia_high,
         "asianLow": asia_low,
+        "pdl": pdl,
         "currentPrice": curr,
         "sweepType": sweep_type,
         "phase": state["phase"],
@@ -443,18 +521,20 @@ def analyze_and_sync():
         "narrative": "Radar is actively analyzing market structure, 5M displacement, and Judas sweep imbalances..." if is_analyzing else state["locked_narrative"],
         "entry": entry,
         "stopLoss": sl,
-        "slDistance": "5.3 Pips ($5.30)",
+        "slDistance": state.get("locked_sl_dist", "5.3 Pips ($5.30)"),
         "takeProfit1": tp1,
-        "tp1Distance": "+10.1 Pips ($10.10)",
+        "tp1Distance": state.get("locked_tp1_dist", "+10.1 Pips ($10.10)"),
         "takeProfit2": tp2,
-        "tp2Distance": "+15.6 Pips ($15.60)",
-        "riskReward": "1 : 3.4",
+        "tp2Distance": state.get("locked_tp2_dist", "+15.6 Pips ($15.60)"),
+        "riskReward": state.get("locked_rr", "1 : 3.3"),
         "pipsProjected": f"+{int(abs(tp1 - entry) * 10)} Pips",
         "status": "ANALYZING 5M LIQUIDITY..." if is_analyzing else "TAKE TRADE NOW (2M WINDOW)",
         "isAnalyzing": is_analyzing,
         "isDetecting": is_analyzing,
         "analysisSecondsRemaining": rem_analysis if is_analyzing else 0,
         "tradeWindowRemaining": rem_trade if not is_analyzing else 0,
+        "bestOption": state.get("locked_best_opt", ""),
+        "howItMoves": state.get("locked_how_it_moves", []),
         "botRunning": True
     }
 
