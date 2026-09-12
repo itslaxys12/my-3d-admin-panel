@@ -15,6 +15,7 @@ export const NAV_ITEMS = [
   { id: 'settings', label: 'Settings', icon: 'Settings', badge: null },
   { id: 'welcome_hub', label: 'Discord Welcome Hub', icon: 'Sparkles', badge: 'VIP / Free' },
   { id: 'asian_session_ai', label: 'Asian Session AI Radar', icon: 'Crosshair', badge: '🔴 5M LIVE' },
+  { id: 'tv_master_indicator', label: 'TradingView 100% Master Indicator', icon: 'Tv', badge: '🔥 100% Signal' },
 ];
 
 export const KPI_METRICS = [

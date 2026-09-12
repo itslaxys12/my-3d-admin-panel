@@ -18,6 +18,7 @@ import {
   TrendingUp,
   Sparkles,
   Crosshair,
+  Tv,
 } from 'lucide-react';
 import { NAV_ITEMS, APP_CONFIG } from '../../utils/constants';
 
@@ -33,6 +34,7 @@ const ICON_MAP = {
   Settings,
   Sparkles,
   Crosshair,
+  Tv,
   Box,
 };
 

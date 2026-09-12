@@ -14,6 +14,7 @@ import RouterManager from './views/RouterManager';
 import { FXReplayBacktest } from './components/trading/FXReplayBacktest';
 import WelcomeHub from './views/WelcomeHub';
 import AsianSessionRadar from './views/AsianSessionRadar';
+import TradingViewMasterIndicator from './views/TradingViewMasterIndicator';
 import InteractiveModel from './components/3d/InteractiveModel';
 import GlassCard from './components/UI/GlassCard';
 import SecurityLockdown from './components/security/SecurityLockdown';
@@ -23,7 +24,7 @@ import UserRoleManagerModal from './components/modals/UserRoleManagerModal';
 import useDevToolsSecurity from './hooks/useDevToolsSecurity';
 import use3DScene from './hooks/use3DScene';
 import { MODEL_PRESETS, APP_CONFIG } from './utils/constants';
-import { Box, Sparkles, Film, Eye, Globe, Bot, Lock, Crown, ShieldAlert, LayoutDashboard, Coins, Activity, Menu, Wifi } from 'lucide-react';
+import { Box, Sparkles, Film, Eye, Globe, Bot, Lock, Crown, ShieldAlert, LayoutDashboard, Coins, Activity, Menu, Wifi, Tv } from 'lucide-react';
 
 export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -69,6 +70,17 @@ export function App() {
     };
     window.addEventListener('gmx-background-change', handleBgChange);
     return () => window.removeEventListener('gmx-background-change', handleBgChange);
+  }, []);
+
+  useEffect(() => {
+    const handleSwitchTab = (e) => {
+      if (e.detail) {
+        setCurrentTab(e.detail);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    };
+    window.addEventListener('gmx_switch_tab', handleSwitchTab);
+    return () => window.removeEventListener('gmx_switch_tab', handleSwitchTab);
   }, []);
 
   // 3-Minute DevTools / Inspect Element Lockdown Protection
@@ -249,6 +261,9 @@ export function App() {
       case 'asian_session_ai':
         return <AsianSessionRadar userRole={userRole} />;
 
+      case 'tv_master_indicator':
+        return <TradingViewMasterIndicator userRole={userRole} />;
+
       default:
         return <Dashboard />;
     }
@@ -343,6 +358,15 @@ export function App() {
             <span>Radar</span>
           </button>
         )}
+        <button
+          onClick={() => setCurrentTab('tv_master_indicator')}
+          className={`flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium transition-colors ${
+            currentTab === 'tv_master_indicator' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Tv className="w-5 h-5 mb-0.5 text-cyan-400" />
+          <span>TV Master</span>
+        </button>
         <button
           onClick={() => setIsMobileMenuOpen(true)}
           className="flex flex-col items-center justify-center flex-1 py-1 text-[10px] font-medium text-slate-400 hover:text-slate-200 transition-colors"

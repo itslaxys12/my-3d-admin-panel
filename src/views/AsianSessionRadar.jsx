@@ -2123,6 +2123,72 @@ export function AsianSessionRadar({ userRole = 'owner' }) {
         </div>
       </GlassCard>
 
+      {/* ─── Bottom Dedicated Option: TradingView 100% Confluence Master Indicator ─── */}
+      <GlassCard glowColor="cyan" className="p-6 sm:p-8 border border-cyan-500/40 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-cyan-500/10 via-emerald-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+          <div className="space-y-3 max-w-3xl">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-mono font-bold flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,240,255,0.3)]">
+                <Tv className="w-3.5 h-3.5 text-cyan-400" />
+                TRADINGVIEW 100% MASTER INDICATOR
+              </span>
+              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold">
+                🔥 100% CONFIRMATION & 1:2, 1:3 R:R BOXES
+              </span>
+              <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 text-xs font-mono font-bold">
+                ALL-IN-ONE
+              </span>
+            </div>
+
+            <h3 className="text-xl sm:text-2xl font-black text-white font-heading tracking-wide">
+              Want 100% Confluence Directly Inside Your TradingView Charts?
+            </h3>
+
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-sans">
+              ট্রেডিং ভিউয়ের সব সেরা ইন্ডিকেটর (Smart Money Concepts / SMC, EMA Ribbon 9/21/50/200, Supertrend, RSI, MACD, Stochastic RSI, VWAP & Volume, Bollinger Bands, ATR Dynamic Stops) মিলিয়ে একটি পূর্ণাঙ্গ অল-ইন-ওয়ান মাস্টার স্ক্রিপ্ট। আলাদা কোনো ফেক সিগন্যাল ছাড়াই ১০০% নিখুঁত কনফারমেশন পেলে সরাসরি বড় ১:২, ১:৩ ও ১:৫ Risk-to-Reward বক্স চার্টে ড্র হয়ে যাবে!
+            </p>
+
+            <div className="flex flex-wrap items-center gap-4 pt-1 text-xs font-mono text-slate-400">
+              <div className="flex items-center gap-1.5 text-emerald-400">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Zero False Signals</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-cyan-400">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>1:2, 1:3, 1:5 Visual Boxes</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-purple-400">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Pine Script v5 1-Click Copy</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row lg:flex-col gap-3 w-full lg:w-auto flex-shrink-0">
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('gmx_switch_tab', { detail: 'tv_master_indicator' }));
+              }}
+              className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 via-emerald-500 to-teal-400 text-black font-mono text-xs font-black hover:opacity-95 shadow-[0_0_25px_rgba(0,240,255,0.4)] transition-all active:scale-95 flex items-center justify-center gap-2"
+            >
+              <Tv className="w-4 h-4 text-black" />
+              <span>OPEN 100% MASTER INDICATOR</span>
+              <ArrowUpRight className="w-4 h-4 text-black" />
+            </button>
+
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('gmx_switch_tab', { detail: 'tv_master_indicator' }));
+              }}
+              className="px-5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-300 hover:text-white font-mono text-xs font-bold transition-all text-center"
+            >
+              Get Pine Script v5 Code
+            </button>
+          </div>
+        </div>
+      </GlassCard>
+
       {/* ─── PC Watcher Bot Guide Modal ─── */}
       {isSetupModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
