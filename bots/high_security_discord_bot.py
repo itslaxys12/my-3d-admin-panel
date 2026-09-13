@@ -942,7 +942,31 @@ async def on_guild_join(guild: discord.Guild):
 @bot.event
 async def on_member_join(member: discord.Member):
     """Automatically assigns role and sends rich welcome card when a new member joins."""
-    print(f"📥 [MEMBER JOIN] {member.name} ({member.id}) joined server: {member.guild.name}")
+    guild = member.guild
+    print(f"📥 [MEMBER JOIN] {member.name} ({member.id}) joined server: {guild.name}")
+
+    # 1. Anti-Rogue Bot Trap: Automatically kick unauthorized bots invited to the server
+    if member.bot:
+        if not is_whitelisted_user(member.id, guild):
+            inviter = None
+            try:
+                async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.bot_add):
+                    if entry.target and entry.target.id == member.id:
+                        inviter = entry.user
+                        break
+            except Exception:
+                pass
+
+            inviter_safe = inviter and (inviter.id == guild.owner_id or is_whitelisted_user(inviter.id, guild))
+            if not inviter_safe:
+                try:
+                    await member.kick(reason="[GMX Anti-Nuke] Unauthorized Rogue Bot Entry. Automatic Kick.")
+                    print(f"🚨 [ANTI-NUKE] Blocked & kicked rogue bot @{member.name} ({member.id}) from '{guild.name}'.", flush=True)
+                    await send_ban_log(guild, member, f"@{inviter.name}" if inviter else "Unauthorized Inviter", "[ANTI-NUKE] Unauthorized Rogue Bot Entry Blocked")
+                    return
+                except Exception as e:
+                    print(f"❌ Failed to kick rogue bot {member.name}: {e}", flush=True)
+
     await assign_auto_role_to_member(member, source="new_member_join")
 
 
@@ -1851,6 +1875,131 @@ async def clear_cmd(ctx, amount: int = 10):
     await msg.delete(delay=4)
 
 
+@bot.command(name="massban", aliases=["banraid", "multiban"], help="Ban multiple raiders/spammers by ID in one command")
+@commands.has_permissions(administrator=True)
+async def massban_cmd(ctx, *targets: str):
+    """
+    Safely bans multiple raiders/spammers by their user IDs or mentions in one command.
+    Usage: !massban <id1> <id2> <id3> ... [reason]
+    """
+    if not targets:
+        embed = discord.Embed(
+            title="⚠️ Mass Ban Usage",
+            description="Provide user IDs or mentions separated by space.\n\n**Example:**\n`!massban 123456789 987654321 555666777 Raider Attack`",
+            color=discord.Color.gold()
+        )
+        return await ctx.send(embed=embed)
+
+    user_ids = []
+    reason_words = []
+    for t in targets:
+        clean = "".join(filter(str.isdigit, t))
+        if clean and len(clean) >= 17:
+            user_ids.append(int(clean))
+        else:
+            reason_words.append(t)
+
+    if not user_ids:
+        return await ctx.send("❌ No valid User IDs or mentions found. Discord IDs must be 17-20 digits long.")
+
+    if len(user_ids) > 60:
+        return await ctx.send(f"⚠️ For safety and to prevent Discord rate limits, maximum 60 users can be banned per command batch. Found {len(user_ids)}.")
+
+    reason = " ".join(reason_words).strip() or "Raider / Spammer Mass Ban"
+    status_msg = await ctx.send(f"⏳ **Processing Mass Ban for {len(user_ids)} users...** Please wait.")
+
+    banned_count = 0
+    failed_count = 0
+
+    for uid in user_ids:
+        try:
+            user_obj = discord.Object(id=uid)
+            await ctx.guild.ban(user_obj, reason=f"{reason} (Mass Ban by @{ctx.author.name})", delete_message_days=1)
+            banned_count += 1
+            await asyncio.sleep(0.4)
+        except Exception as e:
+            failed_count += 1
+            print(f"Failed to ban ID {uid}: {e}")
+
+    embed = discord.Embed(
+        title="🔨 Mass Ban Completed",
+        description=f"Successfully processed **{len(user_ids)}** targets in **{ctx.guild.name}**.",
+        color=discord.Color.from_rgb(0, 255, 157)
+    )
+    embed.add_field(name="✅ Successfully Banned", value=f"`{banned_count}` members", inline=True)
+    embed.add_field(name="❌ Failed / Invalid", value=f"`{failed_count}` members", inline=True)
+    embed.add_field(name="🛡️ Moderator", value=ctx.author.mention, inline=True)
+    embed.add_field(name="📋 Reason", value=f"```{reason}```", inline=False)
+    embed.set_footer(text="GMX Quantum Moderation Engine Active")
+
+    await status_msg.edit(content=None, embed=embed)
+    await send_ban_log(ctx.guild, ctx.author, f"@{ctx.author.name}", f"[MASS BAN] Banned {banned_count} raiders. Reason: {reason}")
+
+
+@bot.command(name="lockdown", aliases=["lockserver", "raidlock"], help="Emergency server lockdown: locks all text channels")
+@commands.has_permissions(administrator=True)
+async def lockdown_cmd(ctx, *, reason: str = "Emergency Anti-Raid Lockdown"):
+    """
+    Emergency lockdown: instantly disables Send Messages for @everyone across all text channels.
+    """
+    status_msg = await ctx.send("🚨 **ENGAGING EMERGENCY SERVER LOCKDOWN...**")
+    locked_channels = 0
+    everyone_role = ctx.guild.default_role
+
+    for ch in ctx.guild.text_channels:
+        perms = ch.overwrites_for(everyone_role)
+        if perms.send_messages is not False:
+            try:
+                perms.send_messages = False
+                await ch.set_permissions(everyone_role, overwrite=perms, reason=f"[GMX LOCKDOWN] {reason} (By @{ctx.author.name})")
+                locked_channels += 1
+                await asyncio.sleep(0.2)
+            except Exception:
+                pass
+
+    embed = discord.Embed(
+        title="🔒 EMERGENCY SERVER LOCKDOWN ACTIVE",
+        description=f"**{locked_channels}** text channels have been locked down.\n"
+                    f"All messaging for `@everyone` is temporarily frozen to prevent raider spam.\n"
+                    f"To restore the channels after securing the server, run `!unlock`.",
+        color=discord.Color.from_rgb(255, 42, 109)
+    )
+    embed.add_field(name="Authorized Admin", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Reason", value=f"```{reason}```", inline=False)
+    embed.set_footer(text="GMX Quantum Defense • Unlock command: !unlock")
+    await status_msg.edit(content=None, embed=embed)
+
+
+@bot.command(name="unlock", aliases=["unlockserver"], help="Unlocks server channels after a lockdown")
+@commands.has_permissions(administrator=True)
+async def unlock_cmd(ctx):
+    """
+    Restores Send Messages permission for @everyone across all text channels.
+    """
+    status_msg = await ctx.send("🔓 **Restoring channel permissions...**")
+    unlocked_channels = 0
+    everyone_role = ctx.guild.default_role
+
+    for ch in ctx.guild.text_channels:
+        perms = ch.overwrites_for(everyone_role)
+        if perms.send_messages is False:
+            try:
+                perms.send_messages = None
+                await ch.set_permissions(everyone_role, overwrite=perms, reason=f"[GMX UNLOCK] Restored by @{ctx.author.name}")
+                unlocked_channels += 1
+                await asyncio.sleep(0.2)
+            except Exception:
+                pass
+
+    embed = discord.Embed(
+        title="🔓 SERVER UNLOCKED",
+        description=f"**{unlocked_channels}** channels have been unlocked. Members can now send messages normally.",
+        color=discord.Color.from_rgb(0, 255, 157)
+    )
+    embed.add_field(name="Authorized Admin", value=ctx.author.mention, inline=True)
+    await status_msg.edit(content=None, embed=embed)
+
+
 # ─── VOICE DRAGGING & TROLL MOVE SYSTEM ────────────────────────────────────
 
 active_vcdrags: Dict[int, bool] = {}
@@ -2044,8 +2193,11 @@ async def features_cmd(ctx):
     )
 
     embed.add_field(
-        name="🛡️ 2. Security & Auto-Ban System (ACTIVE)",
+        name="🛡️ 2. Security, Anti-Raid & Ban System (ACTIVE)",
         value="• `!ban @User [reason]` — Ban member & log audit alert\n"
+              "• `!massban <id1> <id2>... [reason]` — Ban multiple raiders safely by ID list\n"
+              "• `!lockdown` — Emergency server lockdown (freezes all channels)\n"
+              "• `!unlock` — Restores messaging permissions after lockdown\n"
               "• `!unban <user_id>` — Revoke ban for a member by ID\n"
               "• `!kick @User [reason]` — Kick member from server\n"
               "• `!testban` — Test ban log channel delivery\n"
